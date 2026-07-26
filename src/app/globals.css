@@ -96,6 +96,8 @@
   /* Animations (D8) — float-slow and float-slower power AmbientOrbs. */
   --animate-float-slow: float-slow 22s var(--ease-in-out-strong) infinite;
   --animate-float-slower: float-slower 30s var(--ease-in-out-strong) infinite;
+  /* fade-up powers the FeaturedProperties carousel stagger (PR 3, P11). */
+  --animate-fade-up: fade-up 0.55s var(--ease-out-strong) both;
 
   @keyframes float-slow {
     0%,
@@ -114,6 +116,17 @@
     }
     50% {
       transform: translate3d(-3rem, 1.75rem, 0) scale(0.94);
+    }
+  }
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(24px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
     }
   }
 }
