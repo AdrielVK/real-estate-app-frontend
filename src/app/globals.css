@@ -1,243 +1,298 @@
 @import 'tailwindcss';
 
 /* =========================================================================
- * Design Tokens
- * Single source of truth for the entire app. Tailwind 4 generates utilities
- * from these via @theme inline below — values are never duplicated
- * (design decision #6: raw --color-{name}-{step} on :root + @theme inline
- * mapping preserves a single source of truth and keeps var() references so
- * runtime overrides propagate without regenerating utilities).
+ * Design Tokens — Bosque + Hueso + Cobre (v0 reference, adapted)
+ *
+ * Single source of truth: every value lives on :root as a CSS custom
+ * property. The @theme inline block below maps those raw vars to Tailwind 4
+ * utility names WITHOUT duplicating values — runtime overrides on :root
+ * propagate to utilities automatically (D1, D2, D9).
+ *
+ * Adapted from v0:
+ *   - Geist fonts come from `next/font/google` in src/app/layout.tsx
+ *     (exposes --font-geist-sans / --font-geist-mono), so the @theme inline
+ *     chains the Geist CSS variables instead of hardcoding 'Geist'.
+ *   - A7: --color-neutral-900 is preserved as a thin alias so the admin
+ *     Sidebar's `bg-neutral-900` class keeps resolving. Remove when admin
+ *     migrates to the new token set.
+ *   - A8/A9: @custom-variant dark is registered; shadcn/tw-animate-css
+ *     imports are intentionally NOT pulled in (deps absent).
  * ========================================================================= */
 
-:root {
-  /* Primary scale (blue) */
-  --color-primary-50: #eff6ff;
-  --color-primary-100: #dbeafe;
-  --color-primary-200: #bfdbfe;
-  --color-primary-300: #93c5fd;
-  --color-primary-400: #60a5fa;
-  --color-primary-500: #3b82f6;
-  --color-primary-600: #2563eb;
-  --color-primary-700: #1d4ed8;
-  --color-primary-800: #1e40af;
-  --color-primary-900: #1e3a8a;
-  --color-primary-950: #172554;
+@custom-variant dark (&:is(.dark *));
 
-  /* Secondary scale (teal) */
-  --color-secondary-50: #f0fdfa;
-  --color-secondary-100: #ccfbf1;
-  --color-secondary-200: #99f6e4;
-  --color-secondary-300: #5eead4;
-  --color-secondary-400: #2dd4bf;
-  --color-secondary-500: #14b8a6;
-  --color-secondary-600: #0d9488;
-  --color-secondary-700: #0f766e;
-  --color-secondary-800: #115e59;
-  --color-secondary-900: #134e4a;
-  --color-secondary-950: #042f2e;
-
-  /* Accent scale (amber) */
-  --color-accent-50: #fffbeb;
-  --color-accent-100: #fef3c7;
-  --color-accent-200: #fde68a;
-  --color-accent-300: #fcd34d;
-  --color-accent-400: #fbbf24;
-  --color-accent-500: #f59e0b;
-  --color-accent-600: #d97706;
-  --color-accent-700: #b45309;
-  --color-accent-800: #92400e;
-  --color-accent-900: #78350f;
-  --color-accent-950: #451a03;
-
-  /* Neutral scale (slate) */
-  --color-neutral-50: #f8fafc;
-  --color-neutral-100: #f1f5f9;
-  --color-neutral-200: #e2e8f0;
-  --color-neutral-300: #cbd5e1;
-  --color-neutral-400: #94a3b8;
-  --color-neutral-500: #64748b;
-  --color-neutral-600: #475569;
-  --color-neutral-700: #334155;
-  --color-neutral-800: #1e293b;
-  --color-neutral-900: #0f172a;
-  --color-neutral-950: #020617;
-
-  /* Semantic colors */
-  --color-success: #16a34a;
-  --color-warning: #f59e0b;
-  --color-error: #dc2626;
-
-  /* Semantic surface (light mode) — flips under prefers-color-scheme (decision #7) */
-  --background: #ffffff;
-  --foreground: #0f172a;
-  --surface: #f8fafc;
-  --surface-hover: #f1f5f9;
-  --border: #e2e8f0;
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
-
-  /* Typography — font families (Geist overrides in @theme inline; system stack is the fallback) */
+@theme inline {
+  /* Typography — Geist (via next/font/google) with a system fallback stack. */
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, sans-serif;
+    var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-    monospace;
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    'Liberation Mono', 'Courier New', monospace;
 
-  /* Typography — font size scale (mirrors Tailwind defaults) */
-  --text-xs: 0.75rem;
-  --text-sm: 0.875rem;
-  --text-base: 1rem;
-  --text-lg: 1.125rem;
-  --text-xl: 1.25rem;
-  --text-2xl: 1.5rem;
-  --text-3xl: 1.875rem;
-  --text-4xl: 2.25rem;
-  --text-5xl: 3rem;
-  --text-6xl: 3.75rem;
+  /* Copper & sage — first-class accents alongside primary (D10). */
+  --color-copper: var(--copper);
+  --color-copper-foreground: var(--copper-foreground);
+  --color-sage: var(--sage);
+  --color-sage-foreground: var(--sage-foreground);
 
-  /* Typography — font weights */
-  --font-weight-normal: 400;
-  --font-weight-medium: 500;
-  --font-weight-semibold: 600;
-  --font-weight-bold: 700;
+  /* Sidebar tokens. */
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
 
-  /* Typography — line heights */
-  --leading-tight: 1.25;
-  --leading-snug: 1.375;
-  --leading-normal: 1.5;
-  --leading-relaxed: 1.625;
+  /* Chart tokens. */
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
 
-  /* Spacing scale (4px base — mirrors Tailwind defaults) */
-  --spacing-0: 0;
-  --spacing-0_5: 0.125rem;
-  --spacing-1: 0.25rem;
-  --spacing-1_5: 0.375rem;
-  --spacing-2: 0.5rem;
-  --spacing-3: 0.75rem;
-  --spacing-4: 1rem;
-  --spacing-5: 1.25rem;
-  --spacing-6: 1.5rem;
-  --spacing-8: 2rem;
-  --spacing-10: 2.5rem;
-  --spacing-12: 3rem;
-  --spacing-16: 4rem;
-  --spacing-20: 5rem;
-  --spacing-24: 6rem;
-  --spacing-32: 8rem;
+  /* Semantic surface tokens. */
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
 
-  /* Border radius (decision #9: md and lg overridden from Tailwind defaults) */
-  --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-full: 9999px;
+  /* TODO(admin-retheme): remove when admin Sidebar migrates to the new
+     token set. Sole legacy usage is `bg-neutral-900` in
+     src/components/admin/Sidebar.tsx (design A7). The var() points back
+     to the alias declared on :root so the @theme mapping stays
+     self-referential and the Tailwind utility keeps resolving. */
+  --color-neutral-900: var(--color-neutral-900);
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-}
+  /* Radius scale (D12) — sm through 4xl derived from a single --radius. */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 
-/* Dark mode (decision #7): only semantic surface vars flip — palette scales stay static. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #020617;
-    --foreground: #f8fafc;
-    --surface: #0f172a;
-    --surface-hover: #1e293b;
-    --border: #1e293b;
-    --muted: #1e293b;
-    --muted-foreground: #94a3b8;
+  /* Easing — strong out / strong in-out for ambient motion (D8). */
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* Animations (D8) — float-slow and float-slower power AmbientOrbs. */
+  --animate-float-slow: float-slow 22s var(--ease-in-out-strong) infinite;
+  --animate-float-slower: float-slower 30s var(--ease-in-out-strong) infinite;
+
+  @keyframes float-slow {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+      transform: translate3d(2.5rem, -2rem, 0) scale(1.06);
+    }
+  }
+
+  @keyframes float-slower {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+      transform: translate3d(-3rem, 1.75rem, 0) scale(0.94);
+    }
   }
 }
 
-/* =========================================================================
- * Tailwind 4 theme mapping
- * Reference CSS vars via var() so utilities track the source of truth and
- * dark-mode overrides propagate at runtime without rebuilding utilities.
- * ========================================================================= */
-@theme inline {
-  /* Semantic surface */
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-surface: var(--surface);
-  --color-surface-hover: var(--surface-hover);
-  --color-border: var(--border);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
+/* Bosque + Hueso + Cobre — light mode defaults
+   background hueso #F5F4EF · foreground verde-negro #121815
+   primary bosque #0F3B2E · copper #C2653C · sage #DDE7DF */
+:root {
+  color-scheme: light;
+  --background: oklch(0.9657 0.0055 106);
+  --foreground: oklch(0.2072 0.0121 164);
+  --card: oklch(0.9925 0.0035 106);
+  --card-foreground: oklch(0.2072 0.0121 164);
+  --popover: oklch(0.9925 0.0035 106);
+  --popover-foreground: oklch(0.2072 0.0121 164);
+  --primary: oklch(0.3391 0.0553 165.4);
+  --primary-foreground: oklch(0.9756 0.0092 110);
+  --secondary: oklch(0.9223 0.0164 155);
+  --secondary-foreground: oklch(0.3006 0.0492 165.4);
+  --muted: oklch(0.9376 0.0074 106);
+  --muted-foreground: oklch(0.4813 0.0165 162);
+  --accent: oklch(0.9223 0.0164 155);
+  --accent-foreground: oklch(0.3006 0.0492 165.4);
+  --copper: oklch(0.5875 0.1128 45.2);
+  --copper-foreground: oklch(0.9857 0.0074 80);
+  --sage: oklch(0.9223 0.0164 155);
+  --sage-foreground: oklch(0.3006 0.0492 165.4);
+  --destructive: oklch(0.5122 0.1706 27.5);
+  --border: oklch(0.8814 0.0102 132);
+  --input: oklch(0.8814 0.0102 132);
+  --ring: oklch(0.3391 0.0553 165.4);
+  --chart-1: oklch(0.3391 0.0553 165.4);
+  --chart-2: oklch(0.5875 0.1128 45.2);
+  --chart-3: oklch(0.5138 0.0592 164);
+  --chart-4: oklch(0.7238 0.0742 156);
+  --chart-5: oklch(0.8221 0.0416 152);
+  --radius: 1rem;
+  --sidebar: oklch(0.9925 0.0035 106);
+  --sidebar-foreground: oklch(0.2072 0.0121 164);
+  --sidebar-primary: oklch(0.3391 0.0553 165.4);
+  --sidebar-primary-foreground: oklch(0.9756 0.0092 110);
+  --sidebar-accent: oklch(0.9223 0.0164 155);
+  --sidebar-accent-foreground: oklch(0.3006 0.0492 165.4);
+  --sidebar-border: oklch(0.8814 0.0102 132);
+  --sidebar-ring: oklch(0.3391 0.0553 165.4);
 
-  /* Color scales — every step mapped 1:1 */
-  --color-primary-50: var(--color-primary-50);
-  --color-primary-100: var(--color-primary-100);
-  --color-primary-200: var(--color-primary-200);
-  --color-primary-300: var(--color-primary-300);
-  --color-primary-400: var(--color-primary-400);
-  --color-primary-500: var(--color-primary-500);
-  --color-primary-600: var(--color-primary-600);
-  --color-primary-700: var(--color-primary-700);
-  --color-primary-800: var(--color-primary-800);
-  --color-primary-900: var(--color-primary-900);
-  --color-primary-950: var(--color-primary-950);
-
-  --color-secondary-50: var(--color-secondary-50);
-  --color-secondary-100: var(--color-secondary-100);
-  --color-secondary-200: var(--color-secondary-200);
-  --color-secondary-300: var(--color-secondary-300);
-  --color-secondary-400: var(--color-secondary-400);
-  --color-secondary-500: var(--color-secondary-500);
-  --color-secondary-600: var(--color-secondary-600);
-  --color-secondary-700: var(--color-secondary-700);
-  --color-secondary-800: var(--color-secondary-800);
-  --color-secondary-900: var(--color-secondary-900);
-  --color-secondary-950: var(--color-secondary-950);
-
-  --color-accent-50: var(--color-accent-50);
-  --color-accent-100: var(--color-accent-100);
-  --color-accent-200: var(--color-accent-200);
-  --color-accent-300: var(--color-accent-300);
-  --color-accent-400: var(--color-accent-400);
-  --color-accent-500: var(--color-accent-500);
-  --color-accent-600: var(--color-accent-600);
-  --color-accent-700: var(--color-accent-700);
-  --color-accent-800: var(--color-accent-800);
-  --color-accent-900: var(--color-accent-900);
-  --color-accent-950: var(--color-accent-950);
-
-  --color-neutral-50: var(--color-neutral-50);
-  --color-neutral-100: var(--color-neutral-100);
-  --color-neutral-200: var(--color-neutral-200);
-  --color-neutral-300: var(--color-neutral-300);
-  --color-neutral-400: var(--color-neutral-400);
-  --color-neutral-500: var(--color-neutral-500);
-  --color-neutral-600: var(--color-neutral-600);
-  --color-neutral-700: var(--color-neutral-700);
-  --color-neutral-800: var(--color-neutral-800);
-  --color-neutral-900: var(--color-neutral-900);
-  --color-neutral-950: var(--color-neutral-950);
-
-  /* Semantic colors */
-  --color-success: var(--color-success);
-  --color-warning: var(--color-warning);
-  --color-error: var(--color-error);
-
-  /* Typography — Geist primary, system stack as fallback (decision #8) */
-  --font-sans: var(--font-geist-sans), var(--font-sans);
-  --font-mono: var(--font-geist-mono), var(--font-mono);
-
-  /* Radius */
-  --radius-sm: var(--radius-sm);
-  --radius-md: var(--radius-md);
-  --radius-lg: var(--radius-lg);
-  --radius-full: var(--radius-full);
-
-  /* Shadows */
-  --shadow-sm: var(--shadow-sm);
-  --shadow-md: var(--shadow-md);
-  --shadow-lg: var(--shadow-lg);
+  /* TODO(admin-retheme): remove when admin Sidebar migrates to the new
+     token set. Sole legacy usage is `bg-neutral-900` in
+     src/components/admin/Sidebar.tsx (design A7). */
+  --color-neutral-900: #111827;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans);
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.1794 0.0129 165);
+  --foreground: oklch(0.9412 0.0085 110);
+  --card: oklch(0.2288 0.0155 165);
+  --card-foreground: oklch(0.9412 0.0085 110);
+  --popover: oklch(0.2288 0.0155 165);
+  --popover-foreground: oklch(0.9412 0.0085 110);
+  --primary: oklch(0.8054 0.0868 156);
+  --primary-foreground: oklch(0.2072 0.0328 165);
+  --secondary: oklch(0.2861 0.0212 165);
+  --secondary-foreground: oklch(0.9412 0.0085 110);
+  --muted: oklch(0.2653 0.0165 165);
+  --muted-foreground: oklch(0.7312 0.0182 150);
+  --accent: oklch(0.3047 0.0224 162);
+  --accent-foreground: oklch(0.9412 0.0085 110);
+  --copper: oklch(0.7124 0.1108 47);
+  --copper-foreground: oklch(0.1875 0.0328 40);
+  --sage: oklch(0.3047 0.0224 162);
+  --sage-foreground: oklch(0.9412 0.0085 110);
+  --destructive: oklch(0.7043 0.1622 25);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.8054 0.0868 156);
+  --chart-1: oklch(0.8054 0.0868 156);
+  --chart-2: oklch(0.7124 0.1108 47);
+  --chart-3: oklch(0.6512 0.0662 158);
+  --chart-4: oklch(0.5138 0.0592 164);
+  --chart-5: oklch(0.3846 0.0448 165);
+  --sidebar: oklch(0.2288 0.0155 165);
+  --sidebar-foreground: oklch(0.9412 0.0085 110);
+  --sidebar-primary: oklch(0.8054 0.0868 156);
+  --sidebar-primary-foreground: oklch(0.2072 0.0328 165);
+  --sidebar-accent: oklch(0.3047 0.0224 162);
+  --sidebar-accent-foreground: oklch(0.9412 0.0085 110);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.8054 0.0868 156);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    color-scheme: dark;
+    --background: oklch(0.1794 0.0129 165);
+    --foreground: oklch(0.9412 0.0085 110);
+    --card: oklch(0.2288 0.0155 165);
+    --card-foreground: oklch(0.9412 0.0085 110);
+    --popover: oklch(0.2288 0.0155 165);
+    --popover-foreground: oklch(0.9412 0.0085 110);
+    --primary: oklch(0.8054 0.0868 156);
+    --primary-foreground: oklch(0.2072 0.0328 165);
+    --secondary: oklch(0.2861 0.0212 165);
+    --secondary-foreground: oklch(0.9412 0.0085 110);
+    --muted: oklch(0.2653 0.0165 165);
+    --muted-foreground: oklch(0.7312 0.0182 150);
+    --accent: oklch(0.3047 0.0224 162);
+    --accent-foreground: oklch(0.9412 0.0085 110);
+    --copper: oklch(0.7124 0.1108 47);
+    --copper-foreground: oklch(0.1875 0.0328 40);
+    --sage: oklch(0.3047 0.0224 162);
+    --sage-foreground: oklch(0.9412 0.0085 110);
+    --destructive: oklch(0.7043 0.1622 25);
+    --border: oklch(1 0 0 / 12%);
+    --input: oklch(1 0 0 / 16%);
+    --ring: oklch(0.8054 0.0868 156);
+    --chart-1: oklch(0.8054 0.0868 156);
+    --chart-2: oklch(0.7124 0.1108 47);
+    --chart-3: oklch(0.6512 0.0662 158);
+    --chart-4: oklch(0.5138 0.0592 164);
+    --chart-5: oklch(0.3846 0.0448 165);
+    --sidebar: oklch(0.2288 0.0155 165);
+    --sidebar-foreground: oklch(0.9412 0.0085 110);
+    --sidebar-primary: oklch(0.8054 0.0868 156);
+    --sidebar-primary-foreground: oklch(0.2072 0.0328 165);
+    --sidebar-accent: oklch(0.3047 0.0224 162);
+    --sidebar-accent-foreground: oklch(0.9412 0.0085 110);
+    --sidebar-border: oklch(1 0 0 / 12%);
+    --sidebar-ring: oklch(0.8054 0.0868 156);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    /* tracking-tight (D11) — explicit value so the body keeps the Geist
+       letter-spacing regardless of which Tailwind utilities are loaded. */
+    letter-spacing: -0.025em;
+  }
+}
+
+@utility glass-panel {
+  background: color-mix(in oklch, var(--card) 72%, transparent);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 55%, transparent),
+    0 1px 2px color-mix(in oklch, var(--primary) 8%, transparent),
+    0 18px 44px -22px color-mix(in oklch, var(--primary) 34%, transparent);
+}
+
+.dark .glass-panel {
+  background: color-mix(in oklch, var(--card) 66%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 10%, transparent),
+    0 18px 44px -20px oklch(0 0 0 / 0.55);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-panel {
+    background: var(--card);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@utility glow-primary {
+  box-shadow: 0 20px 50px -26px color-mix(in oklch, var(--primary) 55%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
