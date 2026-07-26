@@ -3,12 +3,15 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import HomePage from '@/app/(public)/page';
 
-// jsdom 29+ does not implement `IntersectionObserver`. The `SiteHeader`
-// uses one inside `useEffect` to flip its sticky/glass state, so we
-// install a no-op stub before any test runs to keep `render` clean.
-// The stub never fires callbacks — that's fine, the test only checks
-// that the page composes correctly, not that the sticky transition
-// fires.
+// jsdom 29+ does not implement `IntersectionObserver` or `ResizeObserver`.
+// `SiteHeader` uses IntersectionObserver to flip its sticky/glass state;
+// `SearchPanel` uses ResizeObserver to measure tag overflow. We install
+// no-op stubs for both before any test runs.
+//
+// The stubs never fire callbacks — that's fine, the test only checks
+// that the page composes correctly, not that the sticky transition or
+// overflow counter fires.
+
 class IntersectionObserverStub {
   readonly root: Element | Document | null = null;
   readonly rootMargin = '0px';
@@ -27,11 +30,28 @@ class IntersectionObserverStub {
   }
 }
 
+class ResizeObserverStub {
+  observe(): undefined {
+    return undefined;
+  }
+  unobserve(): undefined {
+    return undefined;
+  }
+  disconnect(): undefined {
+    return undefined;
+  }
+}
+
 beforeAll(() => {
   Object.defineProperty(globalThis, 'IntersectionObserver', {
     configurable: true,
     writable: true,
     value: IntersectionObserverStub,
+  });
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    writable: true,
+    value: ResizeObserverStub,
   });
 });
 

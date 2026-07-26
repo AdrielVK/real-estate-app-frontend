@@ -1,14 +1,8 @@
 'use client';
 
-import { type FormEvent,useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import {
-  ChevronDown,
-  Loader2,
-  MapPin,
-  Search,
-  Wand2,
-} from 'lucide-react';
+import { ChevronDown, Loader2, MapPin, Search, Wand2, X } from 'lucide-react';
 
 import type { Operacion } from '@/types/publication';
 import { tiposDePropiedad, zonas } from '@/lib/mock-data';
@@ -17,57 +11,121 @@ import { cn } from '@/lib/utils';
 import { AiSearchDialog } from '@/components/public/AiSearchDialog';
 import { Button } from '@/components/ui/Button';
 
+const MAX_TAGS = 5;
+const INPUT_RESERVE_PX = 80;
+const TAG_GAP_PX = 6;
 const sugerenciasIniciales = zonas.slice(0, 5);
 
 /**
- * `SearchPanel` — the home page's primary search widget (SEARCH-1..8).
+ * `SearchPanel` — the home page's primary search widget with a tag-based
+ * multi-select input for locations and characteristics (SEARCH-1..8).
+ *
+ * Tag behaviour:
+ * - Press **Enter** to convert the current text into a tag (max 5).
+ * - Click a suggestion to add it as a tag.
+ * - Each tag shows an **X** button to remove it from the filter.
+ * - Tags that don't fit inside the bar are collapsed into a **+N** counter
+ *   (measured via ResizeObserver).
  *
  * Why a Client Component?
- * - Owns seven pieces of local state (operacion, tipo, consulta, three
- *   suggestion flags, buscando) plus a click-outside listener and a
- *   mock-loading timer. None of that belongs on the server.
+ * - Owns nine pieces of local state plus a click-outside listener, a
+ *   mock-loading timer, and a ResizeObserver for tag overflow. None of that
+ *   belongs on the server.
  *
- * Composition:
- * - The `<form>` wraps the operation toggle + the search bar.
- * - The "Buscar con IA" button lives OUTSIDE the form so its click
- *   never accidentally submits it.
- *
- * Combobox semantics:
- * - The input is a `role="combobox"` with `aria-controls` pointing at
- *   the suggestion listbox. The listbox carries `role="listbox"` and
- *   each suggestion a `role="option"` with `aria-selected`. This is
- *   the WAI-ARIA 1.2 combobox pattern (SEARCH-4).
+ * Combobox semantics (SEARCH-4):
+ * - The input is `role="combobox"` with `aria-controls` pointing at the
+ *   suggestion listbox. The listbox carries `role="listbox"` and each
+ *   suggestion a `role="option"` with `aria-selected`. WAI-ARIA 1.2 pattern.
  *
  * Keyboard model (SEARCH-4):
- * - ArrowDown/ArrowUp wrap around the suggestion list.
- * - Enter selects the highlighted suggestion (no form submit).
- * - Escape closes the dropdown.
- * - The handler also short-circuits while the IME is composing
- *   (keyCode 229) so users typing in CJK keyboards don't jump the
- *   highlight mid-stroke.
+ * - ArrowDown/ArrowUp wrap the suggestion list.
+ * - Enter adds a tag (text or highlighted suggestion).
+ * - Escape closes the dropdown or clears the input.
+ * - IME composition (keyCode 229) is short-circuited.
  *
  * Loading state (SEARCH-5):
- * - On submit the button swaps its icon for a spinning `Loader2` for
- *   1 second. No fetch happens — this is a visual placeholder until
- *   the search endpoint is wired up (matches the AI dialog's "coming
- *   soon" treatment).
+ * - On submit the button swaps its icon for a spinning `Loader2` for 1 s.
+ *   No fetch happens — placeholder until the search endpoint is wired up.
  */
 export function SearchPanel() {
+  // ── State ────────────────────────────────────────────────────────────
   const [operacion, setOperacion] = useState<Operacion>('alquilar');
   const [tipo, setTipo] = useState('');
-  const [consulta, setConsulta] = useState('');
+  const [inputText, setInputText] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
   const [sugerenciasAbiertas, setSugerenciasAbiertas] = useState(false);
   const [resaltado, setResaltado] = useState(0);
   const [buscando, setBuscando] = useState(false);
   const [modalIa, setModalIa] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(MAX_TAGS);
+
   const contenedor = useRef<HTMLDivElement>(null);
+  const tagsRowRef = useRef<HTMLDivElement>(null);
+  const tagElementsRef = useRef<(HTMLSpanElement | null)[]>([]);
 
+  // ── Suggestions ─────────────────────────────────────────────────────
   const sugerencias = useMemo(() => {
-    const q = consulta.trim().toLowerCase();
+    const q = inputText.trim().toLowerCase();
     if (!q) return sugerenciasIniciales;
-    return zonas.filter((z) => z.toLowerCase().includes(q)).slice(0, 6);
-  }, [consulta]);
+    const matches = zonas.filter((z) => z.toLowerCase().includes(q));
+    // Exclude zones already present as tags
+    const tagSet = new Set(tags.map((t) => t.toLowerCase()));
+    return matches.filter((z) => !tagSet.has(z.toLowerCase())).slice(0, 6);
+  }, [inputText, tags]);
 
+  // ── Tag helpers ─────────────────────────────────────────────────────
+  const addTag = useCallback(
+    (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || tags.length >= MAX_TAGS) return;
+      if (tags.some((t) => t.toLowerCase() === trimmed.toLowerCase())) return;
+      setTags((prev) => [...prev, trimmed]);
+      setInputText('');
+      setSugerenciasAbiertas(false);
+      setResaltado(0);
+    },
+    [tags],
+  );
+
+  const removeTag = useCallback((index: number) => {
+    setTags((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  // ── Overflow measurement ────────────────────────────────────────────
+  useEffect(() => {
+    const row = tagsRowRef.current;
+    if (!row) return;
+
+    const observer = new ResizeObserver(() => {
+      const availableWidth = row.clientWidth - INPUT_RESERVE_PX;
+      let accumulated = 0;
+      let count = 0;
+
+      for (let i = 0; i < tags.length; i++) {
+        const el = tagElementsRef.current[i];
+        if (!el) break;
+        const tagWidth = el.offsetWidth + TAG_GAP_PX;
+        if (accumulated + tagWidth <= availableWidth) {
+          accumulated += tagWidth;
+          count++;
+        } else {
+          break;
+        }
+      }
+
+      setVisibleCount(Math.max(0, count));
+    });
+
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [tags]);
+
+  // Reset ref array when tags change so stale elements aren't measured
+  useEffect(() => {
+    tagElementsRef.current = tagElementsRef.current.slice(0, tags.length);
+  }, [tags]);
+
+  // ── Click outside ───────────────────────────────────────────────────
   useEffect(() => {
     const alClickear = (e: MouseEvent) => {
       if (!contenedor.current?.contains(e.target as Node)) {
@@ -78,12 +136,53 @@ export function SearchPanel() {
     return () => document.removeEventListener('mousedown', alClickear);
   }, []);
 
+  // ── Submit ──────────────────────────────────────────────────────────
   function buscar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSugerenciasAbiertas(false);
     setBuscando(true);
     window.setTimeout(() => setBuscando(false), 1000);
   }
+
+  // ── Keyboard ────────────────────────────────────────────────────────
+  function handleInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+
+    if (e.key === 'Enter') {
+      // If a suggestion is highlighted, add it as a tag
+      if (sugerenciasAbiertas && sugerencias[resaltado]) {
+        e.preventDefault();
+        addTag(sugerencias[resaltado]);
+        return;
+      }
+      // Otherwise add the raw text as a tag
+      if (inputText.trim()) {
+        e.preventDefault();
+        addTag(inputText);
+        return;
+      }
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSugerenciasAbiertas(true);
+      setResaltado((i) => (i + 1) % Math.max(sugerencias.length, 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setResaltado((i) =>
+        i === 0 ? Math.max(sugerencias.length - 1, 0) : i - 1,
+      );
+    } else if (e.key === 'Escape') {
+      if (sugerenciasAbiertas) {
+        setSugerenciasAbiertas(false);
+      } else if (inputText) {
+        setInputText('');
+        setResaltado(0);
+      }
+    }
+  }
+
+  const hiddenCount = tags.length - visibleCount;
 
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
@@ -92,6 +191,7 @@ export function SearchPanel() {
         className="min-w-0 flex-1"
         aria-label="Búsqueda de propiedades"
       >
+        {/* ── Operation toggle ───────────────────────────────────────── */}
         <div
           role="radiogroup"
           aria-label="Tipo de operación"
@@ -116,10 +216,12 @@ export function SearchPanel() {
           ))}
         </div>
 
+        {/* ── Search bar ─────────────────────────────────────────────── */}
         <div
           ref={contenedor}
           className="glass-panel relative flex flex-col gap-1 rounded-[1.75rem] border border-border/70 p-2 sm:h-[4.5rem] sm:flex-row sm:items-center sm:rounded-full sm:pl-5"
         >
+          {/* Property type select */}
           <label className="relative flex min-w-0 shrink-0 items-center sm:w-44">
             <span className="sr-only">¿Qué buscás?</span>
             <select
@@ -145,52 +247,87 @@ export function SearchPanel() {
             className="hidden h-8 w-px shrink-0 bg-border sm:block"
           />
 
+          {/* ── Tag + input zone ─────────────────────────────────────── */}
           <div className="relative min-w-0 flex-1">
-            <MapPin
-              aria-hidden
-              className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-            />
-            <input
-              type="text"
-              value={consulta}
-              role="combobox"
-              aria-expanded={sugerenciasAbiertas}
-              aria-autocomplete="list"
-              aria-controls="sugerencias-zona"
-              aria-label="Zona, barrio o dirección"
-              placeholder="Zona, barrio, dirección o característica"
-              onChange={(e) => {
-                setConsulta(e.target.value);
-                setSugerenciasAbiertas(true);
-                setResaltado(0);
-              }}
-              onFocus={() => setSugerenciasAbiertas(true)}
-              onKeyDown={(e) => {
-                if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-                if (e.key === 'ArrowDown') {
-                  e.preventDefault();
-                  setSugerenciasAbiertas(true);
-                  setResaltado((i) => (i + 1) % Math.max(sugerencias.length, 1));
-                } else if (e.key === 'ArrowUp') {
-                  e.preventDefault();
-                  setResaltado((i) =>
-                    i === 0 ? Math.max(sugerencias.length - 1, 0) : i - 1,
-                  );
-                } else if (e.key === 'Escape') {
-                  setSugerenciasAbiertas(false);
-                } else if (
-                  e.key === 'Enter' &&
-                  sugerenciasAbiertas &&
-                  sugerencias[resaltado]
-                ) {
-                  e.preventDefault();
-                  setConsulta(sugerencias[resaltado]);
-                  setSugerenciasAbiertas(false);
-                }
-              }}
-              className="h-12 w-full rounded-full bg-transparent pr-3 pl-9 text-sm placeholder:text-muted-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none"
-            />
+            <div
+              ref={tagsRowRef}
+              className="flex h-12 items-center gap-1.5 overflow-hidden"
+            >
+              {/* MapPin icon — visible only when there are no tags */}
+              {tags.length === 0 && (
+                <MapPin
+                  aria-hidden
+                  className="absolute left-3 top-1/2 z-10 size-4 shrink-0 -translate-y-1/2 text-muted-foreground"
+                />
+              )}
 
+              {/* Visible tags */}
+              {tags.slice(0, visibleCount).map((tag, i) => (
+                <span
+                  key={`${tag}-${i}`}
+                  ref={(el) => {
+                    tagElementsRef.current[i] = el;
+                  }}
+                  data-tag-index={i}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full bg-secondary/80 px-2.5 py-1 text-xs font-medium text-secondary-foreground"
+                >
+                  <span className="max-w-[8ch] truncate">{tag}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeTag(i);
+                    }}
+                    className="grid size-4 shrink-0 place-items-center rounded-full transition-colors hover:bg-foreground/10"
+                    aria-label={`Quitar ${tag}`}
+                  >
+                    <X aria-hidden className="size-3" />
+                  </button>
+                </span>
+              ))}
+
+              {/* Hidden tags counter */}
+              {hiddenCount > 0 && (
+                <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                  +{hiddenCount}
+                </span>
+              )}
+
+              {/* Text input */}
+              <input
+                type="text"
+                value={inputText}
+                role="combobox"
+                aria-expanded={sugerenciasAbiertas}
+                aria-autocomplete="list"
+                aria-controls="sugerencias-zona"
+                aria-label="Zona, barrio o característica"
+                placeholder={
+                  tags.length === 0
+                    ? 'Zona, barrio, dirección o característica'
+                    : ''
+                }
+                onChange={(e) => {
+                  setInputText(e.target.value);
+                  setSugerenciasAbiertas(true);
+                  setResaltado(0);
+                }}
+                onFocus={() => {
+                  if (inputText || tags.length < MAX_TAGS) {
+                    setSugerenciasAbiertas(true);
+                  }
+                }}
+                onKeyDown={handleInputKeyDown}
+                className={cn(
+                  'h-full bg-transparent text-sm placeholder:text-muted-foreground focus-visible:outline-none',
+                  tags.length === 0
+                    ? 'w-full rounded-full pl-9 pr-3'
+                    : 'min-w-[60px] flex-1 rounded-full pl-1 pr-3',
+                )}
+              />
+            </div>
+
+            {/* ── Suggestions dropdown ────────────────────────────────── */}
             {sugerenciasAbiertas && (
               <div
                 id="sugerencias-zona"
@@ -205,10 +342,7 @@ export function SearchPanel() {
                       role="option"
                       aria-selected={i === resaltado}
                       onMouseEnter={() => setResaltado(i)}
-                      onClick={() => {
-                        setConsulta(zona);
-                        setSugerenciasAbiertas(false);
-                      }}
+                      onClick={() => addTag(zona)}
                       className={cn(
                         'flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-sm transition-colors',
                         i === resaltado
@@ -222,14 +356,16 @@ export function SearchPanel() {
                   ))
                 ) : (
                   <p className="px-3 py-3 text-sm text-muted-foreground">
-                    No encontramos zonas con “{consulta.trim()}”. Probá con
-                    otro barrio o usá la búsqueda con IA.
+                    {inputText.trim()
+                      ? `No encontramos "${inputText.trim()}". Presioná Enter para agregarlo como filtro.`
+                      : 'Escribí para buscar zonas o características.'}
                   </p>
                 )}
               </div>
             )}
           </div>
 
+          {/* Search button */}
           <Button
             type="submit"
             size="lg"
@@ -242,6 +378,7 @@ export function SearchPanel() {
         </div>
       </form>
 
+      {/* ── AI search button ──────────────────────────────────────────── */}
       <div className="relative shrink-0 lg:self-end">
         <div
           aria-hidden
