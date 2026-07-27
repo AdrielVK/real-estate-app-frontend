@@ -1,6 +1,7 @@
 'use client';
 
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { ChevronDown, Loader2, MapPin, Search, Tags, Wand2, X } from 'lucide-react';
 
@@ -14,7 +15,6 @@ import { Button } from '@/components/ui/Button';
 const MAX_TAGS = 4;
 const SUGGESTION_LIMIT = 4;
 const BLUR_DELAY_MS = 100;
-const DROPDOWN_Z = 'z-50';
 
 /**
  * `SearchPanel` — the home page's primary search widget with two independent
@@ -90,6 +90,31 @@ export function SearchPanel() {
 
   const contenedor = useRef<HTMLDivElement>(null);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tipoTriggerRef = useRef<HTMLButtonElement>(null);
+  const locationTriggerRef = useRef<HTMLDivElement>(null);
+  const featuresTriggerRef = useRef<HTMLDivElement>(null);
+
+  // Portal dropdown positions (computed in effects to avoid reading refs during render)
+  const [tipoDropdownStyle, setTipoDropdownStyle] = useState<React.CSSProperties>({});
+  const [locationDropdownStyle, setLocationDropdownStyle] = useState<React.CSSProperties>({});
+  const [featuresDropdownStyle, setFeaturesDropdownStyle] = useState<React.CSSProperties>({});
+
+  function calcStyle(ref: React.RefObject<HTMLElement | null>, minWidth = 256): React.CSSProperties {
+    if (!ref.current) return { position: 'fixed', top: 0, left: 0, zIndex: 50, minWidth };
+    const r = ref.current.getBoundingClientRect();
+    return {
+      position: 'fixed',
+      top: r.bottom + 8,
+      left: r.left,
+      minWidth: Math.max(r.width, minWidth),
+      zIndex: 50,
+    };
+  }
+
+  // Recalculate portal positions whenever a dropdown opens
+  useEffect(() => { if (tipoOpen) setTipoDropdownStyle(calcStyle(tipoTriggerRef)); }, [tipoOpen]);
+  useEffect(() => { if (locationOpen) setLocationDropdownStyle(calcStyle(locationTriggerRef)); }, [locationOpen]);
+  useEffect(() => { if (featuresOpen) setFeaturesDropdownStyle(calcStyle(featuresTriggerRef)); }, [featuresOpen]);
 
   // ── Derived state ───────────────────────────────────────────────────
   const isActive =
@@ -315,6 +340,7 @@ export function SearchPanel() {
           {/* Property type combobox */}
           <div className="relative flex min-w-0 shrink-0 items-center sm:w-44">
             <button
+              ref={tipoTriggerRef}
               type="button"
               onClick={() => setTipoOpen((v) => !v)}
               className={cn(
@@ -333,36 +359,36 @@ export function SearchPanel() {
               />
             </button>
 
-            {tipoOpen && (
-              <div
-                role="listbox"
-                className={cn(
-                  'glass-panel absolute top-[calc(100%+0.5rem)] left-0 z-50 w-full min-w-44 rounded-2xl border border-border/70 p-1.5',
-                  DROPDOWN_Z,
-                )}
-              >
-                {tiposDePropiedad.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    role="option"
-                    aria-selected={tipo === t}
-                    onClick={() => {
-                      setTipo(t);
-                      setTipoOpen(false);
-                    }}
-                    className={cn(
-                      'flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-colors',
-                      tipo === t
-                        ? 'bg-secondary text-secondary-foreground'
-                        : 'text-muted-foreground hover:bg-secondary/50',
-                    )}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            )}
+            {tipoOpen &&
+              createPortal(
+                <div
+                  role="listbox"
+                  style={tipoDropdownStyle}
+                  className="glass-panel rounded-2xl border border-border/70 p-1.5"
+                >
+                  {tiposDePropiedad.map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      role="option"
+                      aria-selected={tipo === t}
+                      onClick={() => {
+                        setTipo(t);
+                        setTipoOpen(false);
+                      }}
+                      className={cn(
+                        'flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-colors',
+                        tipo === t
+                          ? 'bg-secondary text-secondary-foreground'
+                          : 'text-muted-foreground hover:bg-secondary/50',
+                      )}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>,
+                document.body,
+              )}
           </div>
 
           <span
@@ -371,7 +397,7 @@ export function SearchPanel() {
           />
 
           {/* ── Location tag + input block ────────────────────────────── */}
-          <div className="relative min-w-0 flex-1">
+          <div ref={locationTriggerRef} className="relative min-w-0 flex-1">
             <div className="flex h-12 items-center gap-1.5 overflow-hidden">
               {locationTags.length === 0 && (
                 <MapPin
@@ -432,49 +458,49 @@ export function SearchPanel() {
               />
             </div>
 
-            {/* Location suggestions dropdown */}
-            {locationOpen && (
-              <div
-                id="sugerencias-direccion"
-                role="listbox"
-                className={cn(
-                  'glass-panel absolute top-[calc(100%+0.75rem)] left-0 w-full min-w-64 rounded-3xl border border-border/70 p-1.5',
-                  DROPDOWN_Z,
-                )}
-              >
-                {locationLimitReached ? (
-                  <p className="px-3 py-3 text-sm text-muted-foreground">
-                    Máximo 4 ubicaciones
-                  </p>
-                ) : locationSuggestions.length > 0 ? (
-                  locationSuggestions.map((zona, i) => (
-                    <button
-                      key={zona}
-                      type="button"
-                      role="option"
-                      aria-selected={i === locationHighlight}
-                      onMouseEnter={() => setLocationHighlight(i)}
-                      onClick={() => addLocationTag(zona)}
-                      className={cn(
-                        'flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-sm transition-colors',
-                        i === locationHighlight
-                          ? 'bg-secondary text-secondary-foreground'
-                          : 'text-muted-foreground',
-                      )}
-                    >
-                      <MapPin aria-hidden className="size-4 shrink-0" />
-                      {zona}
-                    </button>
-                  ))
-                ) : (
-                  <p className="px-3 py-3 text-sm text-muted-foreground">
-                    {locationInput.trim()
-                      ? `No encontramos "${locationInput.trim()}". Presioná Enter para agregarlo como filtro.`
-                      : 'Escribí para buscar zonas.'}
-                  </p>
-                )}
-              </div>
-            )}
+            {/* Location suggestions dropdown (portaled to escape glass-panel stacking context) */}
+            {locationOpen &&
+              createPortal(
+                <div
+                  id="sugerencias-direccion"
+                  role="listbox"
+                  style={locationDropdownStyle}
+                  className="glass-panel rounded-3xl border border-border/70 p-1.5"
+                >
+                  {locationLimitReached ? (
+                    <p className="px-3 py-3 text-sm text-muted-foreground">
+                      Máximo 4 ubicaciones
+                    </p>
+                  ) : locationSuggestions.length > 0 ? (
+                    locationSuggestions.map((zona, i) => (
+                      <button
+                        key={zona}
+                        type="button"
+                        role="option"
+                        aria-selected={i === locationHighlight}
+                        onMouseEnter={() => setLocationHighlight(i)}
+                        onClick={() => addLocationTag(zona)}
+                        className={cn(
+                          'flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-sm transition-colors',
+                          i === locationHighlight
+                            ? 'bg-secondary text-secondary-foreground'
+                            : 'text-muted-foreground',
+                        )}
+                      >
+                        <MapPin aria-hidden className="size-4 shrink-0" />
+                        {zona}
+                      </button>
+                    ))
+                  ) : (
+                    <p className="px-3 py-3 text-sm text-muted-foreground">
+                      {locationInput.trim()
+                        ? `No encontramos "${locationInput.trim()}". Presioná Enter para agregarlo como filtro.`
+                        : 'Escribí para buscar zonas.'}
+                    </p>
+                  )}
+                </div>,
+                document.body,
+              )}
           </div>
 
           <span
@@ -483,7 +509,7 @@ export function SearchPanel() {
           />
 
           {/* ── Features tag + input block ─────────────────────────────── */}
-          <div className="relative min-w-0 flex-1">
+          <div ref={featuresTriggerRef} className="relative min-w-0 flex-1">
             <div className="flex h-12 items-center gap-1.5 overflow-hidden">
               {featuresTags.length === 0 && (
                 <Tags
@@ -544,49 +570,49 @@ export function SearchPanel() {
               />
             </div>
 
-            {/* Features suggestions dropdown */}
-            {featuresOpen && (
-              <div
-                id="sugerencias-caracteristica"
-                role="listbox"
-                className={cn(
-                  'glass-panel absolute top-[calc(100%+0.75rem)] left-0 w-full min-w-64 rounded-3xl border border-border/70 p-1.5',
-                  DROPDOWN_Z,
-                )}
-              >
-                {featuresLimitReached ? (
-                  <p className="px-3 py-3 text-sm text-muted-foreground">
-                    Máximo 4 características
-                  </p>
-                ) : featuresSuggestions.length > 0 ? (
-                  featuresSuggestions.map((car, i) => (
-                    <button
-                      key={car}
-                      type="button"
-                      role="option"
-                      aria-selected={i === featuresHighlight}
-                      onMouseEnter={() => setFeaturesHighlight(i)}
-                      onClick={() => addFeaturesTag(car)}
-                      className={cn(
-                        'flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-sm transition-colors',
-                        i === featuresHighlight
-                          ? 'bg-secondary text-secondary-foreground'
-                          : 'text-muted-foreground',
-                      )}
-                    >
-                      <Tags aria-hidden className="size-4 shrink-0" />
-                      {car}
-                    </button>
-                  ))
-                ) : (
-                  <p className="px-3 py-3 text-sm text-muted-foreground">
-                    {featuresInput.trim()
-                      ? `No encontramos "${featuresInput.trim()}". Presioná Enter para agregarlo como filtro.`
-                      : 'Escribí para buscar características.'}
-                  </p>
-                )}
-              </div>
-            )}
+            {/* Features suggestions dropdown (portaled to escape glass-panel stacking context) */}
+            {featuresOpen &&
+              createPortal(
+                <div
+                  id="sugerencias-caracteristica"
+                  role="listbox"
+                  style={featuresDropdownStyle}
+                  className="glass-panel rounded-3xl border border-border/70 p-1.5"
+                >
+                  {featuresLimitReached ? (
+                    <p className="px-3 py-3 text-sm text-muted-foreground">
+                      Máximo 4 características
+                    </p>
+                  ) : featuresSuggestions.length > 0 ? (
+                    featuresSuggestions.map((car, i) => (
+                      <button
+                        key={car}
+                        type="button"
+                        role="option"
+                        aria-selected={i === featuresHighlight}
+                        onMouseEnter={() => setFeaturesHighlight(i)}
+                        onClick={() => addFeaturesTag(car)}
+                        className={cn(
+                          'flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-sm transition-colors',
+                          i === featuresHighlight
+                            ? 'bg-secondary text-secondary-foreground'
+                            : 'text-muted-foreground',
+                        )}
+                      >
+                        <Tags aria-hidden className="size-4 shrink-0" />
+                        {car}
+                      </button>
+                    ))
+                  ) : (
+                    <p className="px-3 py-3 text-sm text-muted-foreground">
+                      {featuresInput.trim()
+                        ? `No encontramos "${featuresInput.trim()}". Presioná Enter para agregarlo como filtro.`
+                        : 'Escribí para buscar características.'}
+                    </p>
+                  )}
+                </div>,
+                document.body,
+              )}
           </div>
 
           {/* Search button — collapsible */}
@@ -595,7 +621,7 @@ export function SearchPanel() {
             size={isActive ? 'lg' : 'icon-lg'}
             disabled={buscando}
             className={cn(
-              'shrink-0 rounded-full transition-all duration-300',
+              'shrink-0 rounded-full transition-all duration-500 ease-out',
               isActive
                 ? 'h-12 px-6 shadow-[0_14px_30px_-16px_color-mix(in_oklch,var(--primary)_85%,transparent)]'
                 : 'h-12',
@@ -604,7 +630,7 @@ export function SearchPanel() {
             {buscando ? <Loader2 className="animate-spin" /> : <Search />}
             <span
               className={cn(
-                'overflow-hidden transition-all duration-300',
+                'overflow-hidden transition-all duration-500 ease-out',
                 isActive ? 'max-w-[100px] opacity-100 ml-0' : 'max-w-0 opacity-0 -ml-1',
               )}
             >
