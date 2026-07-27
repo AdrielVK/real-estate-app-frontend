@@ -145,6 +145,12 @@ export function Dialog({ open, onOpenChange, labelledBy, className, children }: 
         'max-w-lg w-[calc(100%-2rem)]',
         'backdrop:bg-black/50 backdrop:backdrop-blur-sm',
         'text-foreground',
+        // `m-auto` centers the dialog vertically/horizontally when
+        // shown as modal. Without it, top-aligned dialogs look
+        // unbalanced. Kept as a class (not an inline style) so the
+        // bottom-sheet variant of `SearchResultsAdvancedFilters` can
+        // override it with `max-sm:mb-0 max-sm:mt-auto` etc.
+        'm-auto',
         // Subtle entry animation: opacity + scale. The native dialog
         // is in the DOM immediately when `open` is true, so we just
         // animate the surface itself.
@@ -161,9 +167,14 @@ export function Dialog({ open, onOpenChange, labelledBy, className, children }: 
 // Inline style block — kept outside the render so React doesn't
 // re-allocate a new object every render. `color` is set here to match
 // the foreground token so default text inside the dialog is legible.
+//
+// Note: `margin: auto` lives on the `m-auto` Tailwind class on the
+// `<dialog>` itself (see the className block) — NOT here. Inline
+// styles are not responsive, so the bottom-sheet variant of the
+// AdvancedFilters modal (which needs `max-sm:mb-0 max-sm:mt-auto
+// max-sm:w-full max-sm:max-w-none max-sm:rounded-b-none`) could not
+// override it. Moving it to a class lets `max-sm:` utilities win
+// for free.
 const DIALOG_STYLE: CSSProperties = {
   color: 'var(--foreground)',
-  // `margin: auto` centers the dialog vertically/horizontally when shown
-  // as modal. Without it, top-aligned dialogs look unbalanced.
-  margin: 'auto',
 };
