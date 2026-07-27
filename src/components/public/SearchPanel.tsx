@@ -14,7 +14,6 @@ import { Button } from '@/components/ui/Button';
 
 const MAX_TAGS = 4;
 const SUGGESTION_LIMIT = 4;
-const BLUR_DELAY_MS = 100;
 
 /**
  * `SearchPanel` — the home page's primary search widget with two independent
@@ -72,14 +71,12 @@ export function SearchPanel() {
   const [locationInput, setLocationInput] = useState('');
   const [locationOpen, setLocationOpen] = useState(false);
   const [locationHighlight, setLocationHighlight] = useState(0);
-  const [locationFocused, setLocationFocused] = useState(false);
 
   // Features tags
   const [featuresTags, setFeaturesTags] = useState<string[]>([]);
   const [featuresInput, setFeaturesInput] = useState('');
   const [featuresOpen, setFeaturesOpen] = useState(false);
   const [featuresHighlight, setFeaturesHighlight] = useState(0);
-  const [featuresFocused, setFeaturesFocused] = useState(false);
 
   // Property type dropdown
   const [tipoOpen, setTipoOpen] = useState(false);
@@ -89,7 +86,6 @@ export function SearchPanel() {
   const [modalIa, setModalIa] = useState(false);
 
   const contenedor = useRef<HTMLDivElement>(null);
-  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tipoTriggerRef = useRef<HTMLButtonElement>(null);
   const locationTriggerRef = useRef<HTMLDivElement>(null);
   const featuresTriggerRef = useRef<HTMLDivElement>(null);
@@ -116,14 +112,18 @@ export function SearchPanel() {
   useEffect(() => { if (locationOpen) setLocationDropdownStyle(calcStyle(locationTriggerRef)); }, [locationOpen]);
   useEffect(() => { if (featuresOpen) setFeaturesDropdownStyle(calcStyle(featuresTriggerRef)); }, [featuresOpen]);
 
-  // ── Derived state ───────────────────────────────────────────────────
-  const isActive =
-    locationTags.length > 0 ||
-    featuresTags.length > 0 ||
-    locationFocused ||
-    featuresFocused;
+  // Reposition open dropdowns on scroll so they stay anchored to their inputs
+  useEffect(() => {
+    const onScroll = () => {
+      if (tipoOpen) setTipoDropdownStyle(calcStyle(tipoTriggerRef));
+      if (locationOpen) setLocationDropdownStyle(calcStyle(locationTriggerRef));
+      if (featuresOpen) setFeaturesDropdownStyle(calcStyle(featuresTriggerRef));
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [tipoOpen, locationOpen, featuresOpen]);
 
-  // ── Suggestions (per input) ─────────────────────────────────────────
+  // ── Click outside ───────────────────────────────────────────────────
   const locationSuggestions = useMemo(() => {
     const q = locationInput.trim().toLowerCase();
     const tagSet = new Set(locationTags.map((t) => t.toLowerCase()));
@@ -194,31 +194,6 @@ export function SearchPanel() {
     document.addEventListener('mousedown', alClickear);
     return () => document.removeEventListener('mousedown', alClickear);
   }, []);
-
-  // ── Cleanup pending blur timer on unmount ───────────────────────────
-  useEffect(() => {
-    return () => {
-      if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
-    };
-  }, []);
-
-  /**
-   * Schedule a focus-out for a given input group. The 100 ms delay lets
-   * `mousedown` on a suggestion (or a tag's X button) register BEFORE we
-   * flip the focus state, so the search button doesn't briefly collapse
-   * while the click is in flight (SRT-10).
-   */
-  function scheduleBlur(setter: (v: boolean) => void) {
-    if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
-    blurTimerRef.current = setTimeout(() => setter(false), BLUR_DELAY_MS);
-  }
-
-  function cancelPendingBlur() {
-    if (blurTimerRef.current) {
-      clearTimeout(blurTimerRef.current);
-      blurTimerRef.current = null;
-    }
-  }
 
   // ── Submit ──────────────────────────────────────────────────────────
   function buscar(event: FormEvent<HTMLFormElement>) {
@@ -440,14 +415,8 @@ export function SearchPanel() {
                   setLocationOpen(true);
                   setLocationHighlight(0);
                 }}
-                onFocus={() => {
-                  cancelPendingBlur();
-                  setLocationFocused(true);
-                  setLocationOpen(true);
-                }}
-                onBlur={() => {
-                  scheduleBlur(setLocationFocused);
-                }}
+                onFocus={() => setLocationOpen(true)}
+                onBlur={undefined}
                 onKeyDown={handleLocationKeyDown}
                 className={cn(
                   'h-full bg-transparent text-sm placeholder:text-muted-foreground focus-visible:outline-none',
@@ -552,14 +521,8 @@ export function SearchPanel() {
                   setFeaturesOpen(true);
                   setFeaturesHighlight(0);
                 }}
-                onFocus={() => {
-                  cancelPendingBlur();
-                  setFeaturesFocused(true);
-                  setFeaturesOpen(true);
-                }}
-                onBlur={() => {
-                  scheduleBlur(setFeaturesFocused);
-                }}
+                onFocus={() => setFeaturesOpen(true)}
+                onBlur={undefined}
                 onKeyDown={handleFeaturesKeyDown}
                 className={cn(
                   'h-full bg-transparent text-sm placeholder:text-muted-foreground focus-visible:outline-none',
@@ -615,27 +578,15 @@ export function SearchPanel() {
               )}
           </div>
 
-          {/* Search button — collapsible */}
+          {/* Search button */}
           <Button
             type="submit"
-            size={isActive ? 'lg' : 'icon-lg'}
+            size="lg"
             disabled={buscando}
-            className={cn(
-              'shrink-0 rounded-full transition-all duration-500 ease-out',
-              isActive
-                ? 'h-12 px-6 shadow-[0_14px_30px_-16px_color-mix(in_oklch,var(--primary)_85%,transparent)]'
-                : 'h-12',
-            )}
+            className="h-12 shrink-0 rounded-full px-6 shadow-[0_14px_30px_-16px_color-mix(in_oklch,var(--primary)_85%,transparent)]"
           >
             {buscando ? <Loader2 className="animate-spin" /> : <Search />}
-            <span
-              className={cn(
-                'overflow-hidden transition-all duration-500 ease-out',
-                isActive ? 'max-w-[100px] opacity-100 ml-0' : 'max-w-0 opacity-0 -ml-1',
-              )}
-            >
-              Buscar
-            </span>
+            Buscar
           </Button>
         </div>
       </form>
