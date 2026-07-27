@@ -203,3 +203,21 @@ export const zonas = [
   'Jardín Espinosa',
   'Alberdi',
 ] as const;
+
+/** Property characteristics shown in the SearchPanel features combobox (refactor-search-tags). */
+export const caracteristicas = [
+  'Pileta',
+  'Parrilla',
+  'Cochera',
+  'Balcón',
+  'Terraza',
+  'Quincho',
+  'Seguridad',
+  'Gimnasio',
+  'Laundry',
+  'Mascotas',
+  'Amoblado',
+  'Calefacción',
+  'Aire acondicionado',
+  'SUM',
+] as const;
