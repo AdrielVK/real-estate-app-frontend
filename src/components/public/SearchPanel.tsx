@@ -90,10 +90,43 @@ export function SearchPanel() {
   const locationTriggerRef = useRef<HTMLDivElement>(null);
   const featuresTriggerRef = useRef<HTMLDivElement>(null);
 
+  // Refs to portal dropdown DOM nodes so click-outside can ignore them
+  const tipoDropdownRef = useRef<HTMLDivElement>(null);
+  const locationDropdownRef = useRef<HTMLDivElement>(null);
+  const featuresDropdownRef = useRef<HTMLDivElement>(null);
+
   // Portal dropdown positions (computed in effects to avoid reading refs during render)
   const [tipoDropdownStyle, setTipoDropdownStyle] = useState<React.CSSProperties>({});
   const [locationDropdownStyle, setLocationDropdownStyle] = useState<React.CSSProperties>({});
   const [featuresDropdownStyle, setFeaturesDropdownStyle] = useState<React.CSSProperties>({});
+
+  // ── Open helpers (mutual exclusion: only one dropdown at a time) ────
+  function openTipo() {
+    setLocationOpen(false);
+    setFeaturesOpen(false);
+    setTipoOpen(true);
+  }
+  function toggleTipo() {
+    if (tipoOpen) setTipoOpen(false);
+    else openTipo();
+  }
+
+  function openLocation() {
+    setTipoOpen(false);
+    setFeaturesOpen(false);
+    setLocationOpen(true);
+  }
+  function openFeatures() {
+    setTipoOpen(false);
+    setLocationOpen(false);
+    setFeaturesOpen(true);
+  }
+
+  function closeAll() {
+    setTipoOpen(false);
+    setLocationOpen(false);
+    setFeaturesOpen(false);
+  }
 
   function calcStyle(ref: React.RefObject<HTMLElement | null>, minWidth = 256): React.CSSProperties {
     if (!ref.current) return { position: 'fixed', top: 0, left: 0, zIndex: 50, minWidth };
@@ -112,16 +145,12 @@ export function SearchPanel() {
   useEffect(() => { if (locationOpen) setLocationDropdownStyle(calcStyle(locationTriggerRef)); }, [locationOpen]);
   useEffect(() => { if (featuresOpen) setFeaturesDropdownStyle(calcStyle(featuresTriggerRef)); }, [featuresOpen]);
 
-  // Reposition open dropdowns on scroll so they stay anchored to their inputs
+  // Close any open dropdown on scroll
   useEffect(() => {
-    const onScroll = () => {
-      if (tipoOpen) setTipoDropdownStyle(calcStyle(tipoTriggerRef));
-      if (locationOpen) setLocationDropdownStyle(calcStyle(locationTriggerRef));
-      if (featuresOpen) setFeaturesDropdownStyle(calcStyle(featuresTriggerRef));
-    };
+    const onScroll = () => closeAll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
-  }, [tipoOpen, locationOpen, featuresOpen]);
+  }, []);
 
   // ── Click outside ───────────────────────────────────────────────────
   const locationSuggestions = useMemo(() => {
@@ -185,11 +214,11 @@ export function SearchPanel() {
   // ── Click outside ───────────────────────────────────────────────────
   useEffect(() => {
     const alClickear = (e: MouseEvent) => {
-      if (!contenedor.current?.contains(e.target as Node)) {
-        setLocationOpen(false);
-        setFeaturesOpen(false);
-        setTipoOpen(false);
-      }
+      const target = e.target as Element;
+      // Ignore clicks inside the search bar or any portal dropdown
+      if (contenedor.current?.contains(target)) return;
+      if (target.closest('[role="listbox"]')) return;
+      closeAll();
     };
     document.addEventListener('mousedown', alClickear);
     return () => document.removeEventListener('mousedown', alClickear);
@@ -198,8 +227,7 @@ export function SearchPanel() {
   // ── Submit ──────────────────────────────────────────────────────────
   function buscar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setLocationOpen(false);
-    setFeaturesOpen(false);
+    closeAll();
     setBuscando(true);
     window.setTimeout(() => setBuscando(false), 1000);
   }
@@ -223,7 +251,7 @@ export function SearchPanel() {
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setLocationOpen(true);
+      openLocation();
       setLocationHighlight((i) => (i + 1) % Math.max(locationSuggestions.length, 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
@@ -258,7 +286,7 @@ export function SearchPanel() {
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setFeaturesOpen(true);
+      openFeatures();
       setFeaturesHighlight((i) => (i + 1) % Math.max(featuresSuggestions.length, 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
@@ -317,7 +345,7 @@ export function SearchPanel() {
             <button
               ref={tipoTriggerRef}
               type="button"
-              onClick={() => setTipoOpen((v) => !v)}
+              onClick={toggleTipo}
               className={cn(
                 'flex w-full items-center gap-2 rounded-full bg-transparent py-3 pr-8 pl-3 text-sm sm:pl-1',
                 tipo ? 'text-foreground' : 'text-muted-foreground',
@@ -337,6 +365,7 @@ export function SearchPanel() {
             {tipoOpen &&
               createPortal(
                 <div
+                  ref={tipoDropdownRef}
                   role="listbox"
                   style={tipoDropdownStyle}
                   className="glass-panel rounded-2xl border border-border/70 p-1.5"
@@ -412,10 +441,10 @@ export function SearchPanel() {
                 placeholder={locationTags.length === 0 ? 'Zona, barrio o dirección' : ''}
                 onChange={(e) => {
                   setLocationInput(e.target.value);
-                  setLocationOpen(true);
+                  openLocation();
                   setLocationHighlight(0);
                 }}
-                onFocus={() => setLocationOpen(true)}
+                onFocus={() => openLocation()}
                 onBlur={undefined}
                 onKeyDown={handleLocationKeyDown}
                 className={cn(
@@ -431,6 +460,7 @@ export function SearchPanel() {
             {locationOpen &&
               createPortal(
                 <div
+                  ref={locationDropdownRef}
                   id="sugerencias-direccion"
                   role="listbox"
                   style={locationDropdownStyle}
@@ -518,10 +548,10 @@ export function SearchPanel() {
                 placeholder={featuresTags.length === 0 ? 'Características' : ''}
                 onChange={(e) => {
                   setFeaturesInput(e.target.value);
-                  setFeaturesOpen(true);
+                  openFeatures();
                   setFeaturesHighlight(0);
                 }}
-                onFocus={() => setFeaturesOpen(true)}
+                onFocus={() => openFeatures()}
                 onBlur={undefined}
                 onKeyDown={handleFeaturesKeyDown}
                 className={cn(
@@ -537,6 +567,7 @@ export function SearchPanel() {
             {featuresOpen &&
               createPortal(
                 <div
+                  ref={featuresDropdownRef}
                   id="sugerencias-caracteristica"
                   role="listbox"
                   style={featuresDropdownStyle}
