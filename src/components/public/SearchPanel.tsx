@@ -12,8 +12,9 @@ import { AiSearchDialog } from '@/components/public/AiSearchDialog';
 import { Button } from '@/components/ui/Button';
 
 const MAX_TAGS = 4;
-const SUGGESTION_LIMIT = 6;
+const SUGGESTION_LIMIT = 4;
 const BLUR_DELAY_MS = 100;
+const DROPDOWN_Z = 'z-50';
 
 /**
  * `SearchPanel` — the home page's primary search widget with two independent
@@ -79,6 +80,9 @@ export function SearchPanel() {
   const [featuresOpen, setFeaturesOpen] = useState(false);
   const [featuresHighlight, setFeaturesHighlight] = useState(0);
   const [featuresFocused, setFeaturesFocused] = useState(false);
+
+  // Property type dropdown
+  const [tipoOpen, setTipoOpen] = useState(false);
 
   // Misc
   const [buscando, setBuscando] = useState(false);
@@ -159,6 +163,7 @@ export function SearchPanel() {
       if (!contenedor.current?.contains(e.target as Node)) {
         setLocationOpen(false);
         setFeaturesOpen(false);
+        setTipoOpen(false);
       }
     };
     document.addEventListener('mousedown', alClickear);
@@ -307,26 +312,58 @@ export function SearchPanel() {
           ref={contenedor}
           className="glass-panel relative flex flex-col gap-1 rounded-[1.75rem] border border-border/70 p-2 sm:h-[4.5rem] sm:flex-row sm:items-center sm:rounded-full sm:pl-5"
         >
-          {/* Property type select */}
-          <label className="relative flex min-w-0 shrink-0 items-center sm:w-44">
-            <span className="sr-only">¿Qué buscás?</span>
-            <select
-              value={tipo}
-              onChange={(e) => setTipo(e.target.value)}
-              className="w-full appearance-none rounded-full bg-transparent py-3 pr-8 pl-3 text-sm text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none sm:pl-1"
+          {/* Property type combobox */}
+          <div className="relative flex min-w-0 shrink-0 items-center sm:w-44">
+            <button
+              type="button"
+              onClick={() => setTipoOpen((v) => !v)}
+              className={cn(
+                'flex w-full items-center gap-2 rounded-full bg-transparent py-3 pr-8 pl-3 text-sm sm:pl-1',
+                tipo ? 'text-foreground' : 'text-muted-foreground',
+                'focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none',
+              )}
             >
-              <option value="">¿Qué buscás?</option>
-              {tiposDePropiedad.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-            <ChevronDown
-              aria-hidden
-              className="pointer-events-none absolute right-3 size-4 text-muted-foreground sm:right-4"
-            />
-          </label>
+              <span className="truncate">{tipo || '¿Qué buscás?'}</span>
+              <ChevronDown
+                aria-hidden
+                className={cn(
+                  'pointer-events-none absolute right-3 size-4 shrink-0 text-muted-foreground transition-transform sm:right-4',
+                  tipoOpen && 'rotate-180',
+                )}
+              />
+            </button>
+
+            {tipoOpen && (
+              <div
+                role="listbox"
+                className={cn(
+                  'glass-panel absolute top-[calc(100%+0.5rem)] left-0 z-50 w-full min-w-44 rounded-2xl border border-border/70 p-1.5',
+                  DROPDOWN_Z,
+                )}
+              >
+                {tiposDePropiedad.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    role="option"
+                    aria-selected={tipo === t}
+                    onClick={() => {
+                      setTipo(t);
+                      setTipoOpen(false);
+                    }}
+                    className={cn(
+                      'flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-colors',
+                      tipo === t
+                        ? 'bg-secondary text-secondary-foreground'
+                        : 'text-muted-foreground hover:bg-secondary/50',
+                    )}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <span
             aria-hidden
@@ -400,7 +437,10 @@ export function SearchPanel() {
               <div
                 id="sugerencias-direccion"
                 role="listbox"
-                className="glass-panel absolute top-[calc(100%+0.75rem)] left-0 z-30 w-full min-w-64 rounded-3xl border border-border/70 p-1.5"
+                className={cn(
+                  'glass-panel absolute top-[calc(100%+0.75rem)] left-0 w-full min-w-64 rounded-3xl border border-border/70 p-1.5',
+                  DROPDOWN_Z,
+                )}
               >
                 {locationLimitReached ? (
                   <p className="px-3 py-3 text-sm text-muted-foreground">
@@ -509,7 +549,10 @@ export function SearchPanel() {
               <div
                 id="sugerencias-caracteristica"
                 role="listbox"
-                className="glass-panel absolute top-[calc(100%+0.75rem)] left-0 z-30 w-full min-w-64 rounded-3xl border border-border/70 p-1.5"
+                className={cn(
+                  'glass-panel absolute top-[calc(100%+0.75rem)] left-0 w-full min-w-64 rounded-3xl border border-border/70 p-1.5',
+                  DROPDOWN_Z,
+                )}
               >
                 {featuresLimitReached ? (
                   <p className="px-3 py-3 text-sm text-muted-foreground">
