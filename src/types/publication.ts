@@ -161,6 +161,12 @@ export interface SearchFilters {
  *
  * `operationType` and `propertyType` are returned as backend slugs; the
  * card looks them up in `OPERATION_LABEL` / `PROPERTY_TYPE_LABEL`.
+ *
+ * Enriched fields (PR for `enhance-search-result-card`): every new
+ * field is optional and absent-on-wire. A legacy backend that has not
+ * been updated yet still produces a valid payload — consumers just
+ * read `undefined` for the new fields and the card falls back to
+ * placeholders / shortened rows gracefully.
  */
 export interface PublicationSummaryDto {
   id: string;
@@ -174,7 +180,31 @@ export interface PublicationSummaryDto {
   rooms?: number;
   bedrooms?: number;
   bathrooms?: number;
+  /** Legacy alias — kept for back-compat. Prefer `totalAreaM2`. */
   totalArea?: number;
   expenses?: number;
   featured?: boolean;
+  /* ---- enriched fields (PR: enhance-search-result-card) -------- */
+  /** Gallery — first element is the hero image, the rest are extras. */
+  photos?: string[];
+  /** Pre-formatted address line (street + number), backend-built. */
+  addressFormatted?: string;
+  /** City/locality, surfaced when it is distinct from `addressFormatted`. */
+  addressCity?: string;
+  /** Indoor floor area in m². */
+  coveredAreaM2?: number;
+  /** Total plot / built area in m². Takes precedence over `totalArea`. */
+  totalAreaM2?: number;
+  /** Covered parking spaces (cocheras). */
+  garages?: number;
+  /** Whether the listing accepts mortgage / bank credit. */
+  acceptsCredits?: boolean;
+  /** Whether the listing accepts pets. */
+  acceptsPets?: boolean;
+  /** ISO 8601 timestamp the listing went live. */
+  publishedAt?: string;
+  /** ISO 8601 timestamp until the listing is "featured". */
+  featuredUntil?: string;
+  /** Backend lifecycle status (e.g. `ACTIVE`, `PAUSED`, `DRAFT`). */
+  status?: string;
 }
