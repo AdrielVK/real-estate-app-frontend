@@ -5,7 +5,7 @@ import { useEffect, useId, useState } from 'react';
 import { Minus, Plus, X } from 'lucide-react';
 
 import type { OperationSlug, SearchFilters, TagCategory } from '@/types/publication';
-import { PUBLISHED_LAST_DAYS_OPTIONS, TAGS_BY_CATEGORY } from '@/lib/search/url';
+import { PROPERTY_AGE_OPTIONS, TAGS_BY_CATEGORY } from '@/lib/search/url';
 import { cn } from '@/lib/utils';
 
 import { TagCombobox, type TagComboboxOption } from '@/components/public/TagCombobox';
@@ -21,12 +21,9 @@ const CATEGORY_LABELS: Record<TagCategory, string> = {
 
 const CATEGORY_ORDER: readonly TagCategory[] = ['servicio', 'amenidades', 'condicion', 'material'];
 
-const EXPENSES_OPTIONS = [
-  { label: 'Sin límite', value: undefined as number | undefined },
-  { label: 'Hasta $50.000', value: 50000 },
-  { label: 'Hasta $100.000', value: 100000 },
-  { label: 'Hasta $200.000', value: 200000 },
-  { label: 'Hasta $500.000', value: 500000 },
+const EXPENSES_CURRENCY_OPTIONS = [
+  { value: 'ARS' as const, label: 'ARS' },
+  { value: 'USD' as const, label: 'USD' },
 ];
 
 export interface SearchResultsAdvancedFiltersProps {
@@ -53,7 +50,8 @@ export interface SearchResultsAdvancedFiltersProps {
  * `SearchResultsAdvancedFilters` — controlled modal that lets the
  * user edit the long tail of filter values (rooms/bedrooms/
  * bathrooms/garages min, area min/max, required tags per category,
- * antigüedad, expensesMax, four boolean toggles).
+ * antigüedad, expenses max + currency, "sin expensas" toggle, four
+ * boolean toggles).
  *
  * Design decisions:
  * - **Controlled.** The bar owns the canonical `SearchFilters`; the
@@ -68,14 +66,16 @@ export interface SearchResultsAdvancedFiltersProps {
  *   because we moved it to a class in the Dialog refactor.
  * - **Required tags by category.** The four `TagCombobox`es (one
  *   per `TagCategory`) flatten their slugs into a single
- *   `requiredTags` array. We split on `Aplicar`, not on every
- *   keystroke, to avoid losing the per-category grouping while
- *   editing.
- * - **Antigüedad.** Maps to `publishedLastDays`; "A estrenar" is
- *   the 365-day proxy per the documented backend gap.
- * - **"Sin expensas" OMITTED.** Per spec — the backend does not
- *   support a `noExpenses` filter yet, so only `expensesMax` is
- *   exposed.
+ *   `requiredTags` array. They run in `free-text` mode so users can
+ *   type any word; suggestions from the hardcoded table are
+ *   convenience only. We split on `Aplicar`, not on every keystroke,
+ *   to avoid losing the per-category grouping while editing.
+ * - **Antigüedad.** `propertyAge` — the age of the building, not the
+ *   listing. The URL contract is in place; the backend filter is
+ *   deferred until the search DTO grows the field.
+ * - **Expensas.** `expensesMax` + `expensesCurrency` go together.
+ *   The "Sin expensas" toggle flips the URL to `noExpensas=true`
+ *   and clears the numeric cap so the wire stays clean.
  */
 export function SearchResultsAdvancedFilters({
   open,
@@ -123,12 +123,29 @@ export function SearchResultsAdvancedFilters({
     setLocal((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
-  function setAntiguedad(value: 7 | 30 | 90 | 365 | undefined) {
-    setLocal((prev) => ({ ...prev, publishedLastDays: value }));
+  function setAntiguedad(value: import('@/types/publication').PropertyAge | undefined) {
+    setLocal((prev) => ({ ...prev, propertyAge: value }));
   }
 
   function setExpensesMax(value: number | undefined) {
-    setLocal((prev) => ({ ...prev, expensesMax: value }));
+    setLocal((prev) => ({ ...prev, expensesMax: value, expensesCurrency: prev.expensesCurrency ?? 'ARS' }));
+  }
+
+  function setExpensesCurrency(value: import('@/types/publication').Currency) {
+    setLocal((prev) => ({ ...prev, expensesCurrency: value }));
+  }
+
+  function setNoExpensas(value: boolean) {
+    setLocal((prev) => {
+      if (value) {
+        // Toggling "Sin expensas" wipes the numeric cap and its currency.
+        const { expensesMax: _max, expensesCurrency: _cur, ...rest } = prev;
+        void _max;
+        void _cur;
+        return { ...rest, noExpensas: true };
+      }
+      return { ...prev, noExpensas: undefined };
+    });
   }
 
   function apply() {
@@ -221,7 +238,8 @@ export function SearchResultsAdvancedFilters({
             </div>
           </Section>
 
-          {/* Tags per category */}
+          {/* Tags per category — free-text mode so the user can type
+              any word. Suggestions are convenience only. */}
           {CATEGORY_ORDER.map((category) => (
             <Section key={category} title={CATEGORY_LABELS[category]}>
               <TagCombobox
@@ -230,27 +248,27 @@ export function SearchResultsAdvancedFilters({
                 options={TAGS_BY_CATEGORY[category]}
                 value={tagsForCategory(category)}
                 onChange={(next) => setCategoryTags(category, next)}
-                mode="predefined"
-                maxTags={6}
+                mode="free-text"
+                maxTags={5}
                 placeholder={`Agregar ${CATEGORY_LABELS[category].toLowerCase()}`}
               />
             </Section>
           ))}
 
-          {/* Antigüedad */}
-          <Section title="Antigüedad de la publicación">
+          {/* Antigüedad — age of the building, not the listing. */}
+          <Section title="Antigüedad de la propiedad">
             <div className="flex flex-wrap gap-2" data-testid="adv-antiguedad">
               <RadioChip
                 label="Cualquiera"
-                selected={local.publishedLastDays === undefined}
+                selected={local.propertyAge === undefined}
                 onClick={() => setAntiguedad(undefined)}
                 testId="adv-antiguedad-any"
               />
-              {PUBLISHED_LAST_DAYS_OPTIONS.map((opt) => (
+              {PROPERTY_AGE_OPTIONS.map((opt) => (
                 <RadioChip
                   key={opt.value}
                   label={opt.label}
-                  selected={local.publishedLastDays === opt.value}
+                  selected={local.propertyAge === opt.value}
                   onClick={() => setAntiguedad(opt.value)}
                   testId={`adv-antiguedad-${opt.value}`}
                 />
@@ -258,22 +276,76 @@ export function SearchResultsAdvancedFilters({
             </div>
           </Section>
 
-          {/* Expensas */}
-          <Section title="Expensas máximas">
-            <div className="flex flex-wrap gap-2" data-testid="adv-expenses">
-              {EXPENSES_OPTIONS.map((opt) => (
-                <RadioChip
-                  key={opt.label}
-                  label={opt.label}
-                  selected={local.expensesMax === opt.value}
-                  onClick={() => setExpensesMax(opt.value)}
-                  testId={`adv-expenses-${opt.value ?? 'none'}`}
+          {/* Expensas — numeric cap + currency + "sin expensas" toggle.
+              When the toggle is on, the max/currency controls are
+              grayed out and the URL only carries `noExpensas=true`. */}
+          <Section title="Expensas">
+            <div className="flex flex-col gap-3">
+              <label className="flex cursor-pointer items-center gap-2 text-sm" data-testid="adv-no-expensas">
+                <input
+                  type="checkbox"
+                  checked={local.noExpensas === true}
+                  onChange={(e) => setNoExpensas(e.target.checked)}
+                  className="size-4 cursor-pointer accent-primary"
                 />
-              ))}
+                <span>Sin expensas</span>
+              </label>
+              <div
+                className={cn(
+                  'flex flex-col gap-2 rounded-2xl border border-border/70 p-3 transition-opacity sm:flex-row sm:items-end',
+                  local.noExpensas === true && 'pointer-events-none opacity-50',
+                )}
+                data-testid="adv-expenses"
+                aria-disabled={local.noExpensas === true}
+              >
+                <label className="flex flex-1 flex-col gap-1">
+                  <span className="text-xs text-muted-foreground">Expensas máximas</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={local.expensesMax === undefined ? '' : String(local.expensesMax)}
+                    onChange={(e) => {
+                      const cleaned = e.target.value.replace(/\D/g, '');
+                      if (cleaned === '') {
+                        setExpensesMax(undefined);
+                      } else {
+                        setExpensesMax(Number.parseInt(cleaned, 10));
+                      }
+                    }}
+                    disabled={local.noExpensas === true}
+                    data-testid="adv-expenses-max"
+                    className="h-10 rounded-full border border-border bg-background/70 px-4 text-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:cursor-not-allowed"
+                    placeholder="0"
+                  />
+                </label>
+                <div
+                  className="flex h-10 items-center gap-1.5"
+                  data-testid="adv-expenses-currency"
+                  role="radiogroup"
+                  aria-label="Moneda de expensas"
+                >
+                  {EXPENSES_CURRENCY_OPTIONS.map((c) => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={local.expensesCurrency === c.value}
+                      onClick={() => setExpensesCurrency(c.value)}
+                      disabled={local.noExpensas === true}
+                      data-testid={`adv-expenses-${c.value}`}
+                      className={cn(
+                        'h-8 cursor-pointer rounded-full border px-3 text-xs font-medium transition-all duration-200 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:cursor-not-allowed',
+                        local.expensesCurrency === c.value
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-card/60 text-muted-foreground hover:border-primary/40',
+                      )}
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              La opción &ldquo;Sin expensas&rdquo; se mostrará cuando el backend la soporte.
-            </p>
           </Section>
 
           {/* Toggles */}

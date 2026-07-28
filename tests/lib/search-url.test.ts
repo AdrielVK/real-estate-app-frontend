@@ -5,8 +5,8 @@ import {
   DEFAULT_FILTERS,
   OPERATION_LABEL,
   parseSearchParams,
+  PROPERTY_AGE_OPTIONS,
   PROPERTY_TYPE_LABEL,
-  PUBLISHED_LAST_DAYS_OPTIONS,
   serializeFilters,
   TAGS_BY_CATEGORY,
 } from '@/lib/search/url';
@@ -52,8 +52,9 @@ describe('parseSearchParams / serializeFilters', () => {
         coveredAreaMin: '40',
         coveredAreaMax: '180',
         requiredTags: 'pileta,parrilla',
-        publishedLastDays: '30',
+        propertyAge: '2-5',
         expensesMax: '50000',
+        expensesCurrency: 'USD',
         acceptsCredits: 'true',
         requiresGuarantor: 'true',
         acceptsPets: 'true',
@@ -78,8 +79,9 @@ describe('parseSearchParams / serializeFilters', () => {
       coveredAreaMin: 40,
       coveredAreaMax: 180,
       requiredTags: ['pileta', 'parrilla'],
-      publishedLastDays: 30,
+      propertyAge: '2-5',
       expensesMax: 50000,
+      expensesCurrency: 'USD',
       acceptsCredits: true,
       requiresGuarantor: true,
       acceptsPets: true,
@@ -104,13 +106,13 @@ describe('parseSearchParams / serializeFilters', () => {
       asParams({
         priceMin: 'abc',
         roomsMin: '3',
-        publishedLastDays: '999',
+        propertyAge: '999-9999',
         page: '0',
       }),
     );
     expect(filters.priceMin).toBeUndefined();
     expect(filters.roomsMin).toBe(3);
-    expect(filters.publishedLastDays).toBeUndefined();
+    expect(filters.propertyAge).toBeUndefined();
     expect(filters.page).toBe(1);
   });
 
@@ -147,8 +149,9 @@ describe('parseSearchParams / serializeFilters', () => {
       coveredAreaMin: 25,
       coveredAreaMax: 80,
       requiredTags: ['pileta', 'a-estrenar'],
-      publishedLastDays: 365,
+      propertyAge: '20+',
       expensesMax: 10000,
+      expensesCurrency: 'ARS',
       acceptsCredits: true,
       requiresGuarantor: true,
       acceptsPets: true,
@@ -249,16 +252,34 @@ describe('enum tables', () => {
     }
   });
 
-  it('PUBLISHED_LAST_DAYS_OPTIONS covers the four allowed values', () => {
-    const values = PUBLISHED_LAST_DAYS_OPTIONS.map((o) => o.value);
-    expect(values).toEqual([7, 30, 90, 365]);
+  it('PROPERTY_AGE_OPTIONS covers the five allowed buckets', () => {
+    const values = PROPERTY_AGE_OPTIONS.map((o) => o.value);
+    expect(values).toEqual(['0-2', '2-5', '5-10', '10-20', '20+']);
   });
 
-  it('PUBLISHED_LAST_DAYS_OPTIONS includes the "A estrenar" mapping to 365', () => {
-    const aEstrenar = PUBLISHED_LAST_DAYS_OPTIONS.find((o) =>
-      o.label.toLowerCase().includes('estrenar'),
-    );
-    expect(aEstrenar?.value).toBe(365);
+  it('PROPERTY_AGE_OPTIONS maps "A estrenar" to the 0-2 bucket', () => {
+    const aEstrenar = PROPERTY_AGE_OPTIONS.find((o) => o.label.toLowerCase().includes('estrenar'));
+    expect(aEstrenar?.value).toBe('0-2');
+  });
+
+  it('serialize emits `noExpensas` and skips expensesMax when the toggle is on', () => {
+    const params = serializeFilters({
+      ...DEFAULT_FILTERS,
+      noExpensas: true,
+    });
+    expect(params.get('noExpensas')).toBe('true');
+    expect(params.has('expensesMax')).toBe(false);
+    expect(params.has('expensesCurrency')).toBe(false);
+  });
+
+  it('serialize drops expensesMax when noExpensas is set, even if both are populated (defensive)', () => {
+    const params = serializeFilters({
+      ...DEFAULT_FILTERS,
+      noExpensas: true,
+      expensesMax: 50000,
+    } as SearchFilters);
+    expect(params.get('noExpensas')).toBe('true');
+    expect(params.has('expensesMax')).toBe(false);
   });
 
   it('TAGS_BY_CATEGORY has at least one entry per category', () => {

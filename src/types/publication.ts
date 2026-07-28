@@ -88,6 +88,14 @@ export type PropertyTypeSlug =
 export type TagCategory = 'servicio' | 'amenidades' | 'condicion' | 'material';
 
 /**
+ * Property age buckets (antigüedad de la propiedad). The string
+ * serialization matches the URL param exactly so the round-trip is
+ * lossless. `undefined` is encoded as the absence of the
+ * `propertyAge` query param.
+ */
+export type PropertyAge = '0-2' | '2-5' | '5-10' | '10-20' | '20+';
+
+/**
  * `SearchFilters` — single source of truth for `/buscar` filter state.
  *
  * - `currency` is always set (defaults to `'ARS'` when the URL omits it).
@@ -121,9 +129,22 @@ export interface SearchFilters {
   coveredAreaMax?: number;
   /** Flattened tag slugs across all categories. */
   requiredTags: string[];
-  /** 7 | 30 | 90 | 365 — "A estrenar" maps to 365 as a proxy. */
-  publishedLastDays?: 7 | 30 | 90 | 365;
+  /**
+   * Property age bucket (antigüedad de la propiedad). Distinct from
+   * "publishedLastDays" — this describes how old the building is,
+   * not when the listing went live. The backend will accept this
+   * once the search DTO grows the field; for now the URL param is
+   * ready so the UI is unblocked.
+   */
+  propertyAge?: PropertyAge;
   expensesMax?: number;
+  expensesCurrency?: Currency;
+  /**
+   * `true` when the user has selected the "Sin expensas" toggle.
+   * Mutually exclusive with `expensesMax`/`expensesCurrency` at
+   * serialization time (the URL only carries one or the other).
+   */
+  noExpensas?: boolean;
   acceptsCredits?: boolean;
   /** Documented backend gap — see `toBackendQuery`. */
   requiresGuarantor?: boolean;

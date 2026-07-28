@@ -177,8 +177,8 @@ describe('SearchResultsFilterBar', () => {
     // Toggle acceptsPets.
     await user.click(within(dialog).getByTestId('adv-toggle-pets'));
 
-    // Pick a publishedLastDays value (A estrenar proxy).
-    await user.click(within(dialog).getByTestId('adv-antiguedad-365'));
+    // Pick a propertyAge value (A estrenar → 0-2).
+    await user.click(within(dialog).getByTestId('adv-antiguedad-0-2'));
 
     // Apply.
     await user.click(within(dialog).getByTestId('adv-apply'));
@@ -189,7 +189,7 @@ describe('SearchResultsFilterBar', () => {
     const [params] = onCommit.mock.calls[0] ?? [];
     expect(params.get('roomsMin')).toBe('3');
     expect(params.get('acceptsPets')).toBe('true');
-    expect(params.get('publishedLastDays')).toBe('365');
+    expect(params.get('propertyAge')).toBe('0-2');
     // Page reset to 1 → omitted.
     expect(params.get('page')).toBeNull();
   });

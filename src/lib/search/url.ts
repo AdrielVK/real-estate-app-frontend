@@ -20,6 +20,7 @@
 import type {
   Currency,
   OperationSlug,
+  PropertyAge,
   PropertyTypeSlug,
   SearchFilters,
   TagCategory,
@@ -101,18 +102,21 @@ export const TAGS_BY_CATEGORY: Record<
 };
 
 /**
- * "Antigüedad" selector options. The label "A estrenar" is a proxy for
- * `publishedLastDays=365` (backend has no native "a estrenar" filter
- * yet — see spec gap table).
+ * "Antigüedad de la propiedad" selector options — how old the
+ * building is, NOT when the listing was published. Maps to the
+ * `propertyAge` URL param and the (forthcoming) backend field.
+ *
+ * `undefined` (Cualquiera) is encoded as the absence of the param.
  */
-export const PUBLISHED_LAST_DAYS_OPTIONS: readonly {
+export const PROPERTY_AGE_OPTIONS: readonly {
   readonly label: string;
-  readonly value: 7 | 30 | 90 | 365;
+  readonly value: PropertyAge;
 }[] = [
-  { label: 'Última semana', value: 7 },
-  { label: 'Último mes', value: 30 },
-  { label: 'Últimos 3 meses', value: 90 },
-  { label: 'A estrenar', value: 365 },
+  { label: 'A estrenar', value: '0-2' },
+  { label: 'De 2 a 5 años', value: '2-5' },
+  { label: 'De 5 a 10 años', value: '5-10' },
+  { label: 'De 10 a 20 años', value: '10-20' },
+  { label: '20+ años', value: '20+' },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -127,7 +131,7 @@ const KNOWN_PROPERTY_TYPE_SLUGS = new Set<PropertyTypeSlug>(
   Object.keys(PROPERTY_TYPE_LABEL) as PropertyTypeSlug[],
 );
 
-const KNOWN_PUBLISHED_LAST_DAYS = new Set([7, 30, 90, 365] as const);
+const KNOWN_PROPERTY_AGE = new Set<PropertyAge>(['0-2', '2-5', '5-10', '10-20', '20+']);
 
 const KNOWN_CURRENCIES = new Set<Currency>(['ARS', 'USD']);
 
@@ -237,7 +241,6 @@ export function parseSearchParams(
     'totalAreaMax',
     'coveredAreaMin',
     'coveredAreaMax',
-    'expensesMax',
   ] as const) {
     const value = parseInt0(firstScalar(sp[key]));
     if (value !== undefined) {
@@ -251,12 +254,27 @@ export function parseSearchParams(
     filters.requiredTags = requiredTags;
   }
 
-  const publishedLastDays = parseInt0(firstScalar(sp.publishedLastDays));
-  if (
-    publishedLastDays !== undefined &&
-    KNOWN_PUBLISHED_LAST_DAYS.has(publishedLastDays as 7 | 30 | 90 | 365)
-  ) {
-    filters.publishedLastDays = publishedLastDays as 7 | 30 | 90 | 365;
+  const propertyAge = firstScalar(sp.propertyAge);
+  if (propertyAge && KNOWN_PROPERTY_AGE.has(propertyAge as PropertyAge)) {
+    filters.propertyAge = propertyAge as PropertyAge;
+  }
+
+  // Expensas: `noExpensas` and `expensesMax` are mutually exclusive on
+  // the wire but defensive — if both arrive (legacy URL), we trust
+  // `noExpensas=true` and drop the numeric cap. `expensesCurrency` is
+  // only meaningful when `expensesMax` is also set.
+  if (parseBoolean(firstScalar(sp.noExpensas)) === true) {
+    filters.noExpensas = true;
+  } else {
+    const expensesMax = parseInt0(firstScalar(sp.expensesMax));
+    if (expensesMax !== undefined) {
+      filters.expensesMax = expensesMax;
+      const expensesCurrency = firstScalar(sp.expensesCurrency);
+      filters.expensesCurrency =
+        expensesCurrency && KNOWN_CURRENCIES.has(expensesCurrency as Currency)
+          ? (expensesCurrency as Currency)
+          : 'ARS';
+    }
   }
 
   for (const key of [
@@ -321,7 +339,6 @@ export function serializeFilters(filters: SearchFilters): URLSearchParams {
     'totalAreaMax',
     'coveredAreaMin',
     'coveredAreaMax',
-    'expensesMax',
   ] as const;
   for (const key of numericKeys) {
     const value = filters[key];
@@ -334,8 +351,20 @@ export function serializeFilters(filters: SearchFilters): URLSearchParams {
     params.set('requiredTags', filters.requiredTags.join(','));
   }
 
-  if (filters.publishedLastDays !== undefined) {
-    params.set('publishedLastDays', String(filters.publishedLastDays));
+  if (filters.propertyAge !== undefined) {
+    params.set('propertyAge', filters.propertyAge);
+  }
+
+  // Expensas: `noExpensas` is mutually exclusive with `expensesMax` /
+  // `expensesCurrency` on the wire — picking "Sin expensas" clears the
+  // numeric filter and the backend reads `noExpensas=true` to mean
+  // "must be 0 / not reported". When the user has set a numeric
+  // cap, we send the cap and the currency (default ARS).
+  if (filters.noExpensas === true) {
+    params.set('noExpensas', 'true');
+  } else if (filters.expensesMax !== undefined) {
+    params.set('expensesMax', String(filters.expensesMax));
+    params.set('expensesCurrency', filters.expensesCurrency ?? 'ARS');
   }
 
   for (const key of [
