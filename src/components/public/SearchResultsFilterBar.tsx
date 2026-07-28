@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 
 import { useRouter, useSearchParams } from 'next/navigation';
 
-import { ChevronDown, DollarSign, Home, Loader2, MapPin, Search, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, DollarSign, Eraser, Home, Loader2, MapPin, Search, SlidersHorizontal } from 'lucide-react';
 
 import type { Currency, OperationSlug, PropertyTypeSlug, SearchFilters } from '@/types/publication';
 import {
@@ -111,6 +111,26 @@ export function SearchResultsFilterBar({
     },
     [basePath, locationTags, onCommit, router],
   );
+
+  // ── Clear all filters ──────────────────────────────────────────────
+  // The button only renders when the URL already carries a query
+  // string — if there's nothing to clear, the affordance would just
+  // add noise to the bar. The check is anchored to the URL state
+  // (via `searchParams`) because that's what the user sees in the
+  // address bar and what the page re-renders from after a push.
+  const hasActiveFilters = useMemo(
+    () => (searchParams?.toString() ?? '') !== '',
+    [searchParams],
+  );
+  const clearFilters = useCallback(() => {
+    if (onCommit) {
+      onCommit(new URLSearchParams());
+      return;
+    }
+    startTransition(() => {
+      router.push(basePath, { scroll: false });
+    });
+  }, [basePath, onCommit, router]);
 
   // Pending indicator — flip on while the URL searchParams differs
   // from the last commit. The bar is keyed on the parent, so a new
@@ -363,6 +383,20 @@ export function SearchResultsFilterBar({
 
         {/* Advanced + Buscar */}
         <div className="flex shrink-0 items-center gap-1.5 self-end sm:ml-2 sm:self-center">
+          {hasActiveFilters ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="lg"
+              onClick={clearFilters}
+              className="h-11 cursor-pointer rounded-full text-muted-foreground hover:text-foreground"
+              data-testid="filter-bar-clear"
+              aria-label="Limpiar todos los filtros"
+            >
+              <Eraser aria-hidden className="size-4" />
+              <span className="hidden sm:inline">Limpiar filtros</span>
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"

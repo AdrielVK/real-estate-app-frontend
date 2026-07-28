@@ -58,9 +58,47 @@ describe('SearchResultsFilterBar', () => {
     // Operation + price triggers
     expect(screen.getByTestId('operation-trigger')).toBeInTheDocument();
     expect(screen.getByTestId('price-trigger')).toBeInTheDocument();
-    // Advanced + Buscar
+    // Advanced + Buscar (Limpiar is conditional — covered in its own test)
     expect(screen.getByTestId('filter-bar-advanced')).toBeInTheDocument();
     expect(screen.getByTestId('filter-bar-buscar')).toBeInTheDocument();
+    expect(screen.queryByTestId('filter-bar-clear')).not.toBeInTheDocument();
+  });
+
+  it('hides the Limpiar filtros button when no filters are active', () => {
+    setupRouterMocks('');
+    render(<SearchResultsFilterBar initialFilters={baseFilters} />);
+    expect(screen.queryByTestId('filter-bar-clear')).not.toBeInTheDocument();
+  });
+
+  it('shows the Limpiar filtros button when the URL has query params and pushes a clean /buscar on click', async () => {
+    const user = userEvent.setup();
+    const { push } = setupRouterMocks('propertyTypes=casa');
+    render(<SearchResultsFilterBar initialFilters={baseFilters} />);
+
+    const clearBtn = screen.getByTestId('filter-bar-clear');
+    expect(clearBtn).toBeInTheDocument();
+    expect(clearBtn).toHaveTextContent(/limpiar filtros/i);
+
+    await user.click(clearBtn);
+
+    expect(push).toHaveBeenCalledTimes(1);
+    const [href] = push.mock.calls[0] ?? [];
+    // No query string — a clean /buscar that resets every filter.
+    expect(href).toBe('/buscar');
+  });
+
+  it('Limpiar filtros honors the onCommit test override (returns empty params)', async () => {
+    const user = userEvent.setup();
+    setupRouterMocks('propertyTypes=casa');
+    const onCommit = vi.fn();
+    render(<SearchResultsFilterBar initialFilters={baseFilters} onCommit={onCommit} />);
+
+    await user.click(screen.getByTestId('filter-bar-clear'));
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    const [params] = onCommit.mock.calls[0] ?? [];
+    // Empty URLSearchParams — every filter cleared.
+    expect(params.toString()).toBe('');
   });
 
   it('opens the advanced filters modal when Filtros completos is clicked', async () => {
