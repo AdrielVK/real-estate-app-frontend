@@ -119,6 +119,26 @@ export function SearchResultsAdvancedFilters({
     setLocal((prev) => ({ ...prev, [key]: Number.isFinite(n) ? n : undefined }));
   }
 
+  /**
+   * Stepper setter: a stepper value of `0` is meaningless for the
+   * min-counter (rooms, bedrooms, ...) and the URL would carry a
+   * redundant `0` if we serialized it. We collapse 0 to undefined so
+   * the on-the-wire form omits the parameter and the UI shows the
+   * em-dash placeholder. Larger values pass through unchanged.
+   */
+  function setStepper(key: keyof SearchFilters, raw: string) {
+    if (raw === '') {
+      setLocal((prev) => ({ ...prev, [key]: undefined }));
+      return;
+    }
+    const n = Number.parseInt(raw, 10);
+    if (!Number.isFinite(n) || n <= 0) {
+      setLocal((prev) => ({ ...prev, [key]: undefined }));
+      return;
+    }
+    setLocal((prev) => ({ ...prev, [key]: n }));
+  }
+
   function setToggle(key: 'acceptsCredits' | 'acceptsPets' | 'featuredOnly' | 'requiresGuarantor') {
     setLocal((prev) => ({ ...prev, [key]: !prev[key] }));
   }
@@ -184,25 +204,25 @@ export function SearchResultsAdvancedFilters({
               <NumberStepper
                 label="Ambientes"
                 value={local.roomsMin}
-                onChange={(v) => setNumeric('roomsMin', v)}
+                onChange={(v) => setStepper('roomsMin', v)}
                 testId="adv-rooms"
               />
               <NumberStepper
                 label="Dormitorios"
                 value={local.bedroomsMin}
-                onChange={(v) => setNumeric('bedroomsMin', v)}
+                onChange={(v) => setStepper('bedroomsMin', v)}
                 testId="adv-bedrooms"
               />
               <NumberStepper
                 label="Baños"
                 value={local.bathroomsMin}
-                onChange={(v) => setNumeric('bathroomsMin', v)}
+                onChange={(v) => setStepper('bathroomsMin', v)}
                 testId="adv-bathrooms"
               />
               <NumberStepper
                 label="Cocheras"
                 value={local.garagesMin}
-                onChange={(v) => setNumeric('garagesMin', v)}
+                onChange={(v) => setStepper('garagesMin', v)}
                 testId="adv-garages"
               />
             </div>
@@ -427,6 +447,13 @@ interface NumberStepperProps {
 }
 
 function NumberStepper({ label, value, onChange, testId }: NumberStepperProps) {
+  // Display convention:
+  // - `undefined` (no filter) → em-dash '—'
+  // - `0` is treated as a transient value the user can never
+  //   actually set: pressing - from '1' drops back to undefined
+  //   instead of stepping through '0'. This keeps the URL clean
+  //   (the parameter is omitted, not emitted as 0).
+  const isAtMin = value === undefined || value <= 1;
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs text-muted-foreground">{label}</span>
@@ -437,8 +464,16 @@ function NumberStepper({ label, value, onChange, testId }: NumberStepperProps) {
         <button
           type="button"
           aria-label={`Restar ${label.toLowerCase()}`}
-          onClick={() => onChange(value === undefined || value <= 0 ? '' : String(value - 1))}
-          disabled={value === undefined || value <= 0}
+          onClick={() => {
+            if (value === undefined) return;
+            if (value <= 1) {
+              // 1 → 0 short-circuits to undefined, displayed as '—'.
+              onChange('');
+            } else {
+              onChange(String(value - 1));
+            }
+          }}
+          disabled={isAtMin}
           className="grid size-8 cursor-pointer place-items-center rounded-full text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-30 disabled:hover:bg-transparent"
         >
           <Minus aria-hidden className="size-3.5" />
