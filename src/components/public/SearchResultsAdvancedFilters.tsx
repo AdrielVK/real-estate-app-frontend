@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { Minus, Plus, X } from 'lucide-react';
 
@@ -90,28 +90,97 @@ export function SearchResultsAdvancedFilters({
 }: SearchResultsAdvancedFiltersProps) {
   const headingId = useId();
   const [local, setLocal] = useState<SearchFilters>(value);
+  // Track the previous value reference + serialized form so we only
+  // re-seed the local copy when the parent's `value` actually
+  // changed in content — not on every parent re-render. Without
+  // this guard, the re-seed fires on every render (the test passes
+  // a fresh `value` object literal each render), wiping any tags
+  // the user has just added.
+  const prevValueRef = useRef<{ ref: SearchFilters; signature: string } | null>(null);
 
-  // Re-seed the local copy every time the modal opens. Resetting
-  // form state on open is the intentional AiSearchDialog pattern.
+  // Re-seed the local copy when the modal opens or when the parent's
+  // `value` changes WHILE the modal is already open (e.g. the page
+  // remounts the bar with a fresh URL). On first render we capture
+  // the value; from then on we only sync when the signature differs.
   useEffect(() => {
-    if (open) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: seed local copy from URL on open
+    const signature = JSON.stringify(value);
+    const prev = prevValueRef.current;
+    if (open && (!prev || prev.signature !== signature)) {
       setLocal(value);
     }
+    prevValueRef.current = { ref: value, signature };
   }, [open, value]);
 
   // ── Tag helpers (category → flat requiredTags) ──────────────────────
+  /**
+   * Tags-per-category tracking. The URL carries a single flat
+   * `requiredTags` array, but the modal groups the input by
+   * `TagCategory` so the user sees 4 dedicated sections. Custom
+   * free-text tags (Fix 5) have no entry in the hardcoded
+   * `TAGS_BY_CATEGORY` table, so we can't infer the category from
+   * the slug alone — we track it explicitly here. This map is
+   * UI-only state; it never reaches the URL.
+   */
+  const [tagsByCategory, setTagsByCategory] = useState<Record<TagCategory, string[]>>({
+    servicio: [],
+    amenidades: [],
+    condicion: [],
+    material: [],
+  });
+
+  // Re-seed the per-category map when the modal opens. On the
+  // first render we have nothing in the map; we distribute the
+  // incoming requiredTags by best-effort (any tag matching a
+  // known slug goes to its category, unknowns go to the first
+  // category so the user can see and rearrange them).
+  useEffect(() => {
+    if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: seed per-category tag map from URL on open / requiredTags change
+      setTagsByCategory((prev) => {
+        // Only re-seed if the parent's requiredTags differ from
+        // what's in our map (i.e. the URL actually changed).
+        const flat = Object.values(prev).flat();
+        if (JSON.stringify(flat) === JSON.stringify(value.requiredTags)) {
+          return prev;
+        }
+        const seed: Record<TagCategory, string[]> = {
+          servicio: [],
+          amenidades: [],
+          condicion: [],
+          material: [],
+        };
+        const unclaimed: string[] = [];
+        for (const slug of value.requiredTags) {
+          let placed = false;
+          for (const cat of CATEGORY_ORDER) {
+            if (TAGS_BY_CATEGORY[cat].some((o) => o.slug === slug)) {
+              seed[cat].push(slug);
+              placed = true;
+              break;
+            }
+          }
+          if (!placed) unclaimed.push(slug);
+        }
+        // Custom tags land in 'servicio' as a default bucket.
+        // The user can drag/edit them in the UI.
+        seed.servicio.push(...unclaimed);
+        return seed;
+      });
+    }
+  }, [open, value.requiredTags]);
+
   function tagsForCategory(category: TagCategory): string[] {
-    return local.requiredTags.filter((slug) =>
-      TAGS_BY_CATEGORY[category].some((o) => o.slug === slug),
-    );
+    return tagsByCategory[category];
   }
 
   function setCategoryTags(category: TagCategory, next: string[]) {
-    const others = local.requiredTags.filter(
-      (slug) => !TAGS_BY_CATEGORY[category].some((o) => o.slug === slug),
-    );
-    setLocal((prev) => ({ ...prev, requiredTags: [...others, ...next] }));
+    setTagsByCategory((prev) => {
+      const next_map = { ...prev, [category]: next };
+      // Flatten into requiredTags for the onApply payload.
+      const flat = CATEGORY_ORDER.flatMap((c) => next_map[c]);
+      setLocal((prevLocal) => ({ ...prevLocal, requiredTags: flat }));
+      return next_map;
+    });
   }
 
   // ── Field helpers ───────────────────────────────────────────────────
@@ -503,7 +572,10 @@ function NumberStepper({ label, value, onChange, testId }: NumberStepperProps) {
   //   actually set: pressing - from '1' drops back to undefined
   //   instead of stepping through '0'. This keeps the URL clean
   //   (the parameter is omitted, not emitted as 0).
-  const isAtMin = value === undefined || value <= 1;
+  // The minus button is disabled only at the dash (no value to
+  // step down from). It MUST stay enabled at 1 so the user can
+  // clear the filter back to '—' in a single click.
+  const isAtDash = value === undefined;
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs text-muted-foreground">{label}</span>
@@ -523,7 +595,7 @@ function NumberStepper({ label, value, onChange, testId }: NumberStepperProps) {
               onChange(String(value - 1));
             }
           }}
-          disabled={isAtMin}
+          disabled={isAtDash}
           className="grid size-8 cursor-pointer place-items-center rounded-full text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-30 disabled:hover:bg-transparent"
         >
           <Minus aria-hidden className="size-3.5" />
