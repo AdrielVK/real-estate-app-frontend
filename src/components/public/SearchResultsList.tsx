@@ -43,7 +43,7 @@ export function SearchResultsList({
 
   return (
     <div
-      className={cn('grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3', className)}
+      className={cn('flex flex-col gap-4', className)}
       data-testid="search-results-grid"
     >
       {publications.map((publication) => (

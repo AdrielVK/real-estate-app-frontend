@@ -37,12 +37,14 @@ describe('SearchResultsList', () => {
     expect(within(grid).getAllByTestId('search-result-card')).toHaveLength(3);
   });
 
-  it('uses the responsive 1/2/3 column grid layout', () => {
+  it('uses a single-column vertical list (so the horizontal card spans full width)', () => {
     render(<SearchResultsList publications={[makePublication('1')]} filters={DEFAULT_FILTERS} />);
     const grid = screen.getByTestId('search-results-grid');
-    expect(grid.className).toMatch(/grid-cols-1/);
-    expect(grid.className).toMatch(/md:grid-cols-2/);
-    expect(grid.className).toMatch(/lg:grid-cols-3/);
+    // Single-column flex layout — the new horizontal card design needs
+    // the full row width to render the media + content split.
+    expect(grid.className).toMatch(/\bflex\b/);
+    expect(grid.className).toMatch(/\bflex-col\b/);
+    expect(grid.className).not.toMatch(/\bgrid-cols-/);
   });
 
   it('renders the empty state when given an empty publication list', () => {
