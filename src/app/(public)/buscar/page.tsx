@@ -55,12 +55,8 @@ export default async function BuscarPage({ searchParams }: PageProps) {
   return (
     <Section>
       <Container className="space-y-6">
-        <header className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Buscar propiedades</h1>
-          <p className="text-sm text-muted-foreground sm:text-base">
-            Filtrá por zona, tipo, operación, precio y más. La URL se actualiza con cada cambio —
-            podés compartirla o volver cuando quieras.
-          </p>
+        <header>
+          <h1 className="text-lg font-semibold tracking-tight sm:text-xl">Buscar propiedades</h1>
         </header>
 
         <SearchResultsFilterBar key={serialized} initialFilters={filters} />
