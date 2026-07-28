@@ -16,6 +16,11 @@ import {
   serializeFilters,
 } from '@/lib/search/url';
 import { cn } from '@/lib/utils';
+import {
+  minMaxError,
+  PRICE_MIN_MAX_ERROR_MESSAGE,
+  sanitizeDigits,
+} from '@/lib/validation/digits';
 
 import { SearchResultsAdvancedFilters } from '@/components/public/SearchResultsAdvancedFilters';
 import { TagCombobox, type TagComboboxOption } from '@/components/public/TagCombobox';
@@ -143,6 +148,12 @@ export function SearchResultsFilterBar({
   }));
   const priceTriggerRef = useRef<HTMLButtonElement>(null);
   const priceDropdownRef = useRef<HTMLDivElement>(null);
+  // Lift the min≤max check up to the bar so the main Buscar button
+  // is also disabled when the price panel has an error. The
+  // commit() path uses draft, not priceDraft, so an invalid
+  // priceDraft never leaks into the URL — but disabling Buscar
+  // keeps the UX honest.
+  const priceError = minMaxError(priceDraft.min, priceDraft.max);
 
   const closeAll = useCallback(() => {
     setOperationOpen(false);
@@ -368,7 +379,7 @@ export function SearchResultsFilterBar({
             type="button"
             size="lg"
             onClick={() => commit(draft)}
-            disabled={pending}
+            disabled={pending || priceError !== null}
             className="h-11 cursor-pointer rounded-full px-5"
             data-testid="filter-bar-buscar"
           >
@@ -471,6 +482,7 @@ const PricePanel = forwardRef<HTMLDivElement, PricePanelProps>(function PricePan
   { style, value, onChange, onApply, onClose },
   ref,
 ) {
+  const error = minMaxError(value.min, value.max);
   return (
     <div
       ref={ref}
@@ -483,28 +495,37 @@ const PricePanel = forwardRef<HTMLDivElement, PricePanelProps>(function PricePan
           <label className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">Mínimo</span>
             <input
-              type="number"
+              type="text"
               inputMode="numeric"
-              min={0}
               value={value.min}
-              onChange={(e) => onChange({ ...value, min: e.target.value })}
+              onChange={(e) => onChange({ ...value, min: sanitizeDigits(e.target.value) })}
+              aria-invalid={error !== null}
               data-testid="price-min"
-              className="h-9 rounded-full border border-border bg-background/70 px-3 text-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+              className="h-9 rounded-full border border-border bg-background/70 px-3 text-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none aria-[invalid=true]:border-red-500"
             />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">Máximo</span>
             <input
-              type="number"
+              type="text"
               inputMode="numeric"
-              min={0}
               value={value.max}
-              onChange={(e) => onChange({ ...value, max: e.target.value })}
+              onChange={(e) => onChange({ ...value, max: sanitizeDigits(e.target.value) })}
+              aria-invalid={error !== null}
               data-testid="price-max"
-              className="h-9 rounded-full border border-border bg-background/70 px-3 text-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+              className="h-9 rounded-full border border-border bg-background/70 px-3 text-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none aria-[invalid=true]:border-red-500"
             />
           </label>
         </div>
+        {error ? (
+          <p
+            className="text-xs text-red-500"
+            role="alert"
+            data-testid="price-error"
+          >
+            {PRICE_MIN_MAX_ERROR_MESSAGE}
+          </p>
+        ) : null}
         <div className="flex items-center gap-1.5" data-testid="price-currency">
           {CURRENCY_TOGGLE.map((c) => (
             <button
@@ -539,6 +560,7 @@ const PricePanel = forwardRef<HTMLDivElement, PricePanelProps>(function PricePan
             type="button"
             size="sm"
             onClick={onApply}
+            disabled={error !== null}
             className="cursor-pointer rounded-full"
             data-testid="price-apply"
           >

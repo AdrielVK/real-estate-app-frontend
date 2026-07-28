@@ -1,12 +1,17 @@
 'use client';
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 
 import { Minus, Plus, X } from 'lucide-react';
 
 import type { OperationSlug, SearchFilters, TagCategory } from '@/types/publication';
 import { PROPERTY_AGE_OPTIONS, TAGS_BY_CATEGORY } from '@/lib/search/url';
 import { cn } from '@/lib/utils';
+import {
+  AREA_MIN_MAX_ERROR_MESSAGE,
+  minMaxError,
+  sanitizeDigits,
+} from '@/lib/validation/digits';
 
 import { TagCombobox, type TagComboboxOption } from '@/components/public/TagCombobox';
 import { Button } from '@/components/ui/Button';
@@ -173,6 +178,28 @@ export function SearchResultsAdvancedFilters({
     onOpenChange(false);
   }
 
+  /**
+   * Validation summary for the modal's footer. Aplicar filtros is
+   * blocked while any of the checks fail so the URL never carries an
+   * impossible filter combination (e.g. areaMin > areaMax).
+   */
+  const areaError = useMemo(
+    () => ({
+      total: minMaxError(
+        local.totalAreaMin === undefined ? '' : String(local.totalAreaMin),
+        local.totalAreaMax === undefined ? '' : String(local.totalAreaMax),
+        AREA_MIN_MAX_ERROR_MESSAGE,
+      ),
+      covered: minMaxError(
+        local.coveredAreaMin === undefined ? '' : String(local.coveredAreaMin),
+        local.coveredAreaMax === undefined ? '' : String(local.coveredAreaMax),
+        AREA_MIN_MAX_ERROR_MESSAGE,
+      ),
+    }),
+    [local.totalAreaMin, local.totalAreaMax, local.coveredAreaMin, local.coveredAreaMax],
+  );
+  const hasValidationError = areaError.total !== null || areaError.covered !== null;
+
   return (
     <Dialog
       open={open}
@@ -235,27 +262,49 @@ export function SearchResultsAdvancedFilters({
                 label="Total mínima"
                 value={local.totalAreaMin}
                 onChange={(v) => setNumeric('totalAreaMin', v)}
+                error={areaError.total}
                 testId="adv-total-area-min"
               />
               <RangeInput
                 label="Total máxima"
                 value={local.totalAreaMax}
                 onChange={(v) => setNumeric('totalAreaMax', v)}
+                error={areaError.total}
                 testId="adv-total-area-max"
               />
               <RangeInput
                 label="Cubierta mínima"
                 value={local.coveredAreaMin}
                 onChange={(v) => setNumeric('coveredAreaMin', v)}
+                error={areaError.covered}
                 testId="adv-covered-area-min"
               />
               <RangeInput
                 label="Cubierta máxima"
                 value={local.coveredAreaMax}
                 onChange={(v) => setNumeric('coveredAreaMax', v)}
+                error={areaError.covered}
                 testId="adv-covered-area-max"
               />
             </div>
+            {areaError.total ? (
+              <p
+                className="text-xs text-red-500"
+                role="alert"
+                data-testid="adv-total-area-error"
+              >
+                {areaError.total}
+              </p>
+            ) : null}
+            {areaError.covered ? (
+              <p
+                className="text-xs text-red-500"
+                role="alert"
+                data-testid="adv-covered-area-error"
+              >
+                {areaError.covered}
+              </p>
+            ) : null}
           </Section>
 
           {/* Tags per category — free-text mode so the user can type
@@ -325,7 +374,7 @@ export function SearchResultsAdvancedFilters({
                     inputMode="numeric"
                     value={local.expensesMax === undefined ? '' : String(local.expensesMax)}
                     onChange={(e) => {
-                      const cleaned = e.target.value.replace(/\D/g, '');
+                      const cleaned = sanitizeDigits(e.target.value);
                       if (cleaned === '') {
                         setExpensesMax(undefined);
                       } else {
@@ -415,6 +464,7 @@ export function SearchResultsAdvancedFilters({
             type="button"
             size="lg"
             onClick={apply}
+            disabled={hasValidationError}
             className="rounded-full"
             data-testid="adv-apply"
           >
@@ -501,21 +551,27 @@ interface RangeInputProps {
   label: string;
   value: number | undefined;
   onChange: (next: string) => void;
+  /** Validation error to show on the input (red border + aria-invalid). */
+  error?: string | null;
   testId: string;
 }
 
-function RangeInput({ label, value, onChange, testId }: RangeInputProps) {
+function RangeInput({ label, value, onChange, error, testId }: RangeInputProps) {
+  const hasError = error !== null && error !== undefined;
   return (
     <label className="flex flex-col gap-1">
       <span className="text-xs text-muted-foreground">{label}</span>
       <input
-        type="number"
+        type="text"
         inputMode="numeric"
-        min={0}
-        value={value === undefined ? '' : value}
-        onChange={(e) => onChange(e.target.value)}
+        value={value === undefined ? '' : String(value)}
+        onChange={(e) => onChange(sanitizeDigits(e.target.value))}
+        aria-invalid={hasError}
         data-testid={testId}
-        className="h-10 rounded-full border border-border bg-background/70 px-4 text-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+        className={cn(
+          'h-10 rounded-full border border-border bg-background/70 px-4 text-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
+          hasError && 'border-red-500',
+        )}
       />
     </label>
   );
