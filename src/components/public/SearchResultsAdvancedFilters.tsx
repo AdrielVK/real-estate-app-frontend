@@ -508,11 +508,11 @@ export function SearchResultsAdvancedFilters({
                 testId="adv-toggle-featured"
               />
               <Toggle
-                label="Requiere garantía"
+                label="Sin garantía"
                 checked={local.requiresGuarantor === true}
                 onChange={() => setToggle('requiresGuarantor')}
                 testId="adv-toggle-guarantor"
-                hint="Filtro visible — el backend aún no lo aplica, se omite del request."
+                hint="Mostrar solo propiedades que no requieren garantía. El backend aún no aplica este filtro, se omite del request."
               />
             </div>
           </Section>
