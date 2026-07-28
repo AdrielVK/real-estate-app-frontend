@@ -27,6 +27,9 @@ describe('SearchResultCard', () => {
 
     expect(screen.getByTestId('search-result-card')).toBeInTheDocument();
     expect(screen.getByTestId('card-title')).toHaveTextContent(FULL_PUBLICATION.title);
+    // Title is rendered with the compact text-sm class (not text-lg)
+    // to keep the card footprint small on the results grid.
+    expect(screen.getByTestId('card-title')).toHaveClass('text-sm');
     expect(screen.getByTestId('card-operation')).toHaveTextContent('Venta');
     expect(screen.getByTestId('card-property-type')).toHaveTextContent('Casa');
     expect(screen.getByTestId('card-location')).toHaveTextContent(

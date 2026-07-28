@@ -49,23 +49,23 @@ export function SearchResultCard({ publication }: SearchResultCardProps) {
     <Card className="flex h-full flex-col">
       <article className="flex h-full flex-col" data-testid="search-result-card">
         <PhotoSlot src={publication.mainImageUrl} alt={publication.title} />
-        <div className="flex flex-1 flex-col gap-3 p-4">
+        <div className="flex flex-1 flex-col gap-2 p-3">
           <div className="flex items-center justify-between gap-2">
             <span data-testid="card-operation">
               <Badge variant={operationVariant}>{operationLabel}</Badge>
             </span>
             <span
-              className="text-base font-semibold"
+              className="text-sm font-semibold"
               data-testid="card-price"
             >
               {formatCurrency(publication.price, publication.currency)}
             </span>
           </div>
-          <h3 className="text-lg font-semibold leading-snug" data-testid="card-title">
+          <h3 className="text-sm font-semibold leading-snug" data-testid="card-title">
             {publication.title}
           </h3>
           {publication.locationText ? (
-            <p className="text-sm" data-testid="card-location">
+            <p className="text-xs text-muted-foreground" data-testid="card-location">
               {publication.locationText}
             </p>
           ) : null}
@@ -97,7 +97,7 @@ interface PhotoSlotProps {
 function PhotoSlot({ src, alt }: PhotoSlotProps) {
   if (src) {
     return (
-      <div className="relative h-40 w-full overflow-hidden bg-muted">
+      <div className="relative h-32 w-full overflow-hidden bg-muted">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={src}
@@ -112,9 +112,9 @@ function PhotoSlot({ src, alt }: PhotoSlotProps) {
     <div
       aria-hidden="true"
       data-testid="card-photo-placeholder"
-      className="flex h-40 w-full items-center justify-center bg-muted"
+      className="flex h-32 w-full items-center justify-center bg-muted"
     >
-      <Building aria-hidden className="size-10 text-muted-foreground/30" />
+      <Building aria-hidden className="size-8 text-muted-foreground/30" />
     </div>
   );
 }
