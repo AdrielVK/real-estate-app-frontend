@@ -97,6 +97,31 @@ describe('TagCombobox', () => {
     expect(onChange).toHaveBeenCalledWith(['Villa Ser']);
   });
 
+  it('free-text Enter commits the typed text even when a suggestion is highlighted', async () => {
+    // Regression: before the fix, the Enter handler preferred
+    // `suggestions[highlight]` whenever it was truthy, so typing
+    // "Pal" + Enter added "palermo" (the highlighted match)
+    // instead of letting the user add a custom tag.
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <TagCombobox
+        label="Zona"
+        icon={<MapPin aria-hidden className="size-4" />}
+        options={ZONAS}
+        value={[]}
+        onChange={onChange}
+        mode="free-text"
+      />,
+    );
+
+    const input = getInput();
+    await user.type(input, 'Pal{Enter}');
+
+    // The literal typed text — not the suggestion slug.
+    expect(onChange).toHaveBeenCalledWith(['Pal']);
+  });
+
   it('ignores unknown text in predefined mode on Enter', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

@@ -212,6 +212,17 @@ export function TagCombobox({
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
 
     if (e.key === 'Enter') {
+      // Free-text mode: Enter always commits the current input verbatim,
+      // even when a suggestion is highlighted. This was the bug — the
+      // old code preferred suggestions[highlight] whenever it was
+      // truthy, so typing "Pal" + Enter added "palermo" instead of
+      // letting the user add a custom tag. To add a suggestion in
+      // free-text mode, the user clicks it.
+      if (mode === 'free-text' && input.trim()) {
+        e.preventDefault();
+        addTag(input);
+        return;
+      }
       if (open && suggestions[highlight]) {
         e.preventDefault();
         addTag(suggestions[highlight].slug);
