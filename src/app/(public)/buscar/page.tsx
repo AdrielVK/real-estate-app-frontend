@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
-import { searchPublications } from '@/lib/publications/api';
+// TODO: revert to real API after visual review
+import { searchPublicationsMock as searchPublications } from '@/lib/publications/mock-api';
 import { parseSearchParams, serializeFilters } from '@/lib/search/url';
 
 import { SearchResultsFilterBar } from '@/components/public/SearchResultsFilterBar';

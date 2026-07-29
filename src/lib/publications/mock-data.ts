@@ -1,0 +1,271 @@
+/**
+ * Mock data for the `/buscar` page.
+ *
+ * 12 hand-crafted `PublicationSummaryDto` payloads deliberately
+ * exercising every new card feature (carousel, address line,
+ * featured badge, badges, partial specs, etc.) so the user can
+ * visually verify the redesigned `SearchResultCard` end-to-end.
+ *
+ * Realistic Argentine context: CABA neighborhoods + GBA. Image URLs
+ * use `placehold.co` so the carousel works with no asset pipeline.
+ *
+ * Dates are computed from "now" at module load so the relative-date
+ * buckets (hoy / ayer / N días / fecha) stay correct across runs
+ * without anyone having to bump hardcoded timestamps.
+ */
+import type { PublicationSummaryDto } from '@/types/publication';
+
+/* ------------------------------------------------------------------ */
+/*  Date helpers                                                       */
+/* ------------------------------------------------------------------ */
+
+const NOW_MS = Date.now();
+const daysAgo = (n: number): string => new Date(NOW_MS - n * 86_400_000).toISOString();
+const daysFromNow = (n: number): string => new Date(NOW_MS + n * 86_400_000).toISOString();
+
+/* ------------------------------------------------------------------ */
+/*  Mock dataset                                                       */
+/* ------------------------------------------------------------------ */
+
+export const MOCK_SEARCH_RESULTS: PublicationSummaryDto[] = [
+  {
+    id: 'pub-001',
+    title: 'Casa de 4 ambientes con jardín y garage en Belgrano',
+    price: 385_000,
+    currency: 'USD',
+    operationType: 'venta',
+    propertyType: 'casa',
+    addressFormatted: 'Av. Cabildo 2900',
+    addressCity: 'Belgrano',
+    mainImageUrl: 'https://placehold.co/800x600/dbeafe/1e40af?text=Casa+Belgrano',
+    photos: [
+      'https://placehold.co/800x600/dbeafe/1e40af?text=Casa+Belgrano+1',
+      'https://placehold.co/800x600/dbeafe/1e40af?text=Casa+Belgrano+2',
+      'https://placehold.co/800x600/dbeafe/1e40af?text=Casa+Belgrano+3',
+      'https://placehold.co/800x600/dbeafe/1e40af?text=Casa+Belgrano+4',
+    ],
+    totalAreaM2: 220,
+    coveredAreaM2: 180,
+    rooms: 4,
+    bedrooms: 3,
+    bathrooms: 2,
+    garages: 2,
+    featured: true,
+    acceptsCredits: true,
+    acceptsPets: true,
+    publishedAt: daysAgo(0),
+  },
+  {
+    id: 'pub-002',
+    title: 'Departamento de 3 ambientes en Palermo Soho',
+    price: 285_000,
+    currency: 'USD',
+    operationType: 'venta',
+    propertyType: 'departamento',
+    addressFormatted: 'Honduras 3800',
+    addressCity: 'Palermo',
+    mainImageUrl: 'https://placehold.co/800x600/fce7f3/9d174d?text=Depto+Palermo',
+    photos: [
+      'https://placehold.co/800x600/fce7f3/9d174d?text=Depto+Palermo+1',
+      'https://placehold.co/800x600/fce7f3/9d174d?text=Depto+Palermo+2',
+      'https://placehold.co/800x600/fce7f3/9d174d?text=Depto+Palermo+3',
+    ],
+    totalAreaM2: 95,
+    coveredAreaM2: 88,
+    rooms: 3,
+    bedrooms: 2,
+    bathrooms: 2,
+    garages: 1,
+    featuredUntil: daysFromNow(14),
+    acceptsCredits: true,
+    publishedAt: daysAgo(3),
+  },
+  {
+    id: 'pub-003',
+    title: 'Piso de 2 ambientes con balcón en Recoleta',
+    price: 950_000,
+    currency: 'ARS',
+    operationType: 'alquiler',
+    propertyType: 'departamento',
+    addressFormatted: 'Av. Pueyrredón 2400',
+    addressCity: 'Recoleta',
+    mainImageUrl: 'https://placehold.co/800x600/dcfce7/166534?text=Depto+Recoleta',
+    // no `photos` — exercises the single-image fallback
+    totalAreaM2: 62,
+    coveredAreaM2: 58,
+    rooms: 2,
+    bedrooms: 1,
+    bathrooms: 1,
+    acceptsPets: true,
+    publishedAt: daysAgo(1),
+  },
+  {
+    id: 'pub-004',
+    title: 'PH tipo casa de 3 ambientes con terraza en Villa Crespo',
+    price: 215_000,
+    currency: 'USD',
+    operationType: 'venta',
+    propertyType: 'ph',
+    addressFormatted: 'Serrano 1200',
+    addressCity: 'Villa Crespo',
+    mainImageUrl: 'https://placehold.co/800x600/fef3c7/854d0e?text=PH+Villa+Crespo',
+    photos: [
+      'https://placehold.co/800x600/fef3c7/854d0e?text=PH+Crespo+1',
+      'https://placehold.co/800x600/fef3c7/854d0e?text=PH+Crespo+2',
+      'https://placehold.co/800x600/fef3c7/854d0e?text=PH+Crespo+3',
+      'https://placehold.co/800x600/fef3c7/854d0e?text=PH+Crespo+4',
+      'https://placehold.co/800x600/fef3c7/854d0e?text=PH+Crespo+5',
+    ],
+    totalAreaM2: 110,
+    coveredAreaM2: 95,
+    rooms: 3,
+    bedrooms: 2,
+    bathrooms: 1,
+    featured: true,
+    acceptsCredits: true,
+    publishedAt: daysAgo(15),
+  },
+  {
+    id: 'pub-005',
+    title: 'Departamento de 2 ambientes en Puerto Madero - Alquiler temporario',
+    price: 1_450_000,
+    currency: 'ARS',
+    operationType: 'alquiler_temporario',
+    propertyType: 'departamento',
+    addressFormatted: 'Juana Manso 1500',
+    addressCity: 'Puerto Madero',
+    mainImageUrl: 'https://placehold.co/800x600/ede9fe/5b21b6?text=Depto+Pto+Madero',
+    photos: [
+      'https://placehold.co/800x600/ede9fe/5b21b6?text=Pto+Madero+1',
+      'https://placehold.co/800x600/ede9fe/5b21b6?text=Pto+Madero+2',
+      'https://placehold.co/800x600/ede9fe/5b21b6?text=Pto+Madero+3',
+    ],
+    totalAreaM2: 55,
+    coveredAreaM2: 50,
+    rooms: 2,
+    bedrooms: 1,
+    bathrooms: 1,
+    publishedAt: daysAgo(0),
+  },
+  {
+    id: 'pub-006',
+    title: 'Local comercial a metros de Plaza Dorrego',
+    price: 480_000,
+    currency: 'ARS',
+    operationType: 'alquiler',
+    propertyType: 'local',
+    locationText: 'San Telmo, CABA',
+    mainImageUrl: 'https://placehold.co/800x600/e2e8f0/475569?text=Local+San+Telmo',
+    // no `photos`, partial specs — exercises the sparse-fallback path
+    totalAreaM2: 45,
+    bathrooms: 1,
+    publishedAt: daysAgo(60),
+  },
+  {
+    id: 'pub-007',
+    title: 'Oficina en torre con vista al río',
+    price: 1_200_000,
+    currency: 'ARS',
+    operationType: 'alquiler',
+    propertyType: 'oficina',
+    locationText: 'Microcentro, CABA',
+    mainImageUrl: 'https://placehold.co/800x600/f1f5f9/334155?text=Oficina+Centro',
+    totalAreaM2: 80,
+    coveredAreaM2: 80,
+    bathrooms: 1,
+    publishedAt: daysAgo(15),
+  },
+  {
+    id: 'pub-008',
+    title: 'Casa de 5 ambientes con piscina en Nuñez',
+    price: 495_000,
+    currency: 'USD',
+    operationType: 'venta',
+    propertyType: 'casa',
+    addressFormatted: 'Av. Congreso 3800',
+    addressCity: 'Nuñez',
+    mainImageUrl: 'https://placehold.co/800x600/dbeafe/1e3a8a?text=Casa+Nu%C3%B1ez',
+    photos: [
+      'https://placehold.co/800x600/dbeafe/1e3a8a?text=Casa+Nu%C3%B1ez+1',
+      'https://placehold.co/800x600/dbeafe/1e3a8a?text=Casa+Nu%C3%B1ez+2',
+      'https://placehold.co/800x600/dbeafe/1e3a8a?text=Casa+Nu%C3%B1ez+3',
+      'https://placehold.co/800x600/dbeafe/1e3a8a?text=Casa+Nu%C3%B1ez+4',
+    ],
+    totalAreaM2: 280,
+    coveredAreaM2: 230,
+    rooms: 5,
+    bedrooms: 4,
+    bathrooms: 3,
+    garages: 2,
+    featuredUntil: daysFromNow(30),
+    acceptsCredits: true,
+    acceptsPets: true,
+    publishedAt: daysAgo(0),
+  },
+  {
+    id: 'pub-009',
+    title: 'Departamento de 2 ambientes en Caballito',
+    price: 165_000,
+    currency: 'USD',
+    operationType: 'venta',
+    propertyType: 'departamento',
+    locationText: 'Caballito, CABA',
+    // no mainImageUrl, no photos — exercises the "neither" placeholder
+    totalAreaM2: 50,
+    coveredAreaM2: 48,
+    rooms: 2,
+    bedrooms: 1,
+    bathrooms: 1,
+    publishedAt: daysAgo(3),
+  },
+  {
+    id: 'pub-010',
+    title: 'Terreno en barrio cerrado - Pilar',
+    price: 95_000,
+    currency: 'USD',
+    operationType: 'venta',
+    propertyType: 'terreno',
+    addressFormatted: 'Km 50, Panamericana Ramal Pilar',
+    addressCity: 'Pilar',
+    mainImageUrl: 'https://placehold.co/800x600/dcfce7/14532d?text=Terreno+Pilar',
+    totalAreaM2: 800,
+    // no rooms/bedrooms/bathrooms — N/A for a bare lot
+    acceptsCredits: true,
+    publishedAt: daysAgo(15),
+  },
+  {
+    id: 'pub-011',
+    title: 'Cochera cubierta en Palermo',
+    price: 28_000,
+    currency: 'USD',
+    operationType: 'venta',
+    propertyType: 'cochera',
+    locationText: 'Palermo, CABA',
+    mainImageUrl: 'https://placehold.co/800x600/f1f5f9/0f172a?text=Cochera+Palermo',
+    // no specs at all — cocheras don't carry m²/rooms
+    publishedAt: daysAgo(60),
+  },
+  {
+    id: 'pub-012',
+    title: 'PH de 3 ambientes con patio en Almagro',
+    price: 720_000,
+    currency: 'ARS',
+    operationType: 'alquiler',
+    propertyType: 'ph',
+    addressFormatted: 'Av. Corrientes 4500',
+    addressCity: 'Almagro',
+    mainImageUrl: 'https://placehold.co/800x600/fce7f3/be185d?text=PH+Almagro',
+    photos: [
+      'https://placehold.co/800x600/fce7f3/be185d?text=PH+Almagro+1',
+      'https://placehold.co/800x600/fce7f3/be185d?text=PH+Almagro+2',
+      'https://placehold.co/800x600/fce7f3/be185d?text=PH+Almagro+3',
+    ],
+    totalAreaM2: 90,
+    coveredAreaM2: 75,
+    rooms: 3,
+    bedrooms: 2,
+    bathrooms: 1,
+    acceptsPets: true,
+    publishedAt: daysAgo(1),
+  },
+];
