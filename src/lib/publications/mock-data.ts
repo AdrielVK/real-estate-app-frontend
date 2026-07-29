@@ -78,6 +78,7 @@ export const MOCK_SEARCH_RESULTS: PublicationSummaryDto[] = [
     garages: 1,
     featuredUntil: daysFromNow(14),
     acceptsCredits: true,
+    expenses: 85_000,
     publishedAt: daysAgo(3),
   },
   {
@@ -86,6 +87,7 @@ export const MOCK_SEARCH_RESULTS: PublicationSummaryDto[] = [
     price: 950_000,
     currency: 'ARS',
     operationType: 'alquiler',
+    expenses: 120_000,
     propertyType: 'departamento',
     addressFormatted: 'Av. Pueyrredón 2400',
     addressCity: 'Recoleta',
@@ -145,6 +147,7 @@ export const MOCK_SEARCH_RESULTS: PublicationSummaryDto[] = [
     rooms: 2,
     bedrooms: 1,
     bathrooms: 1,
+    expenses: 180_000,
     publishedAt: daysAgo(0),
   },
   {
@@ -173,6 +176,7 @@ export const MOCK_SEARCH_RESULTS: PublicationSummaryDto[] = [
     totalAreaM2: 80,
     coveredAreaM2: 80,
     bathrooms: 1,
+    expenses: 45_000,
     publishedAt: daysAgo(15),
   },
   {

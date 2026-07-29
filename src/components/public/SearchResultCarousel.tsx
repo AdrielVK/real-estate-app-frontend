@@ -101,7 +101,7 @@ export function SearchResultCarousel({ photos, alt, className }: SearchResultCar
       onKeyDown={handleKeyDown}
       data-testid="search-result-carousel"
       className={cn(
-        'flex h-full w-full snap-x snap-mandatory overflow-x-auto scroll-smooth',
+        'flex h-full w-full snap-x snap-mandatory overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:hidden',
         className,
       )}
     >

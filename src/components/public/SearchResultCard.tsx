@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import Link from 'next/link';
+
 import { Bath, BedDouble, Building, Car, Grid3x3, MapPin, Ruler } from 'lucide-react';
 
 import type { PublicationSummaryDto } from '@/types/publication';
@@ -128,21 +130,31 @@ export function SearchResultCard({ publication }: SearchResultCardProps) {
   const relativeDate = formatRelativeDate(publication.publishedAt);
 
   return (
-    <Card className="h-full overflow-hidden">
+    <Card className="group relative cursor-pointer overflow-hidden rounded-3xl transition-shadow duration-300 hover:shadow-lg">
+      {/* Invisible overlay link — covers the entire card */}
+      <Link
+        href={`/publicaciones/${publication.id}`}
+        data-testid="card-detail-link"
+        className="absolute inset-0 z-10"
+        aria-label={`Ver detalle de ${publication.title}`}
+      >
+        <span className="sr-only">Ver detalle de {publication.title}</span>
+      </Link>
+
       <article
         data-testid="search-result-card"
         className="flex h-full flex-col md:flex-row"
       >
-        <div className="relative aspect-[16/10] w-full shrink-0 bg-muted md:aspect-auto md:w-2/5 md:min-h-56">
+        <div className="relative aspect-[4/3] w-full shrink-0 bg-muted md:aspect-auto md:w-2/5 md:min-h-56">
           <MediaPanel photos={photos} alt={publication.title} />
           <FavoriteButton
             publicationId={publication.id}
-            className="absolute top-2 right-2 z-10"
+            className="absolute top-2 right-2 z-20"
           />
           {isFeatured ? (
             <span
               data-testid="card-featured-badge"
-              className="absolute top-2 left-2 z-10 rounded-full bg-background/85 px-2.5 py-1 text-[0.7rem] font-medium tracking-wide text-foreground backdrop-blur-md"
+              className="absolute top-2 left-2 z-20 rounded-full bg-background/85 px-2.5 py-1 text-[0.7rem] font-medium tracking-wide text-foreground backdrop-blur-md"
             >
               <Badge variant="warning">Destacada</Badge>
             </span>
@@ -159,12 +171,22 @@ export function SearchResultCard({ publication }: SearchResultCardProps) {
                 <Badge variant="neutral">{propertyLabel}</Badge>
               </span>
             </div>
-            <span
-              className="text-lg font-semibold"
-              data-testid="card-price"
-            >
-              {formatCurrency(publication.price, publication.currency)}
-            </span>
+            <div className="text-right">
+              <span
+                className="text-lg font-semibold"
+                data-testid="card-price"
+              >
+                {formatCurrency(publication.price, publication.currency)}
+              </span>
+              {publication.expenses != null && publication.expenses > 0 ? (
+                <span
+                  className="block text-xs text-muted-foreground"
+                  data-testid="card-expenses"
+                >
+                  + {formatCurrency(publication.expenses, publication.currency)} expensas
+                </span>
+              ) : null}
+            </div>
           </div>
 
           <h3
@@ -215,10 +237,9 @@ export function SearchResultCard({ publication }: SearchResultCardProps) {
             ) : (
               <span />
             )}
-            <a
-              href={`/publicaciones/${publication.id}`}
-              data-testid="card-detail-link"
-              className="inline-flex items-center gap-1 rounded-full text-sm font-medium text-primary transition-colors hover:text-copper focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            <span
+              data-testid="card-detail-cta"
+              className="relative z-20 inline-flex items-center gap-1 rounded-full text-sm font-medium text-primary transition-colors group-hover:text-copper"
             >
               Ver detalle
               <svg
@@ -234,7 +255,7 @@ export function SearchResultCard({ publication }: SearchResultCardProps) {
                 <path d="M7 17 17 7" />
                 <path d="M7 7h10v10" />
               </svg>
-            </a>
+            </span>
           </div>
         </div>
       </article>
