@@ -128,7 +128,7 @@ export function SearchResultCarousel({ photos, alt, className }: SearchResultCar
             aria-label="Foto anterior"
             data-testid="carousel-prev"
             onClick={() => scrollTo(-1)}
-            className="absolute top-1/2 left-2 z-20 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-white/80 text-foreground shadow-sm backdrop-blur-md transition-transform duration-300 hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="absolute top-1/2 left-2 z-20 grid size-8 -translate-y-1/2 cursor-pointer place-items-center rounded-full bg-white/80 text-foreground shadow-sm backdrop-blur-md transition-transform duration-300 hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             <ChevronLeft aria-hidden className="size-4" />
           </button>
@@ -137,7 +137,7 @@ export function SearchResultCarousel({ photos, alt, className }: SearchResultCar
             aria-label="Foto siguiente"
             data-testid="carousel-next"
             onClick={() => scrollTo(1)}
-            className="absolute top-1/2 right-2 z-20 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-white/80 text-foreground shadow-sm backdrop-blur-md transition-transform duration-300 hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="absolute top-1/2 right-2 z-20 grid size-8 -translate-y-1/2 cursor-pointer place-items-center rounded-full bg-white/80 text-foreground shadow-sm backdrop-blur-md transition-transform duration-300 hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             <ChevronRight aria-hidden className="size-4" />
           </button>

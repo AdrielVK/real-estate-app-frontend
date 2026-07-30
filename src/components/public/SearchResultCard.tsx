@@ -177,6 +177,9 @@ export function SearchResultCard({ publication }: SearchResultCardProps) {
                 data-testid="card-price"
               >
                 {formatCurrency(publication.price, publication.currency)}
+                <span className="ml-1 text-xs font-normal text-muted-foreground">
+                  {publication.currency}
+                </span>
               </span>
               {publication.expenses != null && publication.expenses > 0 ? (
                 <span

@@ -305,7 +305,7 @@ describe('SearchResultCard', () => {
 
       rerender(<SearchResultCard publication={ars} />);
       const rendered = screen.getByTestId('card-price').textContent ?? '';
-      expect(rendered.replace(/\s/g, '')).toBe(formatCurrency(1000, 'ARS').replace(/\s/g, ''));
+      expect(rendered.replace(/\s/g, '')).toContain(formatCurrency(1000, 'ARS').replace(/\s/g, ''));
     });
 
     it('falls back to the raw slug when the operation type is unknown to the UI', () => {
