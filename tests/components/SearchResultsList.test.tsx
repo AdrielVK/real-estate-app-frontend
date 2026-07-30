@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import type { PublicationSummaryDto, SearchFilters } from '@/types/publication';
 import { DEFAULT_FILTERS } from '@/lib/search/url';
 
-import { SearchResultsList } from '@/components/public/SearchResultsList';
+import { SearchResultsList } from '@/components/search/SearchResultsList';
 
 const FULL_FILTERS: SearchFilters = {
   ...DEFAULT_FILTERS,

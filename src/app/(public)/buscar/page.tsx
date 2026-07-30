@@ -4,11 +4,12 @@ import type { Metadata } from 'next';
 import { searchPublicationsMock as searchPublications } from '@/lib/publications/mock-api';
 import { parseSearchParams, serializeFilters } from '@/lib/search/url';
 
-import { SearchResultsFilterBar } from '@/components/public/SearchResultsFilterBar';
-import { SearchResultsList } from '@/components/public/SearchResultsList';
-import { SearchResultsPagination } from '@/components/public/SearchResultsPagination';
+import { SearchResultsFilterBar } from '@/components/search';
 import { Container } from '@/components/ui/Container';
 import { Section } from '@/components/ui/Section';
+
+import { BuscarError } from './_components/BuscarError';
+import { BuscarResults } from './_components/BuscarResults';
 
 export const metadata: Metadata = {
   title: 'Buscar propiedades',
@@ -41,8 +42,9 @@ interface PageProps {
  *
  * Empty / error / not-yet-configured states
  * - `searchPublications` returns a discriminated `SearchResult`.
- *   We render the result list inside an inline `try/catch`-style
- *   switch so the filter bar stays interactive in every state.
+ *   `BuscarResults` and `BuscarError` (under `./_components`) hold
+ *   the per-state markup so this page stays focused on
+ *   orchestration: parse → fetch → render states.
  */
 export default async function BuscarPage({ searchParams }: PageProps) {
   const rawSearchParams = await searchParams;
@@ -63,9 +65,9 @@ export default async function BuscarPage({ searchParams }: PageProps) {
         <SearchResultsFilterBar key={serialized} initialFilters={filters} />
 
         {!result.ok ? (
-          <ErrorState status={result.status} message={result.message} />
+          <BuscarError status={result.status} message={result.message} />
         ) : (
-          <ResultsState
+          <BuscarResults
             publications={result.response.data}
             total={result.response.total}
             currentPage={result.response.page}
@@ -75,74 +77,5 @@ export default async function BuscarPage({ searchParams }: PageProps) {
         )}
       </Container>
     </Section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  State branches                                                     */
-/* ------------------------------------------------------------------ */
-
-interface ResultsStateProps {
-  publications: import('@/types/publication').PublicationSummaryDto[];
-  total: number;
-  currentPage: number;
-  totalPages: number;
-  filters: import('@/types/publication').SearchFilters;
-}
-
-function ResultsState({
-  publications,
-  total,
-  currentPage,
-  totalPages,
-  filters,
-}: ResultsStateProps) {
-  return (
-    <div className="space-y-6">
-      <p className="text-sm text-muted-foreground" data-testid="results-summary">
-        {total === 0
-          ? 'Sin resultados para los filtros activos.'
-          : total === 1
-            ? '1 propiedad encontrada'
-            : `${total} propiedades encontradas`}
-        {totalPages > 1 ? ` · página ${currentPage} de ${totalPages}` : null}
-      </p>
-
-      <SearchResultsList publications={publications} filters={filters} />
-
-      <SearchResultsPagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        filters={filters}
-      />
-    </div>
-  );
-}
-
-interface ErrorStateProps {
-  status: number | null;
-  message: string;
-}
-
-/**
- * Inline error state — keeps the filter bar interactive so the
- * user can retry without a full page reload. A thrown error
- * would propagate to the nearest `error.tsx` boundary and
- * unmount the bar.
- */
-function ErrorState({ status, message }: ErrorStateProps) {
-  return (
-    <div
-      data-testid="results-error"
-      role="alert"
-      className="flex flex-col items-start gap-3 rounded-3xl border border-border bg-card/60 px-6 py-8"
-    >
-      <p className="text-base font-semibold text-foreground">No pudimos cargar los resultados</p>
-      <p className="text-sm text-muted-foreground">
-        {status === null
-          ? 'El servicio de búsqueda no está disponible en este momento. Verificá que el backend esté corriendo y que la variable API_BASE_URL esté configurada.'
-          : `El backend respondió con un error (${status}). ${message}`}
-      </p>
-    </div>
   );
 }

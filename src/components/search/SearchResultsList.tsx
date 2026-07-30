@@ -5,7 +5,7 @@ import type { SearchFilters } from '@/types/publication';
 import { serializeFilters } from '@/lib/search/url';
 import { cn } from '@/lib/utils';
 
-import { SearchResultCard } from '@/components/public/SearchResultCard';
+import { SearchResultCard } from './SearchResultCard';
 
 export interface SearchResultsListProps {
   publications: readonly PublicationSummaryDto[];
@@ -42,10 +42,7 @@ export function SearchResultsList({
   }
 
   return (
-    <div
-      className={cn('flex flex-col gap-4', className)}
-      data-testid="search-results-grid"
-    >
+    <div className={cn('flex flex-col gap-4', className)} data-testid="search-results-grid">
       {publications.map((publication) => (
         <SearchResultCard key={publication.id} publication={publication} />
       ))}
@@ -87,8 +84,8 @@ function EmptyState({ filters: _filters, resetHref }: EmptyStateProps) {
     >
       <p className="text-base font-medium">No encontramos resultados</p>
       <p className="max-w-sm text-sm text-muted-foreground">
-        Probá quitar alguno de los filtros activos o cambiá la combinación de zonas y
-        tipo de propiedad.
+        Probá quitar alguno de los filtros activos o cambiá la combinación de zonas y tipo de
+        propiedad.
       </p>
       <Link
         href={href}

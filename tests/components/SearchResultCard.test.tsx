@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { PublicationSummaryDto } from '@/types/publication';
 import { formatCurrency } from '@/lib/utils';
 
-import { SearchResultCard } from '@/components/public/SearchResultCard';
+import { SearchResultCard } from '@/components/search/SearchResultCard';
 
 const FULL_PUBLICATION: PublicationSummaryDto = {
   id: 'dto-001',

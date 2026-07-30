@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { FavoriteButton } from '@/components/public/FavoriteButton';
+import { FavoriteButton } from '@/components/search/FavoriteButton';
 
 describe('FavoriteButton', () => {
   it('starts inactive with aria-pressed=false and the "Guardar en favoritos" label', () => {

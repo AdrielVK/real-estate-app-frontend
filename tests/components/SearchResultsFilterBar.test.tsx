@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SearchFilters } from '@/types/publication';
 import { DEFAULT_FILTERS } from '@/lib/search/url';
 
-import { SearchResultsFilterBar } from '@/components/public/SearchResultsFilterBar';
+import { SearchResultsFilterBar } from '@/components/search/SearchResultsFilterBar';
 
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(),

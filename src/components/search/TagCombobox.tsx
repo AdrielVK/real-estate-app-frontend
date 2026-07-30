@@ -349,9 +349,7 @@ export function TagCombobox({
                 ))
               ) : mode === 'predefined' ? (
                 <p className="px-3 py-3 text-sm text-muted-foreground">
-                  {input.trim()
-                    ? `Sin coincidencias para "${input.trim()}".`
-                    : 'Elegí una opción.'}
+                  {input.trim() ? `Sin coincidencias para "${input.trim()}".` : 'Elegí una opción.'}
                 </p>
               ) : (
                 <p className="px-3 py-3 text-sm text-muted-foreground">

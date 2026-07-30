@@ -6,7 +6,16 @@ import { createPortal } from 'react-dom';
 
 import { useRouter, useSearchParams } from 'next/navigation';
 
-import { ChevronDown, DollarSign, Eraser, Home, Loader2, MapPin, Search, SlidersHorizontal } from 'lucide-react';
+import {
+  ChevronDown,
+  DollarSign,
+  Eraser,
+  Home,
+  Loader2,
+  MapPin,
+  Search,
+  SlidersHorizontal,
+} from 'lucide-react';
 
 import type { Currency, OperationSlug, PropertyTypeSlug, SearchFilters } from '@/types/publication';
 import {
@@ -16,15 +25,12 @@ import {
   serializeFilters,
 } from '@/lib/search/url';
 import { cn } from '@/lib/utils';
-import {
-  minMaxError,
-  PRICE_MIN_MAX_ERROR_MESSAGE,
-  sanitizeDigits,
-} from '@/lib/validation/digits';
+import { minMaxError, PRICE_MIN_MAX_ERROR_MESSAGE, sanitizeDigits } from '@/lib/validation/digits';
 
-import { SearchResultsAdvancedFilters } from '@/components/public/SearchResultsAdvancedFilters';
-import { TagCombobox, type TagComboboxOption } from '@/components/public/TagCombobox';
 import { Button } from '@/components/ui/Button';
+
+import { SearchResultsAdvancedFilters } from './SearchResultsAdvancedFilters';
+import { TagCombobox, type TagComboboxOption } from './TagCombobox';
 
 const PROPERTY_TYPE_OPTIONS: readonly TagComboboxOption[] = (
   Object.entries(PROPERTY_TYPE_LABEL) as [PropertyTypeSlug, string][]
@@ -118,10 +124,7 @@ export function SearchResultsFilterBar({
   // add noise to the bar. The check is anchored to the URL state
   // (via `searchParams`) because that's what the user sees in the
   // address bar and what the page re-renders from after a push.
-  const hasActiveFilters = useMemo(
-    () => (searchParams?.toString() ?? '') !== '',
-    [searchParams],
-  );
+  const hasActiveFilters = useMemo(() => (searchParams?.toString() ?? '') !== '', [searchParams]);
   const clearFilters = useCallback(() => {
     if (onCommit) {
       onCommit(new URLSearchParams());
@@ -261,10 +264,7 @@ export function SearchResultsFilterBar({
   }, [draft.priceMin, draft.priceMax, draft.currency]);
 
   return (
-    <div
-      className="glass-panel rounded-3xl border border-border/70 p-2"
-      data-testid="filter-bar"
-    >
+    <div className="glass-panel rounded-3xl border border-border/70 p-2" data-testid="filter-bar">
       <div className="flex flex-col gap-2 sm:h-14 sm:flex-row sm:items-center sm:gap-0 sm:rounded-full sm:pl-3">
         {/* Location */}
         <div className="min-w-0 flex-1">
@@ -445,9 +445,7 @@ export function SearchResultsFilterBar({
 /* ------------------------------------------------------------------ */
 
 function Divider() {
-  return (
-    <span aria-hidden className="hidden h-8 w-px shrink-0 bg-border sm:block" />
-  );
+  return <span aria-hidden className="hidden h-8 w-px shrink-0 bg-border sm:block" />;
 }
 
 interface OperationListboxProps {
@@ -552,11 +550,7 @@ const PricePanel = forwardRef<HTMLDivElement, PricePanelProps>(function PricePan
           </label>
         </div>
         {error ? (
-          <p
-            className="text-xs text-red-500"
-            role="alert"
-            data-testid="price-error"
-          >
+          <p className="text-xs text-red-500" role="alert" data-testid="price-error">
             {PRICE_MIN_MAX_ERROR_MESSAGE}
           </p>
         ) : null}

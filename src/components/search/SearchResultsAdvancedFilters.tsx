@@ -7,15 +7,12 @@ import { Minus, Plus, X } from 'lucide-react';
 import type { OperationSlug, SearchFilters, TagCategory } from '@/types/publication';
 import { PROPERTY_AGE_OPTIONS, TAGS_BY_CATEGORY } from '@/lib/search/url';
 import { cn } from '@/lib/utils';
-import {
-  AREA_MIN_MAX_ERROR_MESSAGE,
-  minMaxError,
-  sanitizeDigits,
-} from '@/lib/validation/digits';
+import { AREA_MIN_MAX_ERROR_MESSAGE, minMaxError, sanitizeDigits } from '@/lib/validation/digits';
 
-import { TagCombobox, type TagComboboxOption } from '@/components/public/TagCombobox';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
+
+import { TagCombobox, type TagComboboxOption } from './TagCombobox';
 
 const CATEGORY_LABELS: Record<TagCategory, string> = {
   servicio: 'Servicios',
@@ -222,7 +219,11 @@ export function SearchResultsAdvancedFilters({
   }
 
   function setExpensesMax(value: number | undefined) {
-    setLocal((prev) => ({ ...prev, expensesMax: value, expensesCurrency: prev.expensesCurrency ?? 'ARS' }));
+    setLocal((prev) => ({
+      ...prev,
+      expensesMax: value,
+      expensesCurrency: prev.expensesCurrency ?? 'ARS',
+    }));
   }
 
   function setExpensesCurrency(value: import('@/types/publication').Currency) {
@@ -357,20 +358,12 @@ export function SearchResultsAdvancedFilters({
               />
             </div>
             {areaError.total ? (
-              <p
-                className="text-xs text-red-500"
-                role="alert"
-                data-testid="adv-total-area-error"
-              >
+              <p className="text-xs text-red-500" role="alert" data-testid="adv-total-area-error">
                 {areaError.total}
               </p>
             ) : null}
             {areaError.covered ? (
-              <p
-                className="text-xs text-red-500"
-                role="alert"
-                data-testid="adv-covered-area-error"
-              >
+              <p className="text-xs text-red-500" role="alert" data-testid="adv-covered-area-error">
                 {areaError.covered}
               </p>
             ) : null}
@@ -419,7 +412,10 @@ export function SearchResultsAdvancedFilters({
               grayed out and the URL only carries `noExpensas=true`. */}
           <Section title="Expensas">
             <div className="flex flex-col gap-3">
-              <label className="flex cursor-pointer items-center gap-2 text-sm" data-testid="adv-no-expensas">
+              <label
+                className="flex cursor-pointer items-center gap-2 text-sm"
+                data-testid="adv-no-expensas"
+              >
                 <input
                   type="checkbox"
                   checked={local.noExpensas === true}
@@ -600,10 +596,7 @@ function NumberStepper({ label, value, onChange, testId }: NumberStepperProps) {
         >
           <Minus aria-hidden className="size-3.5" />
         </button>
-        <span
-          className="text-sm font-medium tabular-nums"
-          data-testid={`${testId}-value`}
-        >
+        <span className="text-sm font-medium tabular-nums" data-testid={`${testId}-value`}>
           {value === undefined ? '—' : value}
         </span>
         <button

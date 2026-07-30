@@ -50,7 +50,11 @@ export function FavoriteButton({ publicationId: _publicationId, className }: Fav
       aria-pressed={active}
       aria-label={active ? 'Quitar de favoritos' : 'Guardar en favoritos'}
       data-testid="favorite-button"
-      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActive((value) => !value); }}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setActive((value) => !value);
+      }}
       className={cn(
         'grid size-8 place-items-center rounded-full bg-white/80 text-muted-foreground shadow-sm backdrop-blur-md transition-transform duration-300 hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
         className,

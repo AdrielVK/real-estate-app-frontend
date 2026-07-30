@@ -1,6 +1,6 @@
 'use client';
 
-import { type KeyboardEvent,useCallback, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 

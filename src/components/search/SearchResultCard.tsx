@@ -8,10 +8,11 @@ import type { PublicationSummaryDto } from '@/types/publication';
 import { OPERATION_LABEL, PROPERTY_TYPE_LABEL } from '@/lib/search/url';
 import { formatCurrency, formatRelativeDate } from '@/lib/utils';
 
-import { FavoriteButton } from '@/components/public/FavoriteButton';
-import { SearchResultCarousel } from '@/components/public/SearchResultCarousel';
 import { Badge, type BadgeVariant } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
+
+import { FavoriteButton } from './FavoriteButton';
+import { SearchResultCarousel } from './SearchResultCarousel';
 
 export interface SearchResultCardProps {
   publication: PublicationSummaryDto;
@@ -59,8 +60,7 @@ export function SearchResultCard({ publication }: SearchResultCardProps) {
   const propertyLabel =
     PROPERTY_TYPE_LABEL[publication.propertyType as keyof typeof PROPERTY_TYPE_LABEL] ??
     publication.propertyType;
-  const operationVariant =
-    OPERATION_VARIANT[publication.operationType] ?? 'neutral';
+  const operationVariant = OPERATION_VARIANT[publication.operationType] ?? 'neutral';
 
   // Media fallback chain: gallery → single image → placeholder.
   const photos =
@@ -141,16 +141,10 @@ export function SearchResultCard({ publication }: SearchResultCardProps) {
         <span className="sr-only">Ver detalle de {publication.title}</span>
       </Link>
 
-      <article
-        data-testid="search-result-card"
-        className="flex h-full flex-col md:flex-row"
-      >
+      <article data-testid="search-result-card" className="flex h-full flex-col md:flex-row">
         <div className="relative aspect-[4/3] w-full shrink-0 bg-muted md:aspect-auto md:w-2/5 md:min-h-56">
           <MediaPanel photos={photos} alt={publication.title} />
-          <FavoriteButton
-            publicationId={publication.id}
-            className="absolute top-2 right-2 z-20"
-          />
+          <FavoriteButton publicationId={publication.id} className="absolute top-2 right-2 z-20" />
           {isFeatured ? (
             <span
               data-testid="card-featured-badge"
@@ -172,20 +166,14 @@ export function SearchResultCard({ publication }: SearchResultCardProps) {
               </span>
             </div>
             <div className="text-right">
-              <span
-                className="text-lg font-semibold"
-                data-testid="card-price"
-              >
+              <span className="text-lg font-semibold" data-testid="card-price">
                 {formatCurrency(publication.price, publication.currency)}
                 <span className="ml-1 text-xs font-normal text-muted-foreground">
                   {publication.currency}
                 </span>
               </span>
               {publication.expenses != null && publication.expenses > 0 ? (
-                <span
-                  className="block text-xs text-muted-foreground"
-                  data-testid="card-expenses"
-                >
+                <span className="block text-xs text-muted-foreground" data-testid="card-expenses">
                   + {formatCurrency(publication.expenses, publication.currency)} expensas
                 </span>
               ) : null}
@@ -216,25 +204,15 @@ export function SearchResultCard({ publication }: SearchResultCardProps) {
           <SpecsList items={specItems} />
 
           {(publication.acceptsCredits || publication.acceptsPets) && (
-            <div
-              className="flex flex-wrap items-center gap-1.5"
-              data-testid="card-amenities"
-            >
-              {publication.acceptsCredits ? (
-                <Badge variant="success">Apto crédito</Badge>
-              ) : null}
-              {publication.acceptsPets ? (
-                <Badge variant="info">Apto mascotas</Badge>
-              ) : null}
+            <div className="flex flex-wrap items-center gap-1.5" data-testid="card-amenities">
+              {publication.acceptsCredits ? <Badge variant="success">Apto crédito</Badge> : null}
+              {publication.acceptsPets ? <Badge variant="info">Apto mascotas</Badge> : null}
             </div>
           )}
 
           <div className="mt-auto flex items-center justify-between gap-2 pt-1">
             {relativeDate ? (
-              <span
-                className="text-xs text-muted-foreground"
-                data-testid="card-relative-date"
-              >
+              <span className="text-xs text-muted-foreground" data-testid="card-relative-date">
                 {relativeDate}
               </span>
             ) : (
@@ -314,10 +292,7 @@ function SpecsList({ items }: { items: (SpecItem | null)[] }) {
   const rendered = items.filter((item): item is SpecItem => item !== null);
   if (rendered.length === 0) return null;
   return (
-    <div
-      className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
-      data-testid="card-specs"
-    >
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" data-testid="card-specs">
       {rendered.map((item) => (
         <Spec key={item.testId} item={item} />
       ))}

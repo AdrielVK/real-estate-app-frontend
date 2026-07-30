@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MapPin } from 'lucide-react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { TagCombobox, type TagComboboxOption } from '@/components/public/TagCombobox';
+import { TagCombobox, type TagComboboxOption } from '@/components/search/TagCombobox';
 
 const ZONAS: readonly TagComboboxOption[] = [
   { slug: 'palermo', label: 'Palermo' },

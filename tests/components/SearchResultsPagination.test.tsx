@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import type { SearchFilters } from '@/types/publication';
 import { DEFAULT_FILTERS } from '@/lib/search/url';
 
-import { SearchResultsPagination } from '@/components/public/SearchResultsPagination';
+import { SearchResultsPagination } from '@/components/search/SearchResultsPagination';
 
 const FILTERS_WITH_STATE: SearchFilters = {
   ...DEFAULT_FILTERS,

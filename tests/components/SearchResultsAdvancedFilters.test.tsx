@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SearchFilters } from '@/types/publication';
 import { DEFAULT_FILTERS, TAGS_BY_CATEGORY } from '@/lib/search/url';
 
-import { SearchResultsAdvancedFilters } from '@/components/public/SearchResultsAdvancedFilters';
+import { SearchResultsAdvancedFilters } from '@/components/search/SearchResultsAdvancedFilters';
 
 function getDialog() {
   return screen.getByRole('dialog');

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { SearchResultCarousel } from '@/components/public/SearchResultCarousel';
+import { SearchResultCarousel } from '@/components/search/SearchResultCarousel';
 
 const PHOTOS = [
   'https://cdn.example.com/a.jpg',
