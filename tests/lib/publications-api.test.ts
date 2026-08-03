@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { SearchFilters } from '@/types/publication';
+import type { BackendSearchResponse, SearchFilters } from '@/types/publication';
 import { searchPublications, toBackendQuery } from '@/lib/publications/api';
 import { DEFAULT_FILTERS } from '@/lib/search/url';
 
@@ -23,6 +23,26 @@ afterEach(() => {
 afterAll(() => {
   vi.unstubAllEnvs();
 });
+
+function makeBackendEnvelope(
+  overrides: Partial<BackendSearchResponse> = {},
+): BackendSearchResponse {
+  return {
+    success: true,
+    data: [
+      {
+        id: 'p-1',
+        title: 'Casa de prueba',
+        priceAmount: 123000,
+        priceCurrency: 'USD',
+        operationType: 'venta',
+        propertyType: 'casa',
+      },
+    ],
+    meta: { page: '1', limit: '2', total: 1, totalPages: 1 },
+    ...overrides,
+  };
+}
 
 describe('toBackendQuery', () => {
   it('strips requiresGuarantor from the query string (backend gap)', () => {
@@ -71,30 +91,105 @@ describe('searchPublications', () => {
   it('returns the parsed response on a 200 OK', async () => {
     vi.stubEnv('API_BASE_URL', TEST_BASE);
     server.use(
-      http.get(`${TEST_BASE}/publications/search`, () =>
-        HttpResponse.json({
-          data: [
-            {
-              id: 'p-1',
-              title: 'Casa de prueba',
-              price: 123000,
-              currency: 'USD',
-              operationType: 'venta',
-              propertyType: 'casa',
-            },
-          ],
-          total: 1,
-          page: 1,
-          totalPages: 1,
-        }),
-      ),
+      http.get(`${TEST_BASE}/publications/search`, () => HttpResponse.json(makeBackendEnvelope())),
     );
 
     const result = await searchPublications(baseFilters);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.response.total).toBe(1);
+      expect(result.response.page).toBe(1);
+      expect(result.response.totalPages).toBe(1);
       expect(result.response.data[0]?.id).toBe('p-1');
+      expect(result.response.data[0]?.price).toBe(123000);
+      expect(result.response.data[0]?.currency).toBe('USD');
+    }
+  });
+
+  it('maps priceAmount/priceCurrency to price/currency', async () => {
+    vi.stubEnv('API_BASE_URL', TEST_BASE);
+    server.use(
+      http.get(`${TEST_BASE}/publications/search`, () =>
+        HttpResponse.json(
+          makeBackendEnvelope({
+            data: [
+              {
+                id: 'p-2',
+                title: 'Departamento de prueba',
+                priceAmount: 250000,
+                priceCurrency: 'ARS',
+                operationType: 'alquiler',
+                propertyType: 'departamento',
+              },
+            ],
+          }),
+        ),
+      ),
+    );
+
+    const result = await searchPublications(baseFilters);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const publication = result.response.data[0];
+      expect(publication?.price).toBe(250000);
+      expect(publication?.currency).toBe('ARS');
+      expect(publication).not.toHaveProperty('priceAmount');
+      expect(publication).not.toHaveProperty('priceCurrency');
+    }
+  });
+
+  it('coerces string page/limit meta values to numbers', async () => {
+    vi.stubEnv('API_BASE_URL', TEST_BASE);
+    server.use(
+      http.get(`${TEST_BASE}/publications/search`, () =>
+        HttpResponse.json(
+          makeBackendEnvelope({
+            meta: { page: '3', limit: '10', total: 5, totalPages: 1 },
+          }),
+        ),
+      ),
+    );
+
+    const result = await searchPublications(baseFilters);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.response.page).toBe(3);
+      expect(result.response.total).toBe(5);
+    }
+  });
+
+  it('falls back to page 1 when meta.page is not a valid number', async () => {
+    vi.stubEnv('API_BASE_URL', TEST_BASE);
+    server.use(
+      http.get(`${TEST_BASE}/publications/search`, () =>
+        HttpResponse.json(
+          makeBackendEnvelope({
+            meta: { page: 'not-a-number', limit: '2', total: 1, totalPages: 1 },
+          }),
+        ),
+      ),
+    );
+
+    const result = await searchPublications(baseFilters);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.response.page).toBe(1);
+    }
+  });
+
+  it('returns ok:false when the backend envelope reports success:false', async () => {
+    vi.stubEnv('API_BASE_URL', TEST_BASE);
+    server.use(
+      http.get(`${TEST_BASE}/publications/search`, () =>
+        HttpResponse.json(makeBackendEnvelope({ success: false, data: [] })),
+      ),
+    );
+
+    const result = await searchPublications(baseFilters);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(200);
+      expect(result.message).toMatch(/unexpected response envelope/i);
     }
   });
 
@@ -132,7 +227,7 @@ describe('searchPublications', () => {
     server.use(
       http.get(`${TEST_BASE}/publications/search`, ({ request }) => {
         receivedUrl = request.url;
-        return HttpResponse.json({ data: [], total: 0, page: 1, totalPages: 0 });
+        return HttpResponse.json(makeBackendEnvelope({ data: [] }));
       }),
     );
 
@@ -151,7 +246,7 @@ describe('searchPublications', () => {
     server.use(
       http.get('*/publications/search', ({ request }) => {
         receivedUrl = request.url;
-        return HttpResponse.json({ data: [], total: 0, page: 1, totalPages: 0 });
+        return HttpResponse.json(makeBackendEnvelope({ data: [] }));
       }),
     );
 

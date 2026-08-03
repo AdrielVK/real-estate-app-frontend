@@ -3,9 +3,9 @@
  * but reads from `MOCK_SEARCH_RESULTS` so the redesigned
  * `SearchResultCard` can be visually verified without a live backend.
  *
- * TEMPORARY: wired into `src/app/(public)/buscar/page.tsx` for the
- * visual-review pass. Revert the import swap once the real API is
- * available and the DTO round-trip is verified.
+ * The real `/buscar` page now uses `src/lib/publications/api.ts`. This
+ * mock remains available as a dev utility for isolated UI work or when
+ * the backend is not running locally.
  */
 import type { SearchFilters } from '@/types/publication';
 
