@@ -64,10 +64,10 @@ describe('SearchResultsList', () => {
     expect(reset.getAttribute('href')).toMatch(/^\/buscar(\?|$)/);
   });
 
-  it('empty state reset link includes the default currency so the URL is canonical', () => {
+  it('empty state reset link goes to the canonical /buscar path', () => {
     render(<SearchResultsList publications={[]} filters={DEFAULT_FILTERS} />);
     const reset = screen.getByTestId('search-results-reset');
-    expect(reset.getAttribute('href')).toBe('/buscar?currency=ARS');
+    expect(reset.getAttribute('href')).toBe('/buscar');
   });
 
   it('empty state reset link uses the provided resetHref when given', () => {

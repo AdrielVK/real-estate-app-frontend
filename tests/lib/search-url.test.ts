@@ -190,9 +190,15 @@ describe('parseSearchParams / serializeFilters', () => {
     expect(params.has('requiredTags')).toBe(false);
   });
 
-  it('serialize always emits currency so the URL is unambiguous', () => {
-    const params = serializeFilters({ ...DEFAULT_FILTERS });
-    expect(params.get('currency')).toBe('ARS');
+  it('only emits currency when a price filter is set', () => {
+    const without = serializeFilters({ ...DEFAULT_FILTERS });
+    expect(without.has('currency')).toBe(false);
+
+    const withMin = serializeFilters({ ...DEFAULT_FILTERS, priceMin: 100 });
+    expect(withMin.get('currency')).toBe('ARS');
+
+    const withMax = serializeFilters({ ...DEFAULT_FILTERS, priceMax: 500000 });
+    expect(withMax.get('currency')).toBe('ARS');
   });
 
   it('serialize joins multi-value keys with commas', () => {

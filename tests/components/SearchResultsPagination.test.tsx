@@ -41,12 +41,12 @@ describe('SearchResultsPagination', () => {
     render(<SearchResultsPagination currentPage={3} totalPages={7} filters={DEFAULT_FILTERS} />);
     // With windowSize=2, page 3 shows pages 1, 2, 3, 4, 5, and 7 (gap at 6).
     // page=1 is omitted from the URL by serializeFilters (it's the
-    // default), so the link to page 1 is just `?currency=ARS`.
-    expect(screen.getByTestId('pagination-page-1')).toHaveAttribute('href', '/buscar?currency=ARS');
+    // default), so the link to page 1 is the bare path.
+    expect(screen.getByTestId('pagination-page-1')).toHaveAttribute('href', '/buscar');
     for (const page of [2, 4, 5, 7]) {
       const link = screen.getByTestId(`pagination-page-${page}`);
       expect(link.tagName).toBe('A');
-      expect(link).toHaveAttribute('href', `/buscar?currency=ARS&page=${page}`);
+      expect(link).toHaveAttribute('href', `/buscar?page=${page}`);
     }
   });
 
@@ -95,15 +95,15 @@ describe('SearchResultsPagination', () => {
     const prev = screen.getByTestId('pagination-prev');
     expect(prev.tagName).toBe('A');
     // page=1 is omitted from the URL (it's the default), so the prev
-    // link on page 2 is the bare default URL.
-    expect(prev).toHaveAttribute('href', '/buscar?currency=ARS');
+    // link on page 2 is the bare path.
+    expect(prev).toHaveAttribute('href', '/buscar');
   });
 
   it('renders the next link as an anchor when not on the last page', () => {
     render(<SearchResultsPagination currentPage={4} totalPages={5} filters={DEFAULT_FILTERS} />);
     const next = screen.getByTestId('pagination-next');
     expect(next.tagName).toBe('A');
-    expect(next).toHaveAttribute('href', '/buscar?currency=ARS&page=5');
+    expect(next).toHaveAttribute('href', '/buscar?page=5');
   });
 
   it('uses the provided baseHref for the page links', () => {

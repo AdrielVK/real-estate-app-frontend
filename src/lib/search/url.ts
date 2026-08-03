@@ -135,7 +135,7 @@ const KNOWN_PROPERTY_AGE = new Set<PropertyAge>(['0-2', '2-5', '5-10', '10-20', 
 
 const KNOWN_CURRENCIES = new Set<Currency>(['ARS', 'USD']);
 
-/** Default filter state — `page=1`, `currency='ARS'`, empty arrays. */
+/** Default filter state — `page=1`, `currency='ARS'`, empty arrays. Currency is only serialized when a price filter is active. */
 export const DEFAULT_FILTERS: SearchFilters = {
   propertyTypes: [],
   requiredTags: [],
@@ -304,7 +304,7 @@ export function parseSearchParams(
  * - Booleans emitted only when `true`.
  * - Empty arrays / absent keys omitted.
  * - `page` omitted when `1` (clean default URL).
- * - `currency` always emitted so the URL is unambiguous.
+ * - `currency` emitted only when `priceMin` or `priceMax` is set.
  */
 export function serializeFilters(filters: SearchFilters): URLSearchParams {
   const params = new URLSearchParams();
@@ -328,7 +328,9 @@ export function serializeFilters(filters: SearchFilters): URLSearchParams {
     params.set('priceMax', String(filters.priceMax));
   }
 
-  params.set('currency', filters.currency);
+  if (filters.priceMin !== undefined || filters.priceMax !== undefined) {
+    params.set('currency', filters.currency);
+  }
 
   const numericKeys = [
     'roomsMin',

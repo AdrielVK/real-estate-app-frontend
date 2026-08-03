@@ -55,11 +55,11 @@ describe('toBackendQuery', () => {
     expect(query).toMatch(/acceptsPets=true/);
   });
 
-  it('emits only the default currency key (currency is always set on the URL)', () => {
-    // DEFAULT_FILTERS has `currency: 'ARS'` and `page: 1` — the only key
-    // that survives serialization is currency. Empty arrays / page=1
-    // are omitted, so the query is exactly `currency=ARS`.
-    expect(toBackendQuery(baseFilters)).toBe('currency=ARS');
+  it('omits currency when no price filter is set', () => {
+    // DEFAULT_FILTERS has `currency: 'ARS'` and `page: 1`, but currency
+    // is only serialized when priceMin or priceMax is present. Without
+    // any price filter the query should be empty.
+    expect(toBackendQuery(baseFilters)).toBe('');
   });
 
   it('preserves the rest of the filter set unchanged', () => {
