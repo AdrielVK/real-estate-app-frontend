@@ -27,11 +27,23 @@
  * - Inventory churn is measured in hours, not seconds, and the page is
  *   cacheable per-query. 60 s keeps the listing fresh enough for
  *   back/forward navigation while offloading load to Next's data cache.
+ *
+ * Why an adapter instead of changing the DTO?
+ * - The backend response shape (`{ success, data, meta }` with
+ *   `priceAmount`/`priceCurrency`) differs from the UI-facing
+ *   `PublicationSummaryDto` (`{ data, total, page, totalPages }` with
+ *   `price`/`currency`). Mapping in this layer keeps the UI, tests,
+ *   and mock data stable and isolates backend changes to one file.
  */
-import type { PublicationSummaryDto, SearchFilters } from '@/types/publication';
+import type {
+  BackendPublicationSummary,
+  BackendSearchResponse,
+  PublicationSummaryDto,
+  SearchFilters,
+} from '@/types/publication';
 import { serializeFilters } from '@/lib/search/url';
 
-/** Server response envelope for `GET /publications/search`. */
+/** Server response envelope for `GET /publications/search` — UI-facing. */
 export interface SearchResponse {
   data: PublicationSummaryDto[];
   total: number;
@@ -45,6 +57,63 @@ export interface SearchResponse {
  */
 export type SearchResult =
   { ok: true; response: SearchResponse } | { ok: false; status: number | null; message: string };
+
+/* ------------------------------------------------------------------ */
+/*  Adapter                                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Coerce a backend meta value to a positive integer.
+ * Falls back to `fallback` when the value is missing, not a number, or
+ * not finite. This keeps a malformed `page` string from leaking `NaN`
+ * into the pagination UI.
+ */
+function coerceMetaNumber(value: string | number | undefined, fallback: number): number {
+  const parsed = value === undefined ? Number.NaN : Number(value);
+  return Number.isFinite(parsed) && parsed >= 1 ? Math.trunc(parsed) : fallback;
+}
+
+/**
+ * Map a raw backend publication to the canonical UI DTO.
+ * Only the price field names differ today; every other field is shared.
+ */
+function mapBackendPublication(raw: BackendPublicationSummary): PublicationSummaryDto {
+  const { priceAmount, priceCurrency, ...rest } = raw;
+  return {
+    ...rest,
+    price: priceAmount,
+    currency: priceCurrency,
+  } as PublicationSummaryDto;
+}
+
+/**
+ * Parse the raw backend envelope and return a UI-facing `SearchResponse`.
+ * Returns `null` when the envelope cannot be parsed or `success` is false,
+ * so `searchPublications` can surface a non-throwing error result.
+ */
+function parseBackendResponse(body: unknown): SearchResponse | null {
+  const envelope = body as Partial<BackendSearchResponse>;
+  if (envelope.success !== true) {
+    return null;
+  }
+
+  const rawMeta = envelope.meta;
+  if (!rawMeta) {
+    return null;
+  }
+
+  const rawData = Array.isArray(envelope.data) ? envelope.data : [];
+  const mappedData = rawData.map((item) =>
+    mapBackendPublication(item as BackendPublicationSummary),
+  );
+
+  return {
+    data: mappedData,
+    total: rawMeta.total ?? 0,
+    page: coerceMetaNumber(rawMeta.page, 1),
+    totalPages: rawMeta.totalPages ?? 0,
+  };
+}
 
 /* ------------------------------------------------------------------ */
 /*  Public API                                                         */
@@ -83,8 +152,17 @@ export async function searchPublications(filters: SearchFilters): Promise<Search
       };
     }
 
-    const body = (await res.json()) as SearchResponse;
-    return { ok: true, response: body };
+    const body = (await res.json()) as BackendSearchResponse;
+    const response = parseBackendResponse(body);
+    if (response === null) {
+      return {
+        ok: false,
+        status: 200,
+        message: 'Backend returned an unexpected response envelope',
+      };
+    }
+
+    return { ok: true, response };
   } catch (error) {
     // Network error, DNS failure, malformed JSON, etc. We log so the
     // server console still shows the underlying cause but we surface a

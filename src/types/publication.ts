@@ -154,6 +154,46 @@ export interface SearchFilters {
   page: number;
 }
 
+/* ===========================================================================
+ * Backend raw types (`GET /publications/search`)
+ *
+ * The backend returns field names and a meta envelope that differ from the
+ * UI-facing DTO. The raw types are intentionally narrow: only the fields the
+ * adapter currently cares about are typed. The adapter maps these to the
+ * canonical `PublicationSummaryDto` / `SearchResponse` shapes used by the rest
+ * of the app.
+ * ========================================================================= */
+
+/**
+ * Pagination metadata returned by `GET /publications/search`.
+ * `page` and `limit` are strings on the wire; the adapter coerces them
+ * to numbers before exposing them to the UI.
+ */
+export interface BackendPaginationMeta {
+  page: string | number;
+  limit: string | number;
+  total: number;
+  totalPages: number;
+}
+
+/**
+ * Raw backend response envelope for `GET /publications/search`.
+ */
+export interface BackendSearchResponse {
+  success: boolean;
+  data: BackendPublicationSummary[];
+  meta: BackendPaginationMeta;
+}
+
+/**
+ * Raw backend publication shape. Differs from `PublicationSummaryDto` only
+ * in the price fields: `priceAmount` and `priceCurrency`.
+ */
+export type BackendPublicationSummary = Omit<PublicationSummaryDto, 'price' | 'currency'> & {
+  priceAmount: number;
+  priceCurrency: string;
+};
+
 /**
  * `PublicationSummaryDto` — single result card payload from
  * `GET /publications/search`. Optional fields are absent on the wire
