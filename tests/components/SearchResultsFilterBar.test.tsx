@@ -173,7 +173,7 @@ describe('SearchResultsFilterBar', () => {
 
     expect(onCommit).toHaveBeenCalledTimes(1);
     const [params] = onCommit.mock.calls[0] ?? [];
-    expect(params.get('operation')).toBe('venta');
+    expect(params.get('operationType')).toBe('venta');
   });
 
   it('opens the price panel and applies a min/max + currency', async () => {

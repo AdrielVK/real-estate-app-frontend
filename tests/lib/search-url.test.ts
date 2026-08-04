@@ -29,7 +29,7 @@ describe('parseSearchParams / serializeFilters', () => {
     const filters = parseSearchParams({
       locationText: '',
       propertyTypes: '',
-      operation: '',
+      operationType: '',
     });
     expect(filters).toEqual(DEFAULT_FILTERS);
   });
@@ -39,7 +39,7 @@ describe('parseSearchParams / serializeFilters', () => {
       asParams({
         locationText: 'Palermo',
         propertyTypes: 'casa,ph',
-        operation: 'venta',
+        operationType: 'venta',
         priceMin: '100000',
         priceMax: '500000',
         currency: 'USD',

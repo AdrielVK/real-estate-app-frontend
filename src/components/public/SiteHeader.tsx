@@ -11,8 +11,8 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 
 const links = [
-  { label: 'Alquilar', href: '/buscar?operation=alquiler' },
-  { label: 'Comprar', href: '/buscar?operation=venta' },
+  { label: 'Alquilar', href: '/buscar?operationType=alquiler' },
+  { label: 'Comprar', href: '/buscar?operationType=venta' },
   { label: 'Propietarios', href: '#propietarios' },
 ] as const;
 

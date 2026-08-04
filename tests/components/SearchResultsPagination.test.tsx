@@ -71,7 +71,7 @@ describe('SearchResultsPagination', () => {
     const href = link.getAttribute('href') ?? '';
     expect(href).toContain('locationText=Palermo');
     expect(href).toContain('propertyTypes=casa');
-    expect(href).toContain('operation=venta');
+    expect(href).toContain('operationType=venta');
     expect(href).toContain('priceMin=100000');
     expect(href).toContain('page=2');
   });

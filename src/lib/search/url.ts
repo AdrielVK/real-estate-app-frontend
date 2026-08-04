@@ -221,7 +221,7 @@ export function parseSearchParams(
     filters.propertyTypes = propertyTypes;
   }
 
-  const operation = firstScalar(sp.operation);
+  const operation = firstScalar(sp.operationType);
   if (operation && KNOWN_OPERATION_SLUGS.has(operation as OperationSlug)) {
     filters.operation = operation as OperationSlug;
   }
@@ -325,7 +325,7 @@ export function serializeFilters(filters: SearchFilters): URLSearchParams {
   }
 
   if (filters.operation) {
-    params.set('operation', filters.operation);
+    params.set('operationType', filters.operation);
   }
 
   if (filters.priceMin !== undefined) {

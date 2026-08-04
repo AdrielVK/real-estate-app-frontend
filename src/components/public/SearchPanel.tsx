@@ -9,6 +9,7 @@ import { ChevronDown, Loader2, MapPin, Search, Tags, Wand2, X } from 'lucide-rea
 
 import type { Operacion } from '@/types/publication';
 import { caracteristicas, tiposDePropiedad, zonas } from '@/lib/mock-data';
+import { PROPERTY_TYPE_LABEL } from '@/lib/search/url';
 import { cn } from '@/lib/utils';
 
 import { AiSearchDialog } from '@/components/public/AiSearchDialog';
@@ -237,7 +238,7 @@ export function SearchPanel() {
 
     // Operation
     const op = operacion === 'comprar' ? 'venta' : 'alquiler';
-    params.set('operation', op);
+    params.set('operationType', op);
 
     // Property type
     if (tipo) {

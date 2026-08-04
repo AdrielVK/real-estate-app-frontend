@@ -70,7 +70,7 @@ describe('toBackendQuery', () => {
       priceMin: 100000,
       page: 2,
     });
-    expect(query).toContain('operation=venta');
+    expect(query).toContain('operationType=venta');
     expect(query).toContain('propertyTypes=casa%2Cph');
     expect(query).toContain('priceMin=100000');
     expect(query).toContain('page=2');
