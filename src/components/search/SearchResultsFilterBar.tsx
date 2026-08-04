@@ -608,16 +608,15 @@ const PricePanel = forwardRef<HTMLDivElement, PricePanelProps>(function PricePan
  * Build the URLSearchParams the bar will push. Resets `page` to 1
  * because a filter change always starts a new result set.
  *
- * Mirrors `serializeFilters` but bakes in the "first location tag
- * only" rule from the spec and always clears `page` even if the
- * caller had it set.
+ * Sends all location tags via `locationTexts` (multi-location UNION),
+ * falling back to single `locationText` for backward compat.
  */
 function serializeForCommit(draft: SearchFilters, locationTags: string[]): URLSearchParams {
-  const locationText = locationTags[0]?.trim() || undefined;
   const next: SearchFilters = {
     ...DEFAULT_FILTERS,
     ...draft,
-    locationText,
+    locationTexts: locationTags.length > 0 ? locationTags : undefined,
+    locationText: undefined,
     page: 1,
   };
   return serializeFilters(next);

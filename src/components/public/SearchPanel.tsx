@@ -3,6 +3,8 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { useRouter } from 'next/navigation';
+
 import { ChevronDown, Loader2, MapPin, Search, Tags, Wand2, X } from 'lucide-react';
 
 import type { Operacion } from '@/types/publication';
@@ -62,6 +64,7 @@ const SUGGESTION_LIMIT = 4;
  *   No fetch happens — placeholder until the search endpoint is wired up.
  */
 export function SearchPanel() {
+  const router = useRouter();
   // ── State ────────────────────────────────────────────────────────────
   const [operacion, setOperacion] = useState<Operacion>('alquilar');
   const [tipo, setTipo] = useState('');
@@ -229,7 +232,32 @@ export function SearchPanel() {
     event.preventDefault();
     closeAll();
     setBuscando(true);
-    window.setTimeout(() => setBuscando(false), 1000);
+
+    const params = new URLSearchParams();
+
+    // Operation
+    const op = operacion === 'comprar' ? 'venta' : 'alquiler';
+    params.set('operation', op);
+
+    // Property type
+    if (tipo) {
+      const slug = Object.entries(PROPERTY_TYPE_LABEL).find(
+        ([, label]) => label.toLowerCase() === tipo.toLowerCase(),
+      )?.[0];
+      if (slug) params.set('propertyTypes', slug);
+    }
+
+    // Location tags → multi-location
+    if (locationTags.length > 0) {
+      params.set('locationTexts', locationTags.join(','));
+    }
+
+    // Feature tags
+    if (featuresTags.length > 0) {
+      params.set('requiredTags', featuresTags.join(','));
+    }
+
+    router.push(`/buscar?${params.toString()}`);
   }
 
   // ── Keyboard handlers (per input) ───────────────────────────────────

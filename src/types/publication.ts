@@ -109,8 +109,10 @@ export type PropertyAge = '0-2' | '2-5' | '5-10' | '10-20' | '20+';
  *   before the request so a strict DTO cannot 400.
  */
 export interface SearchFilters {
-  /** First location tag only (product decision — see spec). */
+  /** First location tag only (backward compat — prefer locationTexts). */
   locationText?: string;
+  /** Multi-location UNION search — all tags sent as comma-separated. */
+  locationTexts?: string[];
   /** Multi-select property types. */
   propertyTypes: PropertyTypeSlug[];
   /** Single-select operation. */

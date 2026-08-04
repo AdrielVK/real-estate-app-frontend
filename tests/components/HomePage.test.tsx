@@ -1,5 +1,10 @@
 import { render, screen } from '@testing-library/react';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+
+// SearchPanel now uses `useRouter` to navigate to /buscar on submit.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
 import HomePage from '@/app/(public)/page';
 

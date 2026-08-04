@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import Link from 'next/link';
+
 import { Menu, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -9,8 +11,8 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 
 const links = [
-  { label: 'Alquilar', href: '#destacadas' },
-  { label: 'Comprar', href: '#destacadas' },
+  { label: 'Alquilar', href: '/buscar?operation=alquiler' },
+  { label: 'Comprar', href: '/buscar?operation=venta' },
   { label: 'Propietarios', href: '#propietarios' },
 ] as const;
 
@@ -96,12 +98,21 @@ export function SiteHeader() {
               <ul className="flex items-center gap-1">
                 {links.map((link) => (
                   <li key={link.label}>
-                    <a
-                      href={link.href}
-                      className="rounded-full px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-                    >
-                      {link.label}
-                    </a>
+                    {link.href.startsWith('/') ? (
+                      <Link
+                        href={link.href}
+                        className="rounded-full px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                      >
+                        {link.label}
+                      </Link>
+                    ) : (
+                      <a
+                        href={link.href}
+                        className="rounded-full px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                      >
+                        {link.label}
+                      </a>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -139,13 +150,23 @@ export function SiteHeader() {
               <ul className="grid">
                 {links.map((link) => (
                   <li key={link.label}>
-                    <a
-                      href={link.href}
-                      onClick={() => setAbierto(false)}
-                      className="block rounded-2xl px-4 py-3 text-sm transition-colors hover:bg-secondary/70"
-                    >
-                      {link.label}
-                    </a>
+                    {link.href.startsWith('/') ? (
+                      <Link
+                        href={link.href}
+                        onClick={() => setAbierto(false)}
+                        className="block rounded-2xl px-4 py-3 text-sm transition-colors hover:bg-secondary/70"
+                      >
+                        {link.label}
+                      </Link>
+                    ) : (
+                      <a
+                        href={link.href}
+                        onClick={() => setAbierto(false)}
+                        className="block rounded-2xl px-4 py-3 text-sm transition-colors hover:bg-secondary/70"
+                      >
+                        {link.label}
+                      </a>
+                    )}
                   </li>
                 ))}
               </ul>

@@ -134,7 +134,7 @@ describe('SearchResultsFilterBar', () => {
     expect(href).not.toMatch(/page=1/);
   });
 
-  it('serializes only the FIRST location tag (multi-location handling)', async () => {
+  it('serializes ALL location tags via locationTexts (multi-location UNION)', async () => {
     const user = userEvent.setup();
     const onCommit = vi.fn();
     render(
@@ -155,8 +155,8 @@ describe('SearchResultsFilterBar', () => {
     expect(onCommit).toHaveBeenCalledTimes(1);
     const [params] = onCommit.mock.calls[0] ?? [];
     // Only Palermo survives — the first tag.
-    expect(params.get('locationText')).toBe('Palermo');
-    expect(params.get('locationText')).not.toBe('Recoleta');
+    expect(params.get('locationTexts')).toBe('Palermo,Recoleta');
+    expect(params.has('locationText')).toBe(false);
   });
 
   it('selects an operation from the portal listbox', async () => {

@@ -209,6 +209,11 @@ export function parseSearchParams(
     filters.locationText = locationText;
   }
 
+  const locationTexts = csvSplit(firstString(sp.locationTexts)).filter((t) => t.length > 0);
+  if (locationTexts.length > 0) {
+    filters.locationTexts = locationTexts;
+  }
+
   const propertyTypes = csvSplit(firstString(sp.propertyTypes)).filter(
     (slug): slug is PropertyTypeSlug => KNOWN_PROPERTY_TYPE_SLUGS.has(slug as PropertyTypeSlug),
   );
@@ -309,7 +314,9 @@ export function parseSearchParams(
 export function serializeFilters(filters: SearchFilters): URLSearchParams {
   const params = new URLSearchParams();
 
-  if (filters.locationText) {
+  if (filters.locationTexts && filters.locationTexts.length > 0) {
+    params.set('locationTexts', filters.locationTexts.join(','));
+  } else if (filters.locationText) {
     params.set('locationText', filters.locationText);
   }
 
