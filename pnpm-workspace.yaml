@@ -1,11 +1,7 @@
 allowBuilds:
-  msw: set this to true or false
+  msw: true
   sharp: true
   unrs-resolver: true
-ignoredBuiltDependencies:
-  - sharp
-  - unrs-resolver
-  - msw
 minimumReleaseAgeExclude:
   - '@next/env@16.2.12'
   - '@next/eslint-plugin-next@16.2.12'
