@@ -20,7 +20,6 @@
 
 const PRICE_MIN_MAX_ERROR = 'El precio mínimo no puede ser mayor al máximo';
 const AREA_MIN_MAX_ERROR = 'La superficie mínima no puede ser mayor a la máxima';
-const EXPENSAS_MAX_ERROR = 'El valor ingresado no es válido';
 
 /**
  * Sanitize a user-typed string to a valid digit input. Empty stays
@@ -35,16 +34,6 @@ export function sanitizeDigits(raw: string): string {
   // everything (e.g. '0000' → '' → '0').
   cleaned = cleaned.replace(/^0+/, '');
   return cleaned === '' ? '0' : cleaned;
-}
-
-/**
- * `true` when the value is either empty or a valid digit string under
- * the rules above. Useful for the input's `aria-invalid` binding.
- */
-export function isValidDigitInput(raw: string): boolean {
-  if (raw === '') return true;
-  if (raw.length > 1 && raw.startsWith('0')) return false;
-  return /^\d+$/.test(raw);
 }
 
 /**
@@ -67,4 +56,3 @@ export function minMaxError(
 
 export const PRICE_MIN_MAX_ERROR_MESSAGE = PRICE_MIN_MAX_ERROR;
 export const AREA_MIN_MAX_ERROR_MESSAGE = AREA_MIN_MAX_ERROR;
-export const EXPENSAS_MAX_ERROR_MESSAGE = EXPENSAS_MAX_ERROR;

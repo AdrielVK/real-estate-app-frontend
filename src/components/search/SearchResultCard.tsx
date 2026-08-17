@@ -63,24 +63,12 @@ export function SearchResultCard({ publication }: SearchResultCardProps) {
   const operationVariant = OPERATION_VARIANT[publication.operationType] ?? 'neutral';
 
   // Media fallback chain: gallery → single image → placeholder.
-  const photos =
-    publication.photos && publication.photos.length > 0
-      ? publication.photos
-      : publication.mainImageUrl
-        ? [publication.mainImageUrl]
-        : [];
+  const photos = getPublicationPhotos(publication);
 
   // Address fallback chain: addressFormatted → locationText → omitted.
   // We attach `addressCity` when present and not already in the line.
   const addressLine = publication.addressFormatted ?? publication.locationText;
-  const addressCity =
-    publication.addressCity &&
-    addressLine &&
-    !addressLine.toLowerCase().includes(publication.addressCity.toLowerCase())
-      ? publication.addressCity
-      : publication.addressCity && !addressLine
-        ? publication.addressCity
-        : null;
+  const addressCity = getAddressCity(publication.addressCity, addressLine);
 
   // Featured logic: explicit flag OR a featuredUntil still in the future.
   const isFeatured = isFeaturedNow(publication.featured, publication.featuredUntil);
@@ -345,4 +333,16 @@ function isFeaturedNow(flag: boolean | undefined, until: string | undefined): bo
   const expiry = new Date(until);
   if (Number.isNaN(expiry.getTime())) return false;
   return expiry.getTime() > Date.now();
+}
+
+function getPublicationPhotos(publication: PublicationSummaryDto): string[] {
+  if (publication.photos && publication.photos.length > 0) return publication.photos;
+  if (publication.mainImageUrl) return [publication.mainImageUrl];
+  return [];
+}
+
+function getAddressCity(city: string | undefined, addressLine: string | undefined): string | null {
+  if (!city) return null;
+  if (!addressLine) return city;
+  return addressLine.toLowerCase().includes(city.toLowerCase()) ? null : city;
 }

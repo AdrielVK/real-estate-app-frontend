@@ -147,7 +147,9 @@ export const DEFAULT_FILTERS: SearchFilters = {
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-function firstString(value: string | string[] | undefined): string | undefined {
+type SearchParam = string | string[] | undefined;
+
+function firstString(value: SearchParam): string | undefined {
   if (value === undefined) return undefined;
   if (Array.isArray(value)) {
     // Next.js hands repeated keys as arrays. Join with commas so
@@ -163,7 +165,7 @@ function firstString(value: string | string[] | undefined): string | undefined {
  * Repeated keys collapse to the FIRST occurrence — the same semantics
  * Next.js would expose if the value were already a plain string.
  */
-function firstScalar(value: string | string[] | undefined): string | undefined {
+function firstScalar(value: SearchParam): string | undefined {
   if (value === undefined) return undefined;
   if (Array.isArray(value)) return value[0];
   return value;
@@ -199,42 +201,59 @@ function parseBoolean(value: string | undefined): boolean | undefined {
  * `undefined`, and unknown enum slugs are filtered out of arrays.
  * Page defaults to `1` and currency to `'ARS'` (matching `DEFAULT_FILTERS`).
  */
-export function parseSearchParams(
-  sp: Record<string, string | string[] | undefined>,
-): SearchFilters {
+export function parseSearchParams(sp: Record<string, SearchParam>): SearchFilters {
   const filters: SearchFilters = { ...DEFAULT_FILTERS };
+  Object.assign(filters, parseLocationFilters(sp));
+  Object.assign(filters, parsePropertyFilters(sp));
+  Object.assign(filters, parseNumericFilters(sp));
+  Object.assign(filters, parseTagFilters(sp));
+  Object.assign(filters, parseExpenseFilters(sp));
+  Object.assign(filters, parseBooleanFilters(sp));
+  const page = parseInt0(firstScalar(sp.page));
+  if (page !== undefined && page >= 1) filters.page = page;
+  return filters;
+}
 
+function parseLocationFilters(sp: Record<string, SearchParam>): Partial<SearchFilters> {
+  const result: Partial<SearchFilters> = {};
   const locationText = firstString(sp.locationText);
-  if (locationText && locationText.length > 0) {
-    filters.locationText = locationText;
-  }
+  if (locationText) result.locationText = locationText;
 
   const locationTexts = csvSplit(firstString(sp.locationTexts)).filter((t) => t.length > 0);
-  if (locationTexts.length > 0) {
-    filters.locationTexts = locationTexts;
-  }
+  if (locationTexts.length > 0) result.locationTexts = locationTexts;
+  return result;
+}
 
+function parsePropertyFilters(sp: Record<string, SearchParam>): Partial<SearchFilters> {
+  const result: Partial<SearchFilters> = {};
   const propertyTypes = csvSplit(firstString(sp.propertyTypes)).filter(
     (slug): slug is PropertyTypeSlug => KNOWN_PROPERTY_TYPE_SLUGS.has(slug as PropertyTypeSlug),
   );
-  if (propertyTypes.length > 0) {
-    filters.propertyTypes = propertyTypes;
-  }
+  if (propertyTypes.length > 0) result.propertyTypes = propertyTypes;
 
   const operation = firstScalar(sp.operationType);
   if (operation && KNOWN_OPERATION_SLUGS.has(operation as OperationSlug)) {
-    filters.operation = operation as OperationSlug;
+    result.operation = operation as OperationSlug;
   }
 
+  const propertyAge = firstScalar(sp.propertyAge);
+  if (propertyAge && KNOWN_PROPERTY_AGE.has(propertyAge as PropertyAge)) {
+    result.propertyAge = propertyAge as PropertyAge;
+  }
+  return result;
+}
+
+function parseNumericFilters(sp: Record<string, SearchParam>): Partial<SearchFilters> {
+  const result: Partial<SearchFilters> = {};
   const priceMin = parseInt0(firstScalar(sp.priceMin));
-  if (priceMin !== undefined) filters.priceMin = priceMin;
+  if (priceMin !== undefined) result.priceMin = priceMin;
 
   const priceMax = parseInt0(firstScalar(sp.priceMax));
-  if (priceMax !== undefined) filters.priceMax = priceMax;
+  if (priceMax !== undefined) result.priceMax = priceMax;
 
   const currency = firstScalar(sp.currency);
   if (currency && KNOWN_CURRENCIES.has(currency as Currency)) {
-    filters.currency = currency as Currency;
+    result.currency = currency as Currency;
   }
 
   for (const key of [
@@ -250,38 +269,43 @@ export function parseSearchParams(
     const value = parseInt0(firstScalar(sp[key]));
     if (value !== undefined) {
       // Numeric filters are always non-negative — drop negatives defensively.
-      filters[key] = value < 0 ? undefined : value;
+      result[key] = value < 0 ? undefined : value;
     }
   }
+  return result;
+}
 
+function parseTagFilters(sp: Record<string, SearchParam>): Partial<SearchFilters> {
+  const result: Partial<SearchFilters> = {};
   const requiredTags = csvSplit(firstString(sp.requiredTags));
-  if (requiredTags.length > 0) {
-    filters.requiredTags = requiredTags;
-  }
+  if (requiredTags.length > 0) result.requiredTags = requiredTags;
+  return result;
+}
 
-  const propertyAge = firstScalar(sp.propertyAge);
-  if (propertyAge && KNOWN_PROPERTY_AGE.has(propertyAge as PropertyAge)) {
-    filters.propertyAge = propertyAge as PropertyAge;
-  }
-
+function parseExpenseFilters(sp: Record<string, SearchParam>): Partial<SearchFilters> {
+  const result: Partial<SearchFilters> = {};
   // Expensas: `noExpensas` and `expensesMax` are mutually exclusive on
   // the wire but defensive — if both arrive (legacy URL), we trust
   // `noExpensas=true` and drop the numeric cap. `expensesCurrency` is
   // only meaningful when `expensesMax` is also set.
   if (parseBoolean(firstScalar(sp.noExpensas)) === true) {
-    filters.noExpensas = true;
+    result.noExpensas = true;
   } else {
     const expensesMax = parseInt0(firstScalar(sp.expensesMax));
     if (expensesMax !== undefined) {
-      filters.expensesMax = expensesMax;
+      result.expensesMax = expensesMax;
       const expensesCurrency = firstScalar(sp.expensesCurrency);
-      filters.expensesCurrency =
+      result.expensesCurrency =
         expensesCurrency && KNOWN_CURRENCIES.has(expensesCurrency as Currency)
           ? (expensesCurrency as Currency)
           : 'ARS';
     }
   }
+  return result;
+}
 
+function parseBooleanFilters(sp: Record<string, SearchParam>): Partial<SearchFilters> {
+  const result: Partial<SearchFilters> = {};
   for (const key of [
     'acceptsCredits',
     'requiresGuarantor',
@@ -289,17 +313,9 @@ export function parseSearchParams(
     'featuredOnly',
   ] as const) {
     const value = parseBoolean(firstScalar(sp[key]));
-    if (value !== undefined) {
-      filters[key] = value;
-    }
+    if (value !== undefined) result[key] = value;
   }
-
-  const page = parseInt0(firstScalar(sp.page));
-  if (page !== undefined && page >= 1) {
-    filters.page = page;
-  }
-
-  return filters;
+  return result;
 }
 
 /**
@@ -313,13 +329,25 @@ export function parseSearchParams(
  */
 export function serializeFilters(filters: SearchFilters): URLSearchParams {
   const params = new URLSearchParams();
+  serializeLocation(params, filters);
+  serializePropertyFilters(params, filters);
+  serializeNumericFilters(params, filters);
+  serializeTags(params, filters);
+  serializeExpenseFilters(params, filters);
+  serializeBooleanFilters(params, filters);
+  if (filters.page !== 1) params.set('page', String(filters.page));
+  return params;
+}
 
+function serializeLocation(params: URLSearchParams, filters: SearchFilters): void {
   if (filters.locationTexts && filters.locationTexts.length > 0) {
     params.set('locationTexts', filters.locationTexts.join(','));
   } else if (filters.locationText) {
     params.set('locationText', filters.locationText);
   }
+}
 
+function serializePropertyFilters(params: URLSearchParams, filters: SearchFilters): void {
   if (filters.propertyTypes.length > 0) {
     params.set('propertyTypes', filters.propertyTypes.join(','));
   }
@@ -363,19 +391,47 @@ export function serializeFilters(filters: SearchFilters): URLSearchParams {
   if (filters.propertyAge !== undefined) {
     params.set('propertyAge', filters.propertyAge);
   }
+}
 
-  // Expensas: `noExpensas` is mutually exclusive with `expensesMax` /
-  // `expensesCurrency` on the wire — picking "Sin expensas" clears the
-  // numeric filter and the backend reads `noExpensas=true` to mean
-  // "must be 0 / not reported". When the user has set a numeric
-  // cap, we send the cap and the currency (default ARS).
+function serializeNumericFilters(params: URLSearchParams, filters: SearchFilters): void {
+  if (filters.priceMin !== undefined) params.set('priceMin', String(filters.priceMin));
+  if (filters.priceMax !== undefined) params.set('priceMax', String(filters.priceMax));
+  if (filters.priceMin !== undefined || filters.priceMax !== undefined) {
+    params.set('currency', filters.currency);
+  }
+
+  const numericKeys = [
+    'roomsMin',
+    'bedroomsMin',
+    'bathroomsMin',
+    'garagesMin',
+    'totalAreaMin',
+    'totalAreaMax',
+    'coveredAreaMin',
+    'coveredAreaMax',
+  ] as const;
+  for (const key of numericKeys) {
+    const value = filters[key];
+    if (value !== undefined) params.set(key, String(value));
+  }
+}
+
+function serializeTags(params: URLSearchParams, filters: SearchFilters): void {
+  if (filters.requiredTags.length > 0) {
+    params.set('requiredTags', filters.requiredTags.join(','));
+  }
+}
+
+function serializeExpenseFilters(params: URLSearchParams, filters: SearchFilters): void {
   if (filters.noExpensas === true) {
     params.set('noExpensas', 'true');
   } else if (filters.expensesMax !== undefined) {
     params.set('expensesMax', String(filters.expensesMax));
     params.set('expensesCurrency', filters.expensesCurrency ?? 'ARS');
   }
+}
 
+function serializeBooleanFilters(params: URLSearchParams, filters: SearchFilters): void {
   for (const key of [
     'acceptsCredits',
     'requiresGuarantor',
@@ -386,10 +442,4 @@ export function serializeFilters(filters: SearchFilters): URLSearchParams {
       params.set(key, 'true');
     }
   }
-
-  if (filters.page !== 1) {
-    params.set('page', String(filters.page));
-  }
-
-  return params;
 }

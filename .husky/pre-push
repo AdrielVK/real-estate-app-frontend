@@ -1,0 +1,6 @@
+set -e
+
+pnpm lint:check
+pnpm type-check
+pnpm test
+pnpm knip

@@ -62,8 +62,8 @@ describe('AiSearchDialog', () => {
     expect(source).not.toMatch(/\bXMLHttpRequest\b/);
   });
 
-  // Validation: short text shows error.
-  it('shows error when text is shorter than 6 characters', async () => {
+  // Validation: short text shows the same error on a repeated submit.
+  it('shows the validation error again after a repeated short-text submit', async () => {
     render(<AiSearchDialog open onOpenChange={vi.fn()} />);
     const textarea = screen.getByPlaceholderText(
       /depto de 2 ambientes con balcón/i,

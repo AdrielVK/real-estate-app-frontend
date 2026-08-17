@@ -4,6 +4,7 @@ import nextTs from 'eslint-config-next/typescript';
 import prettierConfig from 'eslint-config-prettier/flat';
 import prettierPlugin from 'eslint-plugin-prettier';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
+import sonarjs from 'eslint-plugin-sonarjs';
 import unicorn from 'eslint-plugin-unicorn';
 import tseslint from 'typescript-eslint';
 
@@ -16,24 +17,17 @@ const HEX_COLOR_PATTERN = '#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\\
  * 1. Base JS recommended
  * 2. typescript-eslint strict + stylistic (non-type-checked, decision #2)
  * 3. Next.js core-web-vitals + typescript
- * 4. react-hooks
- * 5. jsx-a11y
- * 6. unicorn
- * 7. simple-import-sort (custom import groups per design)
- * 8. prettier plugin
- * 9. eslint-config-prettier (turns off conflicting stylistic rules, MUST be last)
+ * 4. SonarJS recommended quality rules
+ * 5. react-hooks
+ * 6. jsx-a11y
+ * 7. unicorn
+ * 8. simple-import-sort (custom import groups per design)
+ * 9. prettier plugin
+ * 10. eslint-config-prettier (turns off conflicting stylistic rules, MUST be last)
  */
 export default tseslint.config(
   {
-    ignores: [
-      '.next/**',
-      'out/**',
-      'build/**',
-      'next-env.d.ts',
-      'node_modules/**',
-      'coverage/**',
-      'e2e/**',
-    ],
+    ignores: ['.next/**', 'out/**', 'build/**', 'next-env.d.ts', 'node_modules/**', 'coverage/**'],
   },
 
   js.configs.recommended,
@@ -42,6 +36,7 @@ export default tseslint.config(
 
   ...nextVitals,
   ...nextTs,
+  sonarjs.configs.recommended,
 
   {
     plugins: {
@@ -118,6 +113,10 @@ export default tseslint.config(
 
       // Prettier integration: format issues surface as lint errors
       'prettier/prettier': 'error',
+
+      // `void promise` is the intentional fire-and-forget convention already
+      // used by event handlers and covered by TypeScript promise checks.
+      'sonarjs/void-use': 'off',
     },
   },
 
@@ -143,7 +142,7 @@ export default tseslint.config(
 
   // Test files — relax strictness that doesn't apply to test context
   {
-    files: ['tests/**/*.{ts,tsx}', '**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
+    files: ['tests/**/*.{ts,tsx}', 'e2e/**/*.{ts,tsx}', '**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
@@ -153,6 +152,9 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-return': 'off',
       '@typescript-eslint/no-unsafe-argument': 'off',
       'no-console': 'off',
+      // Generic length assertions are useful for Testing Library collections;
+      // the rule adds no signal in this test-only context.
+      'sonarjs/prefer-specific-assertions': 'off',
     },
   },
 

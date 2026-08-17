@@ -83,8 +83,8 @@ describe('FeaturedProperties', () => {
     // follow the staggered formula.
     const delays = Array.from(items).map((item) => {
       const anim = (item as HTMLElement).style.animation;
-      const match = anim.match(/([\d.]+)s\s+both/);
-      return match && match[1] ? Number(match[1]) : null;
+      const delayToken = anim.split('s both')[0]?.split(' ').pop();
+      return delayToken ? Number(delayToken.replace('s', '')) : null;
     });
 
     expect(delays[0]).toBe(0);

@@ -44,7 +44,7 @@ import type {
 import { serializeFilters } from '@/lib/search/url';
 
 /** Server response envelope for `GET /publications/search` — UI-facing. */
-export interface SearchResponse {
+interface SearchResponse {
   data: PublicationSummaryDto[];
   total: number;
   page: number;
@@ -135,8 +135,9 @@ export async function searchPublications(filters: SearchFilters): Promise<Search
   // Strip every trailing slash (e.g. `https://api.example/`) so the
   // path always begins with a single `/`, regardless of how the env
   // value is formatted in deployment manifests.
-  const baseClean = base.replace(/\/+$/, '');
-  const url = `${baseClean}/publications/search${query ? `?${query}` : ''}`;
+  const baseClean = stripTrailingSlash(base);
+  const querySuffix = query ? `?${query}` : '';
+  const url = `${baseClean}/publications/search${querySuffix}`;
 
   try {
     const res = await fetch(url, {
@@ -173,6 +174,12 @@ export async function searchPublications(filters: SearchFilters): Promise<Search
     }
     return { ok: false, status: null, message };
   }
+}
+
+function stripTrailingSlash(value: string): string {
+  let result = value;
+  while (result.endsWith('/')) result = result.slice(0, -1);
+  return result;
 }
 
 /**

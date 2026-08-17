@@ -4,7 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { Minus, Plus, X } from 'lucide-react';
 
-import type { OperationSlug, SearchFilters, TagCategory } from '@/types/publication';
+import type { SearchFilters, TagCategory } from '@/types/publication';
 import { PROPERTY_AGE_OPTIONS, TAGS_BY_CATEGORY } from '@/lib/search/url';
 import { cn } from '@/lib/utils';
 import { AREA_MIN_MAX_ERROR_MESSAGE, minMaxError, sanitizeDigits } from '@/lib/validation/digits';
@@ -12,7 +12,7 @@ import { AREA_MIN_MAX_ERROR_MESSAGE, minMaxError, sanitizeDigits } from '@/lib/v
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 
-import { TagCombobox, type TagComboboxOption } from './TagCombobox';
+import { TagCombobox } from './TagCombobox';
 
 const CATEGORY_LABELS: Record<TagCategory, string> = {
   servicio: 'Servicios',
@@ -708,9 +708,3 @@ function Toggle({ label, checked, onChange, testId, hint }: ToggleProps) {
     </label>
   );
 }
-
-// Suppress an unused-export warning if OperationSlug is never
-// referenced here directly. The type is consumed transitively via
-// SearchFilters, but we re-export the import so callers can build
-// their own search-URL helpers from one place.
-export type { OperationSlug, TagCategory, TagComboboxOption };

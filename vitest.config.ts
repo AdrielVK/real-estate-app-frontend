@@ -13,8 +13,19 @@ export default defineConfig({
     exclude: ['node_modules', '.next', 'e2e'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'html'],
-      exclude: ['**/*.config.{ts,js,mjs}', 'e2e/**', 'tests/**'],
+      include: ['src/**/*.{ts,tsx}'],
+      reporter: ['text', 'html', 'json-summary', 'lcov'],
+      exclude: [
+        '**/*.config.{ts,js,mjs,cjs,mts,cts}',
+        '**/*.d.ts',
+        '**/tests/**',
+        '**/__tests__/**',
+        '**/__mocks__/**',
+        '**/mocks/**',
+        '**/generated/**',
+        '**/e2e/**',
+        '**/.next/**',
+      ],
     },
   },
 });

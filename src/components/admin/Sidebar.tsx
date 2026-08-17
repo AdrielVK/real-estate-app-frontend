@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-export interface SidebarNavItem {
+interface SidebarNavItem {
   /** Visible label of the nav entry. */
   label: string;
   /**

@@ -5,18 +5,51 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 First, run the development server:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
 pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+## Quality Checks
+
+Run the full local quality gate with pnpm:
+
+```bash
+pnpm quality:check
+```
+
+Run individual checks when iterating:
+
+```bash
+pnpm lint:check
+pnpm type-check
+pnpm test --run
+pnpm test:coverage
+pnpm knip
+pnpm knip:production
+```
+
+Coverage reports are written to `coverage/` as text, HTML, JSON summary, and LCOV output. Generated output is intentionally excluded from coverage and Knip analysis; source files, application routes, tests, and configuration files remain analyzed. Knip uses `tsconfig.knip.json` so Next’s generated route declarations do not enter the analysis graph.
+
+## End-to-End Tests
+
+Playwright E2E tests use a production Next.js server on `http://localhost:3000`. Build the app before running them locally, and install Chromium once per machine:
+
+```bash
+pnpm exec playwright install chromium
+pnpm build
+pnpm e2e
+```
+
+Use Playwright's interactive runner while developing tests:
+
+```bash
+pnpm e2e:ui
+```
+
+The smoke suite covers public home rendering, navigation to the publications route, and the home search interaction. It does not require a running backend; the search page's existing unconfigured-API state is asserted deterministically. CI installs browser system dependencies with `pnpm exec playwright install --with-deps chromium`.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

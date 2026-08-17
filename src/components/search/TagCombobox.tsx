@@ -212,27 +212,8 @@ export function TagCombobox({
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
 
     if (e.key === 'Enter') {
-      // Free-text mode: Enter always commits the current input verbatim,
-      // even when a suggestion is highlighted. This was the bug — the
-      // old code preferred suggestions[highlight] whenever it was
-      // truthy, so typing "Pal" + Enter added "palermo" instead of
-      // letting the user add a custom tag. To add a suggestion in
-      // free-text mode, the user clicks it.
-      if (mode === 'free-text' && input.trim()) {
-        e.preventDefault();
-        addTag(input);
-        return;
-      }
-      if (open && suggestions[highlight]) {
-        e.preventDefault();
-        addTag(suggestions[highlight].slug);
-        return;
-      }
-      if (input.trim()) {
-        e.preventDefault();
-        addTag(input);
-        return;
-      }
+      handleEnterKey(e, { mode, input, open, suggestion: suggestions[highlight], addTag });
+      return;
     }
 
     if (e.key === 'ArrowDown') {
@@ -324,46 +305,116 @@ export function TagCombobox({
               className="glass-panel rounded-2xl border border-border/70 p-1.5"
               data-testid={`tag-combobox-listbox-${slugify(label)}`}
             >
-              {limitReached ? (
-                <p className="px-3 py-3 text-sm text-muted-foreground">
-                  Máximo {maxTags} {maxTags === 1 ? 'opción' : 'opciones'}
-                </p>
-              ) : suggestions.length > 0 ? (
-                suggestions.map((opt, i) => (
-                  <button
-                    key={opt.slug}
-                    type="button"
-                    role="option"
-                    aria-selected={i === highlight}
-                    onMouseEnter={() => setHighlight(i)}
-                    onClick={() => addTag(opt.slug)}
-                    className={cn(
-                      'flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-colors',
-                      i === highlight
-                        ? 'bg-secondary text-secondary-foreground'
-                        : 'text-muted-foreground hover:bg-secondary/50',
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                ))
-              ) : mode === 'predefined' ? (
-                <p className="px-3 py-3 text-sm text-muted-foreground">
-                  {input.trim() ? `Sin coincidencias para "${input.trim()}".` : 'Elegí una opción.'}
-                </p>
-              ) : (
-                <p className="px-3 py-3 text-sm text-muted-foreground">
-                  {input.trim()
-                    ? `No encontramos "${input.trim()}". Presioná Enter para agregarlo.`
-                    : 'Escribí para buscar.'}
-                </p>
-              )}
+              <TagOptions
+                limitReached={limitReached}
+                maxTags={maxTags}
+                suggestions={suggestions}
+                highlight={highlight}
+                mode={mode}
+                input={input}
+                onHighlight={setHighlight}
+                onSelect={(slug) => addTag(slug)}
+              />
             </div>,
             document.body,
           )
         : null}
     </div>
   );
+}
+
+interface EnterKeyOptions {
+  mode: 'predefined' | 'free-text';
+  input: string;
+  open: boolean;
+  suggestion: TagComboboxOption | undefined;
+  addTag: (value: string) => void;
+}
+
+function handleEnterKey(
+  event: ReactKeyboardEvent<HTMLInputElement>,
+  { mode, input, open, suggestion, addTag }: EnterKeyOptions,
+): void {
+  if (mode === 'free-text' && input.trim()) {
+    event.preventDefault();
+    addTag(input);
+    return;
+  }
+  if (open && suggestion) {
+    event.preventDefault();
+    addTag(suggestion.slug);
+    return;
+  }
+  if (input.trim()) {
+    event.preventDefault();
+    addTag(input);
+  }
+}
+
+interface TagOptionsProps {
+  limitReached: boolean;
+  maxTags: number;
+  suggestions: readonly TagComboboxOption[];
+  highlight: number;
+  mode: 'predefined' | 'free-text';
+  input: string;
+  onHighlight: (index: number) => void;
+  onSelect: (slug: string) => void;
+}
+
+function TagOptions({
+  limitReached,
+  maxTags,
+  suggestions,
+  highlight,
+  mode,
+  input,
+  onHighlight,
+  onSelect,
+}: TagOptionsProps) {
+  if (limitReached) {
+    return (
+      <p className="px-3 py-3 text-sm text-muted-foreground">
+        Máximo {maxTags} {getOptionWord(maxTags)}
+      </p>
+    );
+  }
+  if (suggestions.length > 0) {
+    return suggestions.map((option, index) => (
+      <button
+        key={option.slug}
+        type="button"
+        role="option"
+        aria-selected={index === highlight}
+        onMouseEnter={() => onHighlight(index)}
+        onClick={() => onSelect(option.slug)}
+        className={cn(
+          'flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-colors',
+          index === highlight
+            ? 'bg-secondary text-secondary-foreground'
+            : 'text-muted-foreground hover:bg-secondary/50',
+        )}
+      >
+        {option.label}
+      </button>
+    ));
+  }
+  return (
+    <p className="px-3 py-3 text-sm text-muted-foreground">{getEmptyTagMessage(mode, input)}</p>
+  );
+}
+
+function getOptionWord(maxTags: number): string {
+  return maxTags === 1 ? 'opción' : 'opciones';
+}
+
+function getEmptyTagMessage(mode: 'predefined' | 'free-text', input: string): string {
+  if (mode === 'predefined') {
+    return input.trim() ? `Sin coincidencias para "${input.trim()}".` : 'Elegí una opción.';
+  }
+  return input.trim()
+    ? `No encontramos "${input.trim()}". Presioná Enter para agregarlo.`
+    : 'Escribí para buscar.';
 }
 
 /**

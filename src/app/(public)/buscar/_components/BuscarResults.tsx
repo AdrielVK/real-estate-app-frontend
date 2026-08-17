@@ -24,14 +24,12 @@ export function BuscarResults({
   totalPages,
   filters,
 }: BuscarResultsProps) {
+  const summary = getResultsSummary(total);
+
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted-foreground" data-testid="results-summary">
-        {total === 0
-          ? 'Sin resultados para los filtros activos.'
-          : total === 1
-            ? '1 propiedad encontrada'
-            : `${total} propiedades encontradas`}
+        {summary}
         {totalPages > 1 ? ` · página ${currentPage} de ${totalPages}` : null}
       </p>
 
@@ -44,4 +42,10 @@ export function BuscarResults({
       />
     </div>
   );
+}
+
+function getResultsSummary(total: number): string {
+  if (total === 0) return 'Sin resultados para los filtros activos.';
+  if (total === 1) return '1 propiedad encontrada';
+  return `${total} propiedades encontradas`;
 }

@@ -1,6 +1,14 @@
 'use client';
 
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { createPortal } from 'react-dom';
 
 import { useRouter } from 'next/navigation';
@@ -495,37 +503,17 @@ export function SearchPanel() {
                   style={locationDropdownStyle}
                   className="glass-panel rounded-3xl border border-border/70 p-1.5"
                 >
-                  {locationLimitReached ? (
-                    <p className="px-3 py-3 text-sm text-muted-foreground">
-                      Máximo 4 ubicaciones
-                    </p>
-                  ) : locationSuggestions.length > 0 ? (
-                    locationSuggestions.map((zona, i) => (
-                      <button
-                        key={zona}
-                        type="button"
-                        role="option"
-                        aria-selected={i === locationHighlight}
-                        onMouseEnter={() => setLocationHighlight(i)}
-                        onClick={() => addLocationTag(zona)}
-                        className={cn(
-                          'flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-sm transition-colors',
-                          i === locationHighlight
-                            ? 'bg-secondary text-secondary-foreground'
-                            : 'text-muted-foreground',
-                        )}
-                      >
-                        <MapPin aria-hidden className="size-4 shrink-0" />
-                        {zona}
-                      </button>
-                    ))
-                  ) : (
-                    <p className="px-3 py-3 text-sm text-muted-foreground">
-                      {locationInput.trim()
-                        ? `No encontramos "${locationInput.trim()}". Presioná Enter para agregarlo como filtro.`
-                        : 'Escribí para buscar zonas.'}
-                    </p>
-                  )}
+                  <SuggestionOptions
+                    icon={<MapPin aria-hidden className="size-4 shrink-0" />}
+                    limitReached={locationLimitReached}
+                    limitMessage="Máximo 4 ubicaciones"
+                    suggestions={locationSuggestions}
+                    highlight={locationHighlight}
+                    query={locationInput}
+                    emptyMessage="Escribí para buscar zonas."
+                    onHighlight={setLocationHighlight}
+                    onSelect={addLocationTag}
+                  />
                 </div>,
                 document.body,
               )}
@@ -602,37 +590,17 @@ export function SearchPanel() {
                   style={featuresDropdownStyle}
                   className="glass-panel rounded-3xl border border-border/70 p-1.5"
                 >
-                  {featuresLimitReached ? (
-                    <p className="px-3 py-3 text-sm text-muted-foreground">
-                      Máximo 4 características
-                    </p>
-                  ) : featuresSuggestions.length > 0 ? (
-                    featuresSuggestions.map((car, i) => (
-                      <button
-                        key={car}
-                        type="button"
-                        role="option"
-                        aria-selected={i === featuresHighlight}
-                        onMouseEnter={() => setFeaturesHighlight(i)}
-                        onClick={() => addFeaturesTag(car)}
-                        className={cn(
-                          'flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-sm transition-colors',
-                          i === featuresHighlight
-                            ? 'bg-secondary text-secondary-foreground'
-                            : 'text-muted-foreground',
-                        )}
-                      >
-                        <Tags aria-hidden className="size-4 shrink-0" />
-                        {car}
-                      </button>
-                    ))
-                  ) : (
-                    <p className="px-3 py-3 text-sm text-muted-foreground">
-                      {featuresInput.trim()
-                        ? `No encontramos "${featuresInput.trim()}". Presioná Enter para agregarlo como filtro.`
-                        : 'Escribí para buscar características.'}
-                    </p>
-                  )}
+                  <SuggestionOptions
+                    icon={<Tags aria-hidden className="size-4 shrink-0" />}
+                    limitReached={featuresLimitReached}
+                    limitMessage="Máximo 4 características"
+                    suggestions={featuresSuggestions}
+                    highlight={featuresHighlight}
+                    query={featuresInput}
+                    emptyMessage="Escribí para buscar características."
+                    onHighlight={setFeaturesHighlight}
+                    onSelect={addFeaturesTag}
+                  />
                 </div>,
                 document.body,
               )}
@@ -677,4 +645,58 @@ export function SearchPanel() {
       <AiSearchDialog open={modalIa} onOpenChange={setModalIa} />
     </div>
   );
+}
+
+interface SuggestionOptionsProps {
+  icon: ReactNode;
+  limitReached: boolean;
+  limitMessage: string;
+  suggestions: string[];
+  highlight: number;
+  query: string;
+  emptyMessage: string;
+  onHighlight: (index: number) => void;
+  onSelect: (value: string) => void;
+}
+
+function SuggestionOptions({
+  icon,
+  limitReached,
+  limitMessage,
+  suggestions,
+  highlight,
+  query,
+  emptyMessage,
+  onHighlight,
+  onSelect,
+}: SuggestionOptionsProps) {
+  if (limitReached) {
+    return <p className="px-3 py-3 text-sm text-muted-foreground">{limitMessage}</p>;
+  }
+  if (suggestions.length === 0) {
+    const message = getSuggestionEmptyMessage(query, emptyMessage);
+    return <p className="px-3 py-3 text-sm text-muted-foreground">{message}</p>;
+  }
+  return suggestions.map((suggestion, index) => (
+    <button
+      key={suggestion}
+      type="button"
+      role="option"
+      aria-selected={index === highlight}
+      onMouseEnter={() => onHighlight(index)}
+      onClick={() => onSelect(suggestion)}
+      className={cn(
+        'flex w-full items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left text-sm transition-colors',
+        index === highlight ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground',
+      )}
+    >
+      {icon}
+      {suggestion}
+    </button>
+  ));
+}
+
+function getSuggestionEmptyMessage(query: string, emptyMessage: string): string {
+  if (query.trim()) return `No encontramos "${query.trim()}". Presioná Enter para agregarlo como filtro.`;
+  return emptyMessage;
 }

@@ -171,7 +171,7 @@ export interface SearchFilters {
  * `page` and `limit` are strings on the wire; the adapter coerces them
  * to numbers before exposing them to the UI.
  */
-export interface BackendPaginationMeta {
+interface BackendPaginationMeta {
   page: string | number;
   limit: string | number;
   total: number;
