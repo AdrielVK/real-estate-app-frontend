@@ -10,6 +10,8 @@ import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/Button';
 
+import { ThemeToggle } from './ThemeToggle';
+
 const links = [
   { label: 'Alquilar', href: '/buscar?operationType=alquiler' },
   { label: 'Comprar', href: '/buscar?operationType=venta' },
@@ -40,10 +42,8 @@ const links = [
  * Notes:
  * - The original v0 reference used Phosphor icons. We swap to lucide
  *   (A2): `List` → `Menu`, `X` → `X`.
- * - Anchors (`<a>`) are used because every link points at an in-page
- *   section (`#inicio`, `#destacadas`, `#propietarios`). When auth
- *   lands, swap the "Ingresar" target for a real route — until then
- *   the design calls for an inert CTA.
+ * - Anchors (`<a>`) are used for in-page sections; route navigation uses
+ *   Next's `<Link>` so the public shell is preserved without a full reload.
  */
 export function SiteHeader() {
   const sentinel = useRef<HTMLDivElement>(null);
@@ -79,8 +79,8 @@ export function SiteHeader() {
                 : 'border border-transparent',
             )}
           >
-            <a
-              href="#inicio"
+            <Link
+              href="/"
               className="flex items-center gap-2.5 rounded-full pr-2 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
             >
               <span className="grid size-8 place-items-center rounded-[0.7rem] bg-primary font-medium text-primary-foreground">
@@ -92,7 +92,7 @@ export function SiteHeader() {
                   Propiedades
                 </span>
               </span>
-            </a>
+            </Link>
 
             <nav aria-label="Principal" className="ml-auto hidden md:block">
               <ul className="flex items-center gap-1">
@@ -120,11 +120,13 @@ export function SiteHeader() {
 
             <div className="ml-auto flex items-center gap-2 md:ml-0">
               <Button
+                asChild
                 size="lg"
                 className="h-9 rounded-full px-4 shadow-[0_10px_24px_-14px_color-mix(in_oklch,var(--primary)_70%,transparent)]"
               >
-                Ingresar
+                <Link href="/login">Ingresar</Link>
               </Button>
+              <ThemeToggle />
               <Button
                 variant="outline"
                 size="icon-lg"

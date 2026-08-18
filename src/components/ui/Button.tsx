@@ -16,7 +16,7 @@ export const buttonVariants = cva(
   // Base — shared layout, focus, disabled behavior.
   // `gap-2` keeps multi-content buttons (icon + label) optically balanced
   // regardless of icon size; `rounded-full` matches the v0 pill silhouette.
-  'inline-flex items-center justify-center gap-2 rounded-full font-medium transition-all duration-300 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full font-medium transition-all duration-300 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {
