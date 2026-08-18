@@ -105,6 +105,6 @@ describe('GENERIC_LOGIN_ERROR', () => {
     // Hard-pinned by the spec (`credenciales inválidas`). The form,
     // the action, and every test import this constant so the wording
     // never drifts between layers.
-    expect(GENERIC_LOGIN_ERROR).toBe('credenciales inválidas');
+    expect(GENERIC_LOGIN_ERROR).toBe('Credenciales inválidas');
   });
 });

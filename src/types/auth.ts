@@ -37,7 +37,7 @@ export interface LoginCredentials {
  * values (`CLIENT`, `AGENT`, etc.) and the frontend does not yet need
  * a typed narrowing — role-based UI is deferred scope.
  */
-export interface AuthUser {
+interface AuthUser {
   id: string;
   email: string;
   role: string;
@@ -69,7 +69,7 @@ export interface BackendLoginEnvelope {
  * Flattened (not nested under `data`) so the action can pass the
  * pair to `cookies().set(...)` without unwrapping.
  */
-export interface LoginTokens {
+interface LoginTokens {
   accessToken: string;
   refreshToken: string;
 }

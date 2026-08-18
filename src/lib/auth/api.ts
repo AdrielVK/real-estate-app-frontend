@@ -30,7 +30,22 @@
  *   surface them. The collapse happens at this boundary so the
  *   action never sees a reason.
  */
-import type { BackendLoginEnvelope, LoginCredentials, LoginResult } from '@/types/auth';
+import { z } from 'zod';
+
+import type { LoginCredentials, LoginResult } from '@/types/auth';
+
+const LoginResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    accessToken: z.string().min(1),
+    refreshToken: z.string().min(1),
+    user: z.object({
+      id: z.string().min(1),
+      email: z.string().min(1),
+      role: z.string().min(1),
+    }),
+  }),
+});
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -60,31 +75,15 @@ function stripTrailingSlash(value: string): string {
  * requirement in the spec.
  */
 function parseLoginResponse(body: unknown): LoginResult {
-  const envelope = body as Partial<BackendLoginEnvelope> | null;
-  if (!envelope || typeof envelope !== 'object') return { ok: false };
-  if (envelope.success !== true) return { ok: false };
+  const parsed = LoginResponseSchema.safeParse(body);
+  if (!parsed.success) return { ok: false };
 
-  const data = envelope.data;
-  if (!data || typeof data !== 'object') return { ok: false };
-
-  const { accessToken, refreshToken, user } = data as Partial<{
-    accessToken: string;
-    refreshToken: string;
-    user: { id: string; email: string; role: string };
-  }>;
-  if (typeof accessToken !== 'string' || accessToken.length === 0) return { ok: false };
-  if (typeof refreshToken !== 'string' || refreshToken.length === 0) return { ok: false };
-  if (!user || typeof user !== 'object') return { ok: false };
-
-  const { id, email, role } = user as Partial<{ id: string; email: string; role: string }>;
-  if (typeof id !== 'string' || id.length === 0) return { ok: false };
-  if (typeof email !== 'string' || email.length === 0) return { ok: false };
-  if (typeof role !== 'string' || role.length === 0) return { ok: false };
+  const { accessToken, refreshToken, user } = parsed.data.data;
 
   return {
     ok: true,
     tokens: { accessToken, refreshToken },
-    user: { id, email, role },
+    user,
   };
 }
 

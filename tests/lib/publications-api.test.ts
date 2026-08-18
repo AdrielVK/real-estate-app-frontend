@@ -193,6 +193,62 @@ describe('searchPublications', () => {
     }
   });
 
+  it('returns ok:false when a required publication field is missing', async () => {
+    vi.stubEnv('API_BASE_URL', TEST_BASE);
+    const envelope = makeBackendEnvelope();
+    const publication = { ...envelope.data[0] };
+    delete (publication as Partial<typeof publication>).title;
+    server.use(
+      http.get(`${TEST_BASE}/publications/search`, () =>
+        HttpResponse.json({ ...envelope, data: [publication] }),
+      ),
+    );
+
+    const result = await searchPublications(baseFilters);
+    expect(result).toEqual({
+      ok: false,
+      status: 200,
+      message: 'Backend returned an unexpected response envelope',
+    });
+  });
+
+  it('returns ok:false when a required field has the wrong primitive type', async () => {
+    vi.stubEnv('API_BASE_URL', TEST_BASE);
+    const envelope = makeBackendEnvelope();
+    server.use(
+      http.get(`${TEST_BASE}/publications/search`, () =>
+        HttpResponse.json({
+          ...envelope,
+          meta: { ...envelope.meta, total: '1' },
+        }),
+      ),
+    );
+
+    const result = await searchPublications(baseFilters);
+    expect(result.ok).toBe(false);
+  });
+
+  it('accepts intentional extra fields while preserving the UI adapter', async () => {
+    vi.stubEnv('API_BASE_URL', TEST_BASE);
+    const envelope = makeBackendEnvelope();
+    server.use(
+      http.get(`${TEST_BASE}/publications/search`, () =>
+        HttpResponse.json({
+          ...envelope,
+          traceId: 'request-1',
+          data: [{ ...envelope.data[0], backendOnly: true }],
+        }),
+      ),
+    );
+
+    const result = await searchPublications(baseFilters);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.response.data[0]).not.toHaveProperty('backendOnly');
+      expect(result.response.data[0]?.price).toBe(123000);
+    }
+  });
+
   it('returns ok:false with the backend status on a 500', async () => {
     vi.stubEnv('API_BASE_URL', TEST_BASE);
     server.use(

@@ -128,6 +128,43 @@ describe('login', () => {
     expect(result.ok).toBe(false);
   });
 
+  it('returns ok:false when a required field has the wrong primitive type', async () => {
+    vi.stubEnv('API_BASE_URL', TEST_BASE);
+    server.use(
+      http.post(`${TEST_BASE}/auth/login`, () =>
+        HttpResponse.json({
+          ...successEnvelope(),
+          data: { ...successEnvelope().data, accessToken: 123 },
+        }),
+      ),
+    );
+
+    const result = await login(validCredentials);
+    expect(result).toEqual({ ok: false });
+  });
+
+  it('accepts intentional extra response fields without exposing them', async () => {
+    vi.stubEnv('API_BASE_URL', TEST_BASE);
+    const envelope = successEnvelope();
+    const data = envelope.data!;
+    server.use(
+      http.post(`${TEST_BASE}/auth/login`, () =>
+        HttpResponse.json({
+          ...envelope,
+          requestId: 'request-1',
+          data: { ...data, user: { ...data.user, displayName: 'User' } },
+        }),
+      ),
+    );
+
+    const result = await login(validCredentials);
+    expect(result).toEqual({
+      ok: true,
+      tokens: { accessToken: 'jwt-access', refreshToken: 'uuid-refresh' },
+      user: { id: 'user-1', email: 'user@domain.com', role: 'CLIENT' },
+    });
+  });
+
   it('returns ok:false when the envelope reports success:false with no error block', async () => {
     vi.stubEnv('API_BASE_URL', TEST_BASE);
     server.use(

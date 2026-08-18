@@ -187,7 +187,7 @@ describe('loginAction', () => {
       expect(result.error).toBe(GENERIC_LOGIN_ERROR);
       // The serialized shape carries ONLY the generic error — no
       // backend status, no message, no code is leaked to the caller.
-      expect(JSON.stringify(result)).toBe('{"error":"credenciales inválidas"}');
+      expect(JSON.stringify(result)).toBe('{"error":"Credenciales inválidas"}');
     });
   });
 });

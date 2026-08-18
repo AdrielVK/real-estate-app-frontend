@@ -183,18 +183,12 @@ interface BackendPaginationMeta {
  */
 export interface BackendSearchResponse {
   success: boolean;
-  data: BackendPublicationSummary[];
+  data: (Omit<PublicationSummaryDto, 'price' | 'currency'> & {
+    priceAmount: number;
+    priceCurrency: string;
+  })[];
   meta: BackendPaginationMeta;
 }
-
-/**
- * Raw backend publication shape. Differs from `PublicationSummaryDto` only
- * in the price fields: `priceAmount` and `priceCurrency`.
- */
-export type BackendPublicationSummary = Omit<PublicationSummaryDto, 'price' | 'currency'> & {
-  priceAmount: number;
-  priceCurrency: string;
-};
 
 /**
  * `PublicationSummaryDto` — single result card payload from

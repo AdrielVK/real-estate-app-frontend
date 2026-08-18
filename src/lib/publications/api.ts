@@ -35,13 +35,51 @@
  *   `price`/`currency`). Mapping in this layer keeps the UI, tests,
  *   and mock data stable and isolates backend changes to one file.
  */
-import type {
-  BackendPublicationSummary,
-  BackendSearchResponse,
-  PublicationSummaryDto,
-  SearchFilters,
-} from '@/types/publication';
+import { z } from 'zod';
+
+import type { PublicationSummaryDto, SearchFilters } from '@/types/publication';
 import { serializeFilters } from '@/lib/search/url';
+
+const BackendPublicationSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  priceAmount: z.number(),
+  priceCurrency: z.enum(['USD', 'ARS']),
+  operationType: z.string(),
+  propertyType: z.string(),
+  locationText: z.string().optional(),
+  mainImageUrl: z.string().optional(),
+  rooms: z.number().optional(),
+  bedrooms: z.number().optional(),
+  bathrooms: z.number().optional(),
+  totalArea: z.number().optional(),
+  expenses: z.number().optional(),
+  featured: z.boolean().optional(),
+  photos: z.array(z.string()).optional(),
+  addressFormatted: z.string().optional(),
+  addressCity: z.string().optional(),
+  coveredAreaM2: z.number().optional(),
+  totalAreaM2: z.number().optional(),
+  garages: z.number().optional(),
+  acceptsCredits: z.boolean().optional(),
+  acceptsPets: z.boolean().optional(),
+  publishedAt: z.string().optional(),
+  featuredUntil: z.string().optional(),
+  status: z.string().optional(),
+});
+
+const BackendSearchResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.array(BackendPublicationSchema),
+  meta: z.object({
+    page: z.union([z.string(), z.number()]),
+    limit: z.union([z.string(), z.number()]),
+    total: z.number(),
+    totalPages: z.number(),
+  }),
+});
+
+type BackendPublication = z.infer<typeof BackendPublicationSchema>;
 
 /** Server response envelope for `GET /publications/search` — UI-facing. */
 interface SearchResponse {
@@ -77,13 +115,13 @@ function coerceMetaNumber(value: string | number | undefined, fallback: number):
  * Map a raw backend publication to the canonical UI DTO.
  * Only the price field names differ today; every other field is shared.
  */
-function mapBackendPublication(raw: BackendPublicationSummary): PublicationSummaryDto {
+function mapBackendPublication(raw: BackendPublication): PublicationSummaryDto {
   const { priceAmount, priceCurrency, ...rest } = raw;
   return {
     ...rest,
     price: priceAmount,
     currency: priceCurrency,
-  } as PublicationSummaryDto;
+  };
 }
 
 /**
@@ -92,20 +130,13 @@ function mapBackendPublication(raw: BackendPublicationSummary): PublicationSumma
  * so `searchPublications` can surface a non-throwing error result.
  */
 function parseBackendResponse(body: unknown): SearchResponse | null {
-  const envelope = body as Partial<BackendSearchResponse>;
-  if (envelope.success !== true) {
+  const parsed = BackendSearchResponseSchema.safeParse(body);
+  if (!parsed.success) {
     return null;
   }
 
-  const rawMeta = envelope.meta;
-  if (!rawMeta) {
-    return null;
-  }
-
-  const rawData = Array.isArray(envelope.data) ? envelope.data : [];
-  const mappedData = rawData.map((item) =>
-    mapBackendPublication(item as BackendPublicationSummary),
-  );
+  const { data: rawData, meta: rawMeta } = parsed.data;
+  const mappedData = rawData.map(mapBackendPublication);
 
   return {
     data: mappedData,
@@ -153,7 +184,7 @@ export async function searchPublications(filters: SearchFilters): Promise<Search
       };
     }
 
-    const body = (await res.json()) as BackendSearchResponse;
+    const body: unknown = await res.json();
     const response = parseBackendResponse(body);
     if (response === null) {
       return {
