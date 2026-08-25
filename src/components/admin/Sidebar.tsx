@@ -4,11 +4,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import type { AdminUser } from '@/lib/auth/admin-session';
+import type { Theme } from '@/lib/theme/theme';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/Button';
 
 import { ADMIN_NAV_ITEMS } from './nav-items';
+import { ThemeSwitch } from './ThemeSwitch';
 import { UserBlock } from './UserBlock';
 
 export interface SidebarProps {
@@ -35,6 +37,20 @@ export interface SidebarProps {
    * RSC-as-trust-boundary pattern.
    */
   onLogout: (formData?: FormData) => Promise<void>;
+  /**
+   * Current resolved theme. Lifted to `AdminShell` (design D2) so
+   * the desktop Sidebar and the mobile drawer share one state and
+   * can never diverge. The switch is fully controlled — Sidebar
+   * does NOT call `useTheme` itself.
+   */
+  theme: Theme;
+  /**
+   * Toggle callback for the footer `ThemeSwitch`. Sourced from
+   * `useTheme().toggleTheme` inside `AdminShell`. Persistence is
+   * handled by the hook (design D5) — Sidebar MUST NOT write to
+   * `localStorage` itself.
+   */
+  onToggleTheme: () => void;
   /** Optional extra classes appended to the root element. */
   className?: string;
 }
@@ -67,8 +83,21 @@ const FALLBACK_USER: AdminUser = { displayName: null, role: 'AGENT' };
  *   server action clears cookies and redirects to `/login`. The
  *   action is threaded in by the RSC layout (commit 2) so the
  *   component never imports a `'use server'` module directly.
+ *
+ * Slice 2 changes (`admin-sidebar-ajustes`):
+ * - Title is now a single `<h2>Panel de administrador</h2>` (design
+ *   D8). The legacy two-line `Real State` / `Admin` block is gone.
+ * - The nav `<ul>` carries `list-none` so the underlying `<li>`
+ *   markers can never render (Tailwind preflight already resets
+ *   them, but the explicit class is the documented contract).
+ * - The decorative dot span renders ONLY on the active link
+ *   (inactive links have NO dot — they would otherwise read as
+ *   "list bullets" to a reviewer scanning the wireframe).
+ * - The footer order is now `UserBlock` → `ThemeSwitch` → logout
+ *   form. The switch consumes the lifted `theme` / `onToggleTheme`
+ *   props from `AdminShell`; Sidebar itself stays stateless.
  */
-export function Sidebar({ user, onLogout, className }: SidebarProps) {
+export function Sidebar({ user, onLogout, theme, onToggleTheme, className }: SidebarProps) {
   const pathname = usePathname();
   const effectiveUser = user ?? FALLBACK_USER;
 
@@ -80,14 +109,11 @@ export function Sidebar({ user, onLogout, className }: SidebarProps) {
       )}
     >
       <div className="border-b border-sidebar-border px-6 py-5">
-        <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Real State
-        </p>
-        <p className="mt-1 text-base font-semibold">Admin</p>
+        <h2 className="text-base font-semibold tracking-tight">Panel de administrador</h2>
       </div>
 
       <nav aria-label="Navegación de administración" className="flex-1 px-3 py-4">
-        <ul className="flex flex-col gap-1">
+        <ul className="flex list-none flex-col gap-1">
           {ADMIN_NAV_ITEMS.map((item) => {
             const isActive = pathname === item.href;
             return (
@@ -103,13 +129,12 @@ export function Sidebar({ user, onLogout, className }: SidebarProps) {
                       : 'text-sidebar-foreground hover:bg-sidebar-accent/70',
                   )}
                 >
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      'inline-block h-2 w-2 shrink-0 rounded-full',
-                      isActive ? 'bg-sidebar-primary' : 'bg-muted-foreground/40',
-                    )}
-                  />
+                  {isActive ? (
+                    <span
+                      aria-hidden="true"
+                      className="inline-block h-2 w-2 shrink-0 rounded-full bg-sidebar-primary"
+                    />
+                  ) : null}
                   <span>{item.label}</span>
                 </Link>
               </li>
@@ -120,6 +145,7 @@ export function Sidebar({ user, onLogout, className }: SidebarProps) {
 
       <footer className="flex flex-col gap-3 border-t border-sidebar-border px-4 py-4">
         <UserBlock displayName={effectiveUser.displayName} userRole={effectiveUser.role} />
+        <ThemeSwitch theme={theme} onToggle={onToggleTheme} />
         <form action={onLogout} className="flex">
           <Button type="submit" variant="outline" size="sm" className="w-full">
             Cerrar sesión
