@@ -128,4 +128,45 @@ describe('decodeAccessTokenPayload', () => {
   it('returns null on an empty string', () => {
     expect(decodeAccessTokenPayload('')).toBeNull();
   });
+
+  it('decodes unicode payloads byte-for-byte identically to the legacy Buffer-based implementation (edge parity)', () => {
+    // The decoder is shared by the proxy (edge runtime) and the
+    // server actions (Node runtime). The refactor from
+    // `Buffer.from(..., 'base64url').toString('utf8')` to
+    // `atob` + `TextDecoder` MUST preserve byte-for-byte parity
+    // for every code point a real JWT may carry: ASCII, Latin-1
+    // extensions, multi-byte UTF-8 (Spanish ñ/í, emoji, CJK).
+    // This test pins the parity by hand-encoding the same string
+    // with the legacy `Buffer` path and asserting the result is
+    // identical. If the refactor ever changes the byte handling
+    // (e.g. lossy `decodeURIComponent` escape round-trip), the
+    // assert fails and the regression is caught before it ships.
+    const fixtures: readonly { name: string; value: string }[] = [
+      { name: 'ASCII', value: 'ana@casal.com' },
+      { name: 'Spanish acute (admin-dashboard locale)', value: 'José María — ñoño' },
+      { name: 'Spanish with diacritics', value: 'Ángela Piñeiro Ávila' },
+      { name: 'multi-byte UTF-8 (Japanese)', value: 'ユーザー名' },
+      { name: 'multi-byte UTF-8 (emoji)', value: 'user🛡️admin' },
+      { name: 'surrogate pair (astral plane)', value: '𝕊𝕥𝕒𝕗𝕗' },
+      { name: 'JSON delimiters and escapes', value: '{"a":"b\\nc"}' },
+      { name: 'overlong null bytes (must NOT be silently dropped)', value: 'a\u0000\u0000b' },
+    ];
+
+    for (const { name, value } of fixtures) {
+      // The JWT round-trip: encode the JSON object `{value: ...}` with
+      // the legacy Buffer path (utf8 bytes → base64url), then decode
+      // with the production decoder. The decoder's contract is "JSON
+      // object payload", so the encoded string is the JSON of the
+      // object, not the raw value.
+      const payloadObject = { value };
+      const json = JSON.stringify(payloadObject);
+      const encoded = Buffer.from(json, 'utf8').toString('base64url');
+      const token = `${base64url('header')}.${encoded}.sig`;
+
+      const decoded = decodeAccessTokenPayload(token);
+      expect(decoded, name).not.toBeNull();
+      // Byte-for-byte parity: the value must round-trip exactly.
+      expect(decoded, name).toEqual(payloadObject);
+    }
+  });
 });

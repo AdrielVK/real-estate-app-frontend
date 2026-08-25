@@ -22,7 +22,21 @@
  *   Carrying the backend reason would tempt callers to surface it.
  *   The collapsing happens at the api boundary so the action never
  *   sees a reason.
+ *
+ * Role types — re-exported from `@/lib/auth/roles` so the public
+ * type surface (`types/auth.ts`) is the single import point for
+ * consumers. The runtime constants (`PRIVILEGED_ROLES`, `USER_ROLES`)
+ * and the `isPrivilegedRole` guard live next to the literal types
+ * so the type and the runtime whitelist cannot drift.
+ *
+ * `AuthUser.role` is typed as `UserRole` (privileged + `CLIENT`) so
+ * the login envelope admits every value the backend may emit. The
+ * admin guard narrows further to `Role` (privileged only) via the
+ * `isPrivilegedRole` predicate.
  */
+import type { Role, UserRole } from '@/lib/auth/roles';
+
+export type { Role, UserRole };
 
 /** Credentials posted to `POST /auth/login`. */
 export interface LoginCredentials {
@@ -33,14 +47,16 @@ export interface LoginCredentials {
 /**
  * Authenticated user returned by the backend.
  *
- * `role` is left as `string` because the backend uses string enum
- * values (`CLIENT`, `AGENT`, etc.) and the frontend does not yet need
- * a typed narrowing — role-based UI is deferred scope.
+ * `role` is typed as `UserRole` (privileged + `CLIENT`) so the login
+ * envelope admits every value the backend may emit. Callers that
+ * need to decide admin access narrow further via
+ * `isPrivilegedRole` from `@/lib/auth/roles` — the runtime guard
+ * returns the `Role` literal subset.
  */
 interface AuthUser {
   id: string;
   email: string;
-  role: string;
+  role: UserRole;
 }
 
 /**
