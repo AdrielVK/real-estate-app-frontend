@@ -34,6 +34,23 @@
 export const GENERIC_LOGIN_ERROR = 'Credenciales inválidas';
 
 /**
+ * Spec-mandated generic error copy for the public-zone logout action.
+ *
+ * Why a separate constant (not reuse of `GENERIC_LOGIN_ERROR`)?
+ * - The login form and the logout menu live in different surfaces with
+ *   different copy owners. Collapsing them would force one surface to
+ *   rename the other whenever the spec changes wording for that flow.
+ *   Splitting keeps each constant tied to its own spec scenario.
+ *
+ * Why Spanish (matching `GENERIC_LOGIN_ERROR`)?
+ * - The whole auth surface ships in Spanish; the UI never branches on
+ *   a per-surface language flag. Keeping both constants in the same
+ *   locale prevents the action from importing one and the form from
+ *   importing the other.
+ */
+export const GENERIC_LOGOUT_ERROR = 'No se pudo cerrar la sesión';
+
+/**
  * Email predicate mirroring `UserEmailValueObject` on the backend.
  *
  * Regex breakdown (matches the backend value object verbatim):

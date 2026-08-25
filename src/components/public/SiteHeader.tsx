@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 
 import Link from 'next/link';
 
@@ -17,6 +17,27 @@ const links = [
   { label: 'Comprar', href: '/buscar?operationType=venta' },
   { label: 'Propietarios', href: '#propietarios' },
 ] as const;
+
+/**
+ * Props for `SiteHeader`.
+ *
+ * `auth` is the session-aware right-side slot owned by the
+ * `(public)/layout.tsx`. The slot is required because every public
+ * route MUST surface a session-aware entry point (the spec's
+ * "Session-Aware Header State" requirement). The header itself
+ * does not branch on auth state — it just renders the slot.
+ */
+export interface SiteHeaderProps {
+  /**
+   * Session-aware right-side slot. The `(public)/layout.tsx` passes
+   * `<AuthSection />` here, which renders the "Ingresar" link for
+   * anonymous visitors and the `ProfileMenu` for authenticated ones.
+   * Required so every public route is guaranteed to ship a session
+   * entry point — a forgotten prop is a TypeScript error, not a
+   * silent regression.
+   */
+  auth: ReactNode;
+}
 
 /**
  * `SiteHeader` — fixed top bar that becomes a glass-panel pill when the
@@ -39,13 +60,20 @@ const links = [
  *   browser's hash navigation already moves the viewport, so leaving
  *   the menu open would just be visual noise.
  *
+ * Auth slot:
+ * - The header receives the auth UI as a `ReactNode` slot from the
+ *   public layout. The slot is required (`auth: ReactNode`) so every
+ *   public route is guaranteed to ship a session-aware entry point.
+ *   The header does NOT branch on auth state — it just renders the
+ *   slot where the old inline "Ingresar" link used to live.
+ *
  * Notes:
  * - The original v0 reference used Phosphor icons. We swap to lucide
  *   (A2): `List` → `Menu`, `X` → `X`.
  * - Anchors (`<a>`) are used for in-page sections; route navigation uses
  *   Next's `<Link>` so the public shell is preserved without a full reload.
  */
-export function SiteHeader() {
+export function SiteHeader({ auth }: SiteHeaderProps) {
   const sentinel = useRef<HTMLDivElement>(null);
   const [pegado, setPegado] = useState(false);
   const [abierto, setAbierto] = useState(false);
@@ -119,13 +147,17 @@ export function SiteHeader() {
             </nav>
 
             <div className="ml-auto flex items-center gap-2 md:ml-0">
-              <Button
-                asChild
-                size="lg"
-                className="h-9 rounded-full px-4 shadow-[0_10px_24px_-14px_color-mix(in_oklch,var(--primary)_70%,transparent)]"
-              >
-                <Link href="/login">Ingresar</Link>
-              </Button>
+              {/*
+                Session-aware right-side slot. The `(public)/layout.tsx`
+                passes `<AuthSection />` here, which renders the
+                "Ingresar" link for anonymous visitors and the
+                `ProfileMenu` for authenticated ones. The header
+                does NOT branch on auth state — it just renders the
+                slot. The slot is required (TypeScript) so every
+                public route is guaranteed to ship a session entry
+                point.
+              */}
+              {auth}
               <ThemeToggle />
               <Button
                 variant="outline"

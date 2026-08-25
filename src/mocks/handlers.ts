@@ -39,4 +39,35 @@ const loginHandler = http.post('*/auth/login', () => {
   return HttpResponse.json(body);
 });
 
-export const handlers: HttpHandler[] = [loginHandler];
+/**
+ * Default `POST /auth/refresh` — mirrors the login envelope but with a
+ * ROTATED pair (`mock-rotated-*`). Token rotation is the whole point of
+ * the endpoint: the response MUST NOT echo the login defaults, or tests
+ * would pass against a backend that silently reuses dead tokens.
+ */
+const refreshHandler = http.post('*/auth/refresh', () => {
+  const body: BackendLoginEnvelope = {
+    success: true,
+    data: {
+      accessToken: 'mock-rotated-access-token',
+      refreshToken: 'mock-rotated-refresh-token',
+      user: {
+        id: DEFAULT_LOGIN_USER_ID,
+        email: 'mock@example.com',
+        role: 'CLIENT',
+      },
+    },
+  };
+  return HttpResponse.json(body);
+});
+
+/**
+ * Default `POST /auth/logout` — the backend revokes the refresh token
+ * and answers with a bare success envelope; no data payload is needed
+ * because the client clears its cookies regardless.
+ */
+const logoutHandler = http.post('*/auth/logout', () => {
+  return HttpResponse.json({ success: true });
+});
+
+export const handlers: HttpHandler[] = [loginHandler, refreshHandler, logoutHandler];
