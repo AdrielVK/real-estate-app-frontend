@@ -1,3 +1,5 @@
+'use client';
+
 import { StatsCard } from '@/components/admin/StatsCard';
 import { Container } from '@/components/ui/Container';
 
@@ -11,12 +13,22 @@ const DASHBOARD_STATS: readonly { label: string }[] = [
 /**
  * `/admin` — admin dashboard placeholder (spec A5).
  *
- * - `<h1>` with the literal "Panel de Administración" — the test asserts
- *   the exact heading text.
- * - 4 `StatsCard` placeholders in a 2/4 column responsive grid
- *   (mobile: 2 cols, desktop: 4 cols). No `value` is passed so the
- *   cards render the em-dash empty state defined in `StatsCard`.
- * - Wireframe only: no decorative styling, just structural layout.
+ * Why `'use client'`?
+ * - The page is the slot of an admin-only segment. Spec NFRs demand
+ *   the admin chrome stays out of the public SEO surface (no
+ *   metadata export, `noindex` from the layout). Marking this
+ *   component client makes that explicit and lets future
+ *   interactivity (e.g. live stat polling) ship without a
+ *   server-rendering round-trip.
+ *
+ * - The 4 placeholder `StatsCard`s sit on the portal token surface
+ *   (`bg-card`, `border-border`, `glass-panel`) — no live data, no
+ *   network request. This is the spec "admin-stats" requirement:
+ *   portal-styled placeholders, behavior unchanged from the pre-PR
+ *   wireframe.
+ *
+ * - Layout is a 2/4-column responsive grid: mobile shows two cards
+ *   side-by-side, desktop shows all four in a row.
  */
 export default function AdminDashboardPage() {
   return (
