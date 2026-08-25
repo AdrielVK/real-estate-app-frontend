@@ -38,11 +38,13 @@
  *   inspect as a string — `renderToStaticMarkup` is the right tool.
  */
 import { isValidElement } from 'react';
-
 import { renderToStaticMarkup } from 'react-dom/server';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import { THEME_INIT_SCRIPT } from '@/lib/theme/theme';
+
+import RootLayout from '@/app/layout';
 
 // `next/font/google` runs at build time (downloads the font files
 // from Google Fonts) — it does not exist in jsdom. Mock the factory
@@ -52,9 +54,6 @@ vi.mock('next/font/google', () => ({
   Geist: () => ({ variable: 'mock-geist-sans-var' }),
   Geist_Mono: () => ({ variable: 'mock-geist-mono-var' }),
 }));
-
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-import RootLayout from '@/app/layout';
 
 describe('RootLayout', () => {
   function renderLayout(children: React.ReactNode = <p>child</p>): string {

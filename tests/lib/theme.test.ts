@@ -92,11 +92,9 @@ describe('readStoredTheme', () => {
     // Some browsers (Safari private, locked enterprise profiles) throw
     // on access. The init path must not crash the page; the system
     // fallback takes over via getSystemTheme.
-    const throwSpy = vi
-      .spyOn(Storage.prototype, 'getItem')
-      .mockImplementation(() => {
-        throw new Error('SecurityError: localStorage is not available');
-      });
+    const throwSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError: localStorage is not available');
+    });
 
     expect(readStoredTheme()).toBeNull();
     expect(throwSpy).toHaveBeenCalled();
@@ -217,9 +215,10 @@ describe('THEME_INIT_SCRIPT (drift guard)', () => {
   it('is an IIFE (executes synchronously before paint, no module export)', () => {
     // An inline script that exposes a binding is useless — it must
     // run as a self-invoking function so the side effects land before
-    // first paint.
-    expect(THEME_INIT_SCRIPT).toMatch(/\(\s*function\s*\(\s*\)\s*\{/);
-    expect(THEME_INIT_SCRIPT).toMatch(/\}\s*\)\s*\(\s*\)\s*;?\s*$/);
+    // first paint. The simplified regex below is anchored to the
+    // script's tail to avoid super-linear backtracking on long
+    // bodies (sonarjs/super-linear-regex).
+    expect(THEME_INIT_SCRIPT).toMatch(/^\(function\s*\(\s*\)\s*\{[\s\S]*\}\)\(\);?\s*$/);
   });
 });
 
@@ -239,6 +238,7 @@ describe('THEME_INIT_SCRIPT (execution in jsdom)', () => {
     // The script targets `document.documentElement` via the global
     // `document`; jsdom exposes it. We compile the script into a
     // function so we can assert side effects without rendering HTML.
+    // eslint-disable-next-line sonarjs/code-eval -- The init script is a controlled, project-owned literal (THEME_INIT_SCRIPT) compiled into a function only to observe its side effects inside jsdom. No user input is interpolated.
     const runner = new Function(THEME_INIT_SCRIPT);
     runner();
 
@@ -249,6 +249,7 @@ describe('THEME_INIT_SCRIPT (execution in jsdom)', () => {
   it('applies the .light class when localStorage already has "light"', () => {
     window.localStorage.setItem(STORAGE_KEY, 'light');
 
+    // eslint-disable-next-line sonarjs/code-eval -- The init script is a controlled, project-owned literal (THEME_INIT_SCRIPT) compiled into a function only to observe its side effects inside jsdom. No user input is interpolated.
     const runner = new Function(THEME_INIT_SCRIPT);
     runner();
 
@@ -268,6 +269,7 @@ describe('THEME_INIT_SCRIPT (execution in jsdom)', () => {
       onchange: null,
     }));
 
+    // eslint-disable-next-line sonarjs/code-eval -- The init script is a controlled, project-owned literal (THEME_INIT_SCRIPT) compiled into a function only to observe its side effects inside jsdom. No user input is interpolated.
     const runner = new Function(THEME_INIT_SCRIPT);
     runner();
 
@@ -280,6 +282,7 @@ describe('THEME_INIT_SCRIPT (execution in jsdom)', () => {
       throw new Error('SecurityError');
     });
 
+    // eslint-disable-next-line sonarjs/code-eval -- The init script is a controlled, project-owned literal (THEME_INIT_SCRIPT) compiled into a function only to observe its side effects inside jsdom. No user input is interpolated.
     const runner = new Function(THEME_INIT_SCRIPT);
 
     expect(() => runner()).not.toThrow();

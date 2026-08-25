@@ -6,8 +6,8 @@ import {
   applyTheme,
   getSystemTheme,
   readStoredTheme,
-  THEME_MEDIA_QUERY,
   type Theme,
+  THEME_MEDIA_QUERY,
 } from '@/lib/theme/theme';
 
 /**
@@ -65,6 +65,7 @@ export function useTheme(): UseThemeResult {
     // painted. The class is already on <html>; this call is a no-op
     // for the class but keeps the function call-site consistent.
     applyTheme(initial, { persist: false });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional mount-sync per design D6.
     setThemeState(initial);
 
     // Only follow the OS when the user has NOT chosen a value. If

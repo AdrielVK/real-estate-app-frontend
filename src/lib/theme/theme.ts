@@ -139,7 +139,7 @@ export function applyTheme(theme: Theme, options: ApplyThemeOptions = {}): void 
  * 3. Catch-all `try/catch` — private mode / missing storage falls
  *    through to `light` so the page never paints without a class.
  */
-export const THEME_INIT_SCRIPT: string = `(function(){
+export const THEME_INIT_SCRIPT = `(function(){
   try {
     var stored = localStorage.getItem('${STORAGE_KEY}');
     var theme;
