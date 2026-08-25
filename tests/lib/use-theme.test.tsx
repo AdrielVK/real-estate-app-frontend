@@ -32,9 +32,10 @@
  *   which now also consumes this hook, stays in lockstep with the
  *   admin switch.
  */
-import { act, renderHook } from '@testing-library/react';
+import { act, render, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { Theme } from '@/lib/theme/theme';
 import { useTheme } from '@/lib/theme/use-theme';
 
 type MediaListener = (event: { matches: boolean }) => void;
@@ -92,13 +93,26 @@ describe('useTheme', () => {
   it('starts with "light" during the very first render (no hydration mismatch)', () => {
     // The blocking script in layout.tsx already painted the right
     // class on <html>. The hook must NOT read localStorage during
-    // render — that would diverge from the server HTML. We render,
-    // then assert the initial state is the safe placeholder.
+    // render — that would diverge from the server HTML. We capture
+    // the value DURING the first render (a Tracker component) so
+    // the assertion reflects the pre-effect state, not the
+    // post-mount-sync value. `renderHook` flushes effects inside
+    // its internal `act()`, so reading `result.current` directly
+    // would see the mounted state, not the first render's state.
     window.localStorage.setItem('casal-theme', 'dark');
 
-    const { result } = renderHook(() => useTheme());
+    let firstRenderTheme: Theme | undefined;
+    function Tracker() {
+      const { theme } = useTheme();
+      if (firstRenderTheme === undefined) {
+        firstRenderTheme = theme;
+      }
+      return null;
+    }
 
-    expect(result.current.theme).toBe('light');
+    render(<Tracker />);
+
+    expect(firstRenderTheme).toBe('light');
   });
 
   it('mount-syncs to the stored theme after the first effect tick', async () => {
@@ -225,6 +239,9 @@ describe('useTheme', () => {
     // the caller. The default behavior (no persist) matches the
     // init path used by mount-sync. Use toggleTheme when persistence
     // is required.
+    const media = makeMatchMedia(false);
+    vi.stubGlobal('matchMedia', () => media);
+
     const { result } = renderHook(() => useTheme());
 
     act(() => {
@@ -267,6 +284,9 @@ describe('useTheme', () => {
   });
 
   it('exposes a stable API across re-renders (no new function refs every call)', () => {
+    const media = makeMatchMedia(false);
+    vi.stubGlobal('matchMedia', () => media);
+
     const { result, rerender } = renderHook(() => useTheme());
     const firstToggle = result.current.toggleTheme;
     const firstSet = result.current.setTheme;
