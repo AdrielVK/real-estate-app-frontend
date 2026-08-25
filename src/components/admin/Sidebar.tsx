@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { logoutAction } from '@/lib/auth/actions';
+import type { AdminUser } from '@/lib/auth/admin-session';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/Button';
@@ -12,9 +12,40 @@ import { ADMIN_NAV_ITEMS } from './nav-items';
 import { UserBlock } from './UserBlock';
 
 export interface SidebarProps {
+  /**
+   * Resolved admin user from the RSC layout (`resolveAdminUser`).
+   * The RSC wrapper decodes the access cookie server-side and pipes
+   * the result here as a prop, so the client chrome never reads
+   * `document.cookie` (design D2 — RSC prop from layout).
+   *
+   * `null` is a defense-in-depth case: the proxy guard should have
+   * redirected the request before this renders, but if a regression
+   * ever lets an undecodable / non-privileged token through, the
+   * chrome MUST still render cleanly (no crash, role badge shown).
+   */
+  user: AdminUser | null;
+  /**
+   * Server `logoutAction` passed RSC → client as a prop. The
+   * `<form action={onLogout}>` binding gives us progressive
+   * enhancement: the form works with zero client JS, the action
+   * clears cookies and redirects server-side.
+   *
+   * Decoupling Sidebar from `@/lib/auth/actions` keeps the component
+   * testable without a server runtime and aligns with the
+   * RSC-as-trust-boundary pattern.
+   */
+  onLogout: (formData?: FormData) => Promise<void>;
   /** Optional extra classes appended to the root element. */
   className?: string;
 }
+
+/**
+ * Safe default for the rare `user === null` case. A regression in
+ * the proxy guard would surface as `null` here; the chrome MUST still
+ * render a coherent identity strip instead of crashing. `AGENT` is
+ * a neutral privileged literal that reads correctly in the role badge.
+ */
+const FALLBACK_USER: AdminUser = { displayName: null, role: 'AGENT' };
 
 /**
  * `Sidebar` — fixed left navigation for the admin zone, desktop only.
@@ -29,24 +60,17 @@ export interface SidebarProps {
  * - The legacy `bg-neutral-900` alias has been removed from
  *   `globals.css` in this same change. The Sidebar now sits on the
  *   Bosque+Hueso+Cobre palette so the admin chrome matches the rest
- *   of the surface tokens. See design D11 (token compliance) and
- *   spec "Design Token Compliance".
+ *   of the surface tokens.
  *
- * Why a `<form action={logoutAction}>` instead of a client handler?
+ * Why a `<form action={onLogout}>` prop instead of a client handler?
  * - Progressive enhancement: the form works with zero client JS, the
  *   server action clears cookies and redirects to `/login`. The
- *   pattern is identical to the legacy Topbar and stays a Server-
- *   Component-friendly binding — the action signature accepts an
- *   unused FormData so React does not complain about arity.
- *
- * Why is the UserBlock hard-coded with displayName=null and role="ADMIN"?
- * - The Sidebar is a presentational chrome — it does not own user
- *   identity. The RSC layout pipes the real `AdminUser` here as a
- *   future enhancement (admin-shell PR3 will pass it as a prop).
- *   The placeholder values match the current test contract.
+ *   action is threaded in by the RSC layout (commit 2) so the
+ *   component never imports a `'use server'` module directly.
  */
-export function Sidebar({ className }: SidebarProps) {
+export function Sidebar({ user, onLogout, className }: SidebarProps) {
   const pathname = usePathname();
+  const effectiveUser = user ?? FALLBACK_USER;
 
   return (
     <aside
@@ -95,8 +119,8 @@ export function Sidebar({ className }: SidebarProps) {
       </nav>
 
       <footer className="flex flex-col gap-3 border-t border-sidebar-border px-4 py-4">
-        <UserBlock displayName={null} userRole="ADMIN" />
-        <form action={logoutAction} className="flex">
+        <UserBlock displayName={effectiveUser.displayName} userRole={effectiveUser.role} />
+        <form action={onLogout} className="flex">
           <Button type="submit" variant="outline" size="sm" className="w-full">
             Cerrar sesión
           </Button>
