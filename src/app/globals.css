@@ -12,9 +12,6 @@
  *   - Geist fonts come from `next/font/google` in src/app/layout.tsx
  *     (exposes --font-geist-sans / --font-geist-mono), so the @theme inline
  *     chains the Geist CSS variables instead of hardcoding 'Geist'.
- *   - A7: --color-neutral-900 is preserved as a thin alias so the admin
- *     Sidebar's `bg-neutral-900` class keeps resolving. Remove when admin
- *     migrates to the new token set.
  *   - A8/A9: @custom-variant dark is registered; shadcn/tw-animate-css
  *     imports are intentionally NOT pulled in (deps absent).
  * ========================================================================= */
@@ -73,12 +70,10 @@
   --color-foreground: var(--foreground);
   --color-background: var(--background);
 
-  /* TODO(admin-retheme): remove when admin Sidebar migrates to the new
-     token set. Sole legacy usage is `bg-neutral-900` in
-     src/components/admin/Sidebar.tsx (design A7). The var() points back
-     to the alias declared on :root so the @theme mapping stays
-     self-referential and the Tailwind utility keeps resolving. */
-  --color-neutral-900: var(--color-neutral-900);
+  /* admin-dashboard PR2: the legacy --color-neutral-900 alias and its
+     sole `bg-neutral-900` consumer are gone. The admin Sidebar now uses
+     the portal --color-sidebar / --color-sidebar-border tokens, so the
+     legacy utility class is no longer required. */
 
   /* Radius scale (D12) — sm through 4xl derived from a single --radius. */
   --radius-sm: calc(var(--radius) * 0.6);
@@ -172,11 +167,6 @@
   --sidebar-accent-foreground: oklch(0.3006 0.0492 165.4);
   --sidebar-border: oklch(0.8814 0.0102 132);
   --sidebar-ring: oklch(0.3391 0.0553 165.4);
-
-  /* TODO(admin-retheme): remove when admin Sidebar migrates to the new
-     token set. Sole legacy usage is `bg-neutral-900` in
-     src/components/admin/Sidebar.tsx (design A7). */
-  --color-neutral-900: #111827;
 }
 
 .dark {

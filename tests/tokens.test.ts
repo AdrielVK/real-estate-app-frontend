@@ -59,9 +59,9 @@ const ROOT_OKLCH_TOKENS = [
 
 /**
  * @theme inline color mappings. Each `--color-X` must be wired to the
- * matching `--X` (or to `--color-X` for the A7 neutral-900 self-alias).
- * The A7 alias is asserted separately because its mapping is intentionally
- * a self-reference.
+ * matching `--X` (e.g. `--color-background: var(--background)`). The
+ * legacy `--color-neutral-900` self-alias was removed in
+ * admin-dashboard PR2 and is no longer present in this list.
  */
 const STANDARD_THEME_COLOR_MAPPINGS = [
   '--color-background',
@@ -153,14 +153,18 @@ describe('globals.css design tokens (v0 oklch palette)', () => {
     expect(css).toMatch(/--radius\s*:\s*1rem/);
   });
 
-  it('declares the A7 --color-neutral-900 alias as #111827', () => {
-    // The :root declaration; the @theme inline self-reference is asserted
-    // separately below.
-    expect(css).toMatch(/--color-neutral-900\s*:\s*#111827/);
+  it('does NOT declare the legacy A7 --color-neutral-900 alias (admin-dashboard PR2 removed it)', () => {
+    // admin-dashboard PR2 migrated the admin Sidebar from `bg-neutral-900`
+    // to the portal tokens (`bg-sidebar`, `border-sidebar-border`) and
+    // removed the alias atomically. The legacy var must be gone everywhere.
+    expect(css).not.toMatch(/--color-neutral-900\s*:/);
   });
 
-  it('includes a TODO(admin-retheme) marker near the neutral-900 alias', () => {
-    expect(css).toMatch(/TODO\(admin-retheme\)/);
+  it('does NOT include a retheme sentinel marker (the migration landed)', () => {
+    // A sentinel marker existed in admin-dashboard PR1 only as a
+    // reminder to migrate the Sidebar. The migration is now complete
+    // in admin-dashboard PR2; the marker is gone.
+    expect(css).not.toMatch(/TODO\(admin-retheme\)/);
   });
 
   it('exposes a .dark block that overrides semantic surface tokens', () => {
@@ -187,10 +191,6 @@ describe('globals.css design tokens (v0 oklch palette)', () => {
       );
     },
   );
-
-  it('maps --color-neutral-900 through @theme inline as a self-reference (A7)', () => {
-    expect(css).toMatch(/--color-neutral-900\s*:\s*var\(--color-neutral-900\)/);
-  });
 
   it('maps --radius-lg directly to var(--radius) (D12 base size)', () => {
     expect(css).toMatch(/--radius-lg\s*:\s*var\(--radius\)\s*;/);
