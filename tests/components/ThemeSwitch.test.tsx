@@ -30,7 +30,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeSwitch } from '@/components/admin/ThemeSwitch';
 
 describe('ThemeSwitch', () => {
-  let onToggle: ReturnType<typeof vi.fn>;
+  let onToggle: () => void;
 
   beforeEach(() => {
     onToggle = vi.fn();

@@ -1,67 +1,68 @@
 'use client';
 
-import { useEffect, useReducer } from 'react';
-
 import { Moon, Sun } from 'lucide-react';
+
+import { useTheme } from '@/lib/theme/use-theme';
 
 import { Button } from '@/components/ui/Button';
 
-type Theme = 'light' | 'dark';
-
-const STORAGE_KEY = 'casal-theme';
-
-function getSystemTheme(): Theme {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-
-function applyTheme(theme: Theme) {
-  document.documentElement.classList.toggle('dark', theme === 'dark');
-  document.documentElement.classList.toggle('light', theme === 'light');
-}
-
+/**
+ * `ThemeToggle` — public-zone dark/light switch.
+ *
+ * Slice 2 (`admin-sidebar-ajustes`):
+ * - The local `useReducer` + `useEffect` + manual `matchMedia`
+ *   listener are GONE. The component now consumes the shared
+ *   `useTheme()` hook from `src/lib/theme/use-theme.ts`, the
+ *   single source of truth for theme state across every surface
+ *   (admin chrome + public portal).
+ * - The blocking pre-paint script in `src/app/layout.tsx` paints
+ *   the right class on `<html>` BEFORE this component hydrates
+ *   (see `THEME_INIT_SCRIPT` in `@/lib/theme/theme`). The hook
+ *   then mount-syncs its internal state to whatever the script
+ *   painted, so the toggle's `aria-checked` icon starts in sync
+ *   with the visible page — no flash, no hydration mismatch.
+ * - The persistence key (`casal-theme`), the storage fallbacks
+ *   (try/catch in private mode), and the class toggles
+ *   (`.dark` / `.light` on `documentElement`) all live in the
+ *   shared foundation; the public toggle is now a thin shell
+ *   around the hook + Button.
+ *
+ * Why a separate visual treatment from `ThemeSwitch`?
+ * - The public header sits on a glass-panel pill and the admin
+ *   chrome sits on sidebar tokens. Sharing the component would
+ *   either fork the styling via className overrides (losing
+ *   type-safety on the variant/size props) or pollute the
+ *   public surface with the admin-state shape. The two
+ *   components are kept distinct on purpose (design D7) and
+ *   each consumes the same hook — the surface contracts are
+ *   independent, the state is shared.
+ *
+ * Markup contract (preserved from pre-slice-2):
+ * - `Button` (outline, icon-lg) with the icon-only silhouette.
+ * - `role="switch"` + `aria-checked` for the WAI-ARIA toggle
+ *   pattern (matches `ThemeSwitch` so screen reader users hear
+ *   the same affordance on both surfaces).
+ * - Spanish `aria-label` describing the NEXT action, not the
+ *   current state.
+ * - The visible icon is `Moon` for dark, `Sun` for light.
+ */
 export function ThemeToggle() {
-  const [theme, setTheme] = useReducer((_: Theme, nextTheme: Theme) => nextTheme, 'light');
-
-  useEffect(() => {
-    const storedTheme = window.localStorage.getItem(STORAGE_KEY);
-    const hasStoredTheme = storedTheme === 'light' || storedTheme === 'dark';
-    const initialTheme = hasStoredTheme ? storedTheme : getSystemTheme();
-
-    setTheme(initialTheme);
-    applyTheme(initialTheme);
-
-    if (hasStoredTheme) return undefined;
-
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleSystemThemeChange = (event: MediaQueryListEvent) => {
-      const nextTheme = event.matches ? 'dark' : 'light';
-      setTheme(nextTheme);
-      applyTheme(nextTheme);
-    };
-
-    mediaQuery.addEventListener('change', handleSystemThemeChange);
-    return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
-  }, []);
-
-  const nextTheme = theme === 'dark' ? 'light' : 'dark';
-
-  function toggleTheme() {
-    setTheme(nextTheme);
-    applyTheme(nextTheme);
-    window.localStorage.setItem(STORAGE_KEY, nextTheme);
-  }
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === 'dark';
+  const nextActionLabel = isDark ? 'Activar modo claro' : 'Activar modo oscuro';
 
   return (
     <Button
+      type="button"
       variant="outline"
       size="icon-lg"
       className="size-9 rounded-full"
       role="switch"
-      aria-checked={theme === 'dark'}
-      aria-label={nextTheme === 'dark' ? 'Activar modo oscuro' : 'Activar modo claro'}
+      aria-checked={isDark}
+      aria-label={nextActionLabel}
       onClick={toggleTheme}
     >
-      {theme === 'dark' ? <Moon aria-hidden className="size-4" /> : <Sun aria-hidden className="size-4" />}
+      {isDark ? <Moon aria-hidden className="size-4" /> : <Sun aria-hidden className="size-4" />}
     </Button>
   );
 }
