@@ -8,11 +8,13 @@ import { usePathname } from 'next/navigation';
 import { Menu, X } from 'lucide-react';
 
 import type { AdminUser } from '@/lib/auth/admin-session';
+import type { Theme } from '@/lib/theme/theme';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/Button';
 
 import { ADMIN_NAV_ITEMS } from './nav-items';
+import { ThemeSwitch } from './ThemeSwitch';
 import { UserBlock } from './UserBlock';
 
 export interface AdminMobileNavProps {
@@ -32,6 +34,19 @@ export interface AdminMobileNavProps {
    * client JS and clears cookies server-side.
    */
   onLogout: (formData?: FormData) => Promise<void>;
+  /**
+   * Current resolved theme. Lifted to `AdminShell` (design D2) so
+   * the desktop Sidebar and the mobile drawer share one state and
+   * can never diverge.
+   */
+  theme: Theme;
+  /**
+   * Toggle callback for the drawer `ThemeSwitch`. Sourced from
+   * `useTheme().toggleTheme` inside `AdminShell`. The drawer state
+   * (`isOpen`) stays local — toggling the theme MUST NOT remount
+   * the drawer or close it.
+   */
+  onToggleTheme: () => void;
   /** Optional extra classes appended to the root element. */
   className?: string;
 }
@@ -65,8 +80,29 @@ const FALLBACK_USER: AdminUser = { displayName: null, role: 'AGENT' };
  * Why `lg:hidden`?
  * - The desktop Sidebar handles `>=lg`. Both surfaces use the same
  *   `ADMIN_NAV_ITEMS` const so the entries cannot drift (design D6).
+ *
+ * Why does `isOpen` stay local even though `theme` is lifted?
+ * - Lifting `isOpen` to `AdminShell` would mean every theme toggle
+ *   re-renders the shell and potentially remounts the drawer. The
+ *   contract is: theme is the cross-surface state, drawer state is
+ *   the local disclosure state. Keeping them independent prevents
+ *   a theme toggle from collapsing the drawer mid-session.
+ *
+ * Slice 2 changes (`admin-sidebar-ajustes`):
+ * - The drawer `<ul>` carries `list-none` (parity with the
+ *   desktop Sidebar).
+ * - The decorative dot indicator renders only on the active link.
+ * - The drawer footer mirrors the `ThemeSwitch` between
+ *   `UserBlock` and the logout form, driven by the lifted
+ *   `theme` / `onToggleTheme` props.
  */
-export function AdminMobileNav({ user, onLogout, className }: AdminMobileNavProps) {
+export function AdminMobileNav({
+  user,
+  onLogout,
+  theme,
+  onToggleTheme,
+  className,
+}: AdminMobileNavProps) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const effectiveUser = user ?? FALLBACK_USER;
@@ -113,7 +149,7 @@ export function AdminMobileNav({ user, onLogout, className }: AdminMobileNavProp
         >
           <div className="glass-panel flex flex-col gap-3 rounded-3xl border border-border/70 p-3">
             <nav aria-label="Navegación de administración">
-              <ul className="flex flex-col">
+              <ul className="flex list-none flex-col">
                 {ADMIN_NAV_ITEMS.map((item) => {
                   const isActive = pathname === item.href;
                   return (
@@ -140,6 +176,7 @@ export function AdminMobileNav({ user, onLogout, className }: AdminMobileNavProp
 
             <div className="flex flex-col gap-3 border-t border-border/70 pt-3">
               <UserBlock displayName={effectiveUser.displayName} userRole={effectiveUser.role} />
+              <ThemeSwitch theme={theme} onToggle={onToggleTheme} />
               <form action={onLogout}>
                 <Button type="submit" variant="outline" size="sm" className="w-full">
                   Cerrar sesión
