@@ -236,12 +236,11 @@ describe('THEME_INIT_SCRIPT (execution in jsdom)', () => {
   it('applies the .dark class when localStorage already has "dark" (no FOUC)', () => {
     window.localStorage.setItem(STORAGE_KEY, 'dark');
 
-    // The script targets `documentElement` via `this` inside the IIFE,
-    // which is bound to `document.documentElement` in non-strict
-    // browser scripts. We re-create the binding by calling the
-    // function with `documentElement` as `this`.
+    // The script targets `document.documentElement` via the global
+    // `document`; jsdom exposes it. We compile the script into a
+    // function so we can assert side effects without rendering HTML.
     const runner = new Function(THEME_INIT_SCRIPT);
-    runner.call(document.documentElement);
+    runner();
 
     expect(document.documentElement).toHaveClass('dark');
     expect(document.documentElement).not.toHaveClass('light');
@@ -251,7 +250,7 @@ describe('THEME_INIT_SCRIPT (execution in jsdom)', () => {
     window.localStorage.setItem(STORAGE_KEY, 'light');
 
     const runner = new Function(THEME_INIT_SCRIPT);
-    runner.call(document.documentElement);
+    runner();
 
     expect(document.documentElement).toHaveClass('light');
     expect(document.documentElement).not.toHaveClass('dark');
@@ -270,7 +269,7 @@ describe('THEME_INIT_SCRIPT (execution in jsdom)', () => {
     }));
 
     const runner = new Function(THEME_INIT_SCRIPT);
-    runner.call(document.documentElement);
+    runner();
 
     expect(document.documentElement).toHaveClass('dark');
     vi.unstubAllGlobals();
@@ -283,10 +282,12 @@ describe('THEME_INIT_SCRIPT (execution in jsdom)', () => {
 
     const runner = new Function(THEME_INIT_SCRIPT);
 
-    expect(() => runner.call(document.documentElement)).not.toThrow();
+    expect(() => runner()).not.toThrow();
     // With storage unavailable AND no matchMedia stubbed, the script
     // must still land on a class (light) so the page has SOME theme.
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    // The default jsdom matchMedia reports matches:false, so the
+    // script picks light.
     expect(document.documentElement.classList.contains('light')).toBe(true);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 });
