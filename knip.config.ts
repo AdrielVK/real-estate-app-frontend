@@ -28,6 +28,14 @@ const config: KnipConfig = {
     config: ['vitest.config.ts'],
     entry: ['tests/**/*.{test,spec}.{ts,tsx}', 'src/**/*.{test,spec}.{ts,tsx}'],
   },
+  // admin-dashboard PR1: `Role` and `UserRole` are public type
+  // anchors required by design D8 (typed role union + Zod enum at
+  // boundary). They are consumed by PR2 (AdminShell / RSC layout)
+  // which this PR does not touch. Knip can't see cross-PR
+  // consumers, so we list the file as intentionally unused at
+  // this slice boundary. The entry will be removed after PR2
+  // lands and the shell imports them.
+  ignore: ['src/types/auth.ts'],
 };
 
 export default config;

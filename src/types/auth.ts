@@ -53,7 +53,7 @@ export interface LoginCredentials {
  * `isPrivilegedRole` from `@/lib/auth/roles` — the runtime guard
  * returns the `Role` literal subset.
  */
-export interface AuthUser {
+interface AuthUser {
   id: string;
   email: string;
   role: UserRole;

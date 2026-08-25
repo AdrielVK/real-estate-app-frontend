@@ -49,7 +49,7 @@ import { decodeAccessTokenPayload } from '@/lib/auth/jwt';
  * "show the login entry point" and the header does not need any
  * further information.
  */
-export interface AnonymousSession {
+interface AnonymousSession {
   readonly state: 'anonymous';
 }
 
@@ -60,7 +60,7 @@ export interface AnonymousSession {
  * text (no username and no email / whitespace-only). The caller
  * renders the trigger icon-only in that case.
  */
-export interface AuthenticatedSession {
+interface AuthenticatedSession {
   readonly state: 'authenticated';
   readonly displayName: string | null;
 }
