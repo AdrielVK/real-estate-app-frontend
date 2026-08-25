@@ -16,13 +16,13 @@
  *   `hidden lg:flex`); the MobileNav handles <lg.
  *
  * Slice 2 (`admin-sidebar-ajustes`) added:
- *  - Title becomes a single `<h2>Panel de administrador</h2>` line —
- *    the legacy `<p>Real State</p>` eyebrow is gone.
+ *  - Title becomes a single `<h2>casal propiedades</h2>` line —
+ *    the legacy `Panel de administrador` is replaced by the brand.
  *  - The nav `<ul>` carries `list-none`; the decorative dot span
  *    renders ONLY on the active link (inactive links have NO dot).
- *  - The footer places a `ThemeSwitch` between `UserBlock` and the
- *    logout button (driven by lifted `theme` + `onToggleTheme` props
- *    from `AdminShell`).
+ *  - The header places a `ThemeSwitch` next to the title (driven by
+ *    lifted `theme` + `onToggleTheme` props from `AdminShell`).
+ *  - The footer contains `UserBlock` (horizontal) + logout form.
  *
  * Behavior pinned:
  * 1. Exactly two nav links with the Spanish labels and the canonical
@@ -30,7 +30,7 @@
  * 2. `aria-current="page"` is set on the link matching the active path,
  *    NOT on the inactive one (mock `usePathname`).
  * 3. The UserBlock identity strip renders the resolved `displayName`
- *    and `role` from the `user` prop.
+ *    and `role` from the `user` prop (horizontal layout).
  * 4. The logout form's `action` is the `onLogout` prop (RSC server
  *    action passed in by the layout).
  * 5. A null `user` falls back to a safe default (no crash, role badge
@@ -39,10 +39,10 @@
  *    `<h2>` (slice 2).
  * 7. The decorative dot indicator is rendered only on the active
  *    link (slice 2) — not on inactive links.
- * 8. The footer order is `UserBlock` → `ThemeSwitch` → logout
- *    button (slice 2).
- * 9. The header is a single `<h2>Panel de administrador</h2>` — the
- *    "Real State" eyebrow MUST be gone (slice 2).
+ * 8. The header order is `casal propiedades` title + `ThemeSwitch`
+ *    (polish fix).
+ * 9. The header is a single `<h2>casal propiedades</h2>` — the
+ *    "Panel de administrador" title is replaced.
  */
 import { render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -204,25 +204,19 @@ describe('Sidebar', () => {
   // Slice 2 — title / list / dot / switch
   // ---------------------------------------------------------------------------
 
-  it('renders a single <h2> with the exact title "Panel de administrador" (slice 2)', () => {
+  it('renders a single <h2> with the exact title "casal propiedades" (polish)', () => {
     renderSidebar();
 
-    // The heading is a section landmark for AT users. The exact casing
-    // is part of the spec contract: lowercase "de", no trailing period.
-    const heading = screen.getByRole('heading', { level: 2, name: 'Panel de administrador' });
+    const heading = screen.getByRole('heading', { level: 2, name: 'casal propiedades' });
     expect(heading).toBeInTheDocument();
     expect(heading.tagName.toLowerCase()).toBe('h2');
   });
 
-  it('does NOT render the legacy "Real State" eyebrow (slice 2)', () => {
+  it('does NOT render the legacy "Panel de administrador" title (polish)', () => {
     renderSidebar();
 
-    // The brand eyebrow from the old two-line block must be gone. We
-    // assert with a precise text query — `queryByText` returns null
-    // when the element is absent, which is exactly what we want.
+    expect(screen.queryByText(/^Panel de administrador$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Real State$/)).not.toBeInTheDocument();
-    // The legacy secondary line `Admin` was a `<p>` and would also be
-    // gone with the title replacement.
     expect(screen.queryByText(/^Admin$/)).not.toBeInTheDocument();
   });
 
@@ -254,28 +248,24 @@ describe('Sidebar', () => {
     expect(inactiveDot).toBeNull();
   });
 
-  it('places the theme switch between UserBlock and the logout button in the footer (slice 2)', () => {
+  it('places the theme switch next to the title in the header (polish)', () => {
+    renderSidebar();
+
+    const heading = screen.getByRole('heading', { level: 2, name: 'casal propiedades' });
+    const header = heading.closest('div');
+    expect(header).not.toBeNull();
+    const themeSwitch = within(header as HTMLElement).getByRole('switch');
+    expect(themeSwitch).toBeInTheDocument();
+  });
+
+  it('keeps the footer as UserBlock + logout without a theme switch (polish)', () => {
     renderSidebar();
 
     const footer = screen.getByRole('contentinfo');
     expect(footer).toBeInTheDocument();
-
-    // DOM order check — RTL returns elements in document order so
-    // we can compare by index. The contract is: UserBlock → Switch
-    // → logout. A regression that puts the switch in the header or
-    // after the logout button would break this.
-    const userBlock = within(footer).getByTestId('user-block');
-    const themeSwitch = within(footer).getByRole('switch');
-    const logoutButton = within(footer).getByRole('button', { name: 'Cerrar sesión' });
-
-    const all = Array.from(footer.querySelectorAll('*'));
-    const userBlockIndex = all.indexOf(userBlock);
-    const switchIndex = all.indexOf(themeSwitch);
-    const logoutIndex = all.indexOf(logoutButton);
-
-    expect(userBlockIndex).toBeGreaterThanOrEqual(0);
-    expect(switchIndex).toBeGreaterThan(userBlockIndex);
-    expect(logoutIndex).toBeGreaterThan(switchIndex);
+    expect(within(footer).getByTestId('user-block')).toBeInTheDocument();
+    expect(within(footer).getByRole('button', { name: 'Cerrar sesión' })).toBeInTheDocument();
+    expect(within(footer).queryByRole('switch')).not.toBeInTheDocument();
   });
 
   it('renders the theme switch with aria-checked mirroring the theme prop (slice 2)', () => {

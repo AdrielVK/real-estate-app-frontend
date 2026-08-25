@@ -37,7 +37,10 @@ export interface UserBlockProps {
  */
 export function UserBlock({ displayName, userRole, className }: UserBlockProps) {
   return (
-    <div data-testid="user-block" className={cn('flex flex-col gap-0.5 text-sm', className)}>
+    <div
+      data-testid="user-block"
+      className={cn('flex flex-row items-center gap-2 text-sm', className)}
+    >
       <span data-testid="user-block-name" className="font-medium leading-tight">
         {displayName ?? ''}
       </span>
