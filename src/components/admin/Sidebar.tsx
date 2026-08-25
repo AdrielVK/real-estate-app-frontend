@@ -108,8 +108,9 @@ export function Sidebar({ user, onLogout, theme, onToggleTheme, className }: Sid
         className,
       )}
     >
-      <div className="border-b border-sidebar-border px-6 py-5">
-        <h2 className="text-base font-semibold tracking-tight">Panel de administrador</h2>
+      <div className="flex items-center justify-between gap-3 border-b border-sidebar-border px-6 py-5">
+        <h2 className="text-base font-semibold tracking-tight">casal propiedades</h2>
+        <ThemeSwitch theme={theme} onToggle={onToggleTheme} />
       </div>
 
       <nav aria-label="Navegación de administración" className="flex-1 px-3 py-4">
@@ -145,7 +146,6 @@ export function Sidebar({ user, onLogout, theme, onToggleTheme, className }: Sid
 
       <footer className="flex flex-col gap-3 border-t border-sidebar-border px-4 py-4">
         <UserBlock displayName={effectiveUser.displayName} userRole={effectiveUser.role} />
-        <ThemeSwitch theme={theme} onToggle={onToggleTheme} />
         <form action={onLogout} className="flex">
           <Button type="submit" variant="outline" size="sm" className="w-full">
             Cerrar sesión

@@ -116,15 +116,18 @@ export function AdminMobileNav({
         className,
       )}
     >
-      <Link
-        href="/admin"
-        className="flex items-center gap-2 rounded-2xl focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-      >
-        <span className="grid size-8 place-items-center rounded-2xl bg-primary text-primary-foreground">
-          C
-        </span>
-        <span className="text-sm font-semibold tracking-tight">Real State — Admin</span>
-      </Link>
+      <div className="flex items-center gap-3">
+        <Link
+          href="/admin"
+          className="flex items-center gap-2 rounded-2xl focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+        >
+          <span className="grid size-8 place-items-center rounded-2xl bg-primary text-primary-foreground">
+            C
+          </span>
+          <span className="text-sm font-semibold tracking-tight">casal propiedades</span>
+        </Link>
+        <ThemeSwitch theme={theme} onToggle={onToggleTheme} />
+      </div>
 
       <Button
         type="button"
@@ -176,7 +179,6 @@ export function AdminMobileNav({
 
             <div className="flex flex-col gap-3 border-t border-border/70 pt-3">
               <UserBlock displayName={effectiveUser.displayName} userRole={effectiveUser.role} />
-              <ThemeSwitch theme={theme} onToggle={onToggleTheme} />
               <form action={onLogout}>
                 <Button type="submit" variant="outline" size="sm" className="w-full">
                   Cerrar sesión
