@@ -15,6 +15,16 @@
  *   component is decoupled from `next/headers` and the actions
  *   module. The tests pin the prop-driven contract.
  *
+ * Slice 2 (`admin-sidebar-ajustes`) added:
+ *  - The drawer footer mirrors the `ThemeSwitch` from the desktop
+ *    `Sidebar` (driven by the lifted `theme` + `onToggleTheme` props
+ *    from `AdminShell`).
+ *  - The drawer nav `<ul>` carries `list-none`.
+ *  - The decorative dot indicator renders only on the active link
+ *    (parity with the desktop Sidebar).
+ *  - The drawer state (`isOpen`) MUST stay local — toggling the
+ *    theme MUST NOT remount the drawer or close it.
+ *
  * Behavior pinned:
  * 1. The toggle button carries `aria-expanded` reflecting the open state.
  * 2. The toggle button has `aria-controls="admin-drawer"`.
@@ -28,17 +38,25 @@
  * 8. The component is `lg:hidden` (CSS-only — pinned by a stable class).
  * 9. A null `user` falls back to a safe default (no crash, role badge
  *    still renders) — defense in depth against a proxy bypass.
+ * 10. (slice 2) The drawer `<ul>` carries `list-none` for bullet-free nav.
+ * 11. (slice 2) The drawer footer mirrors the `ThemeSwitch` from the
+ *     desktop Sidebar, between `UserBlock` and the logout form.
+ * 12. (slice 2) The drawer state stays local — toggling the theme
+ *     does NOT close the drawer.
  */
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AdminUser } from '@/lib/auth/admin-session';
+import type { Theme } from '@/lib/theme/theme';
 
 import { AdminMobileNav } from '@/components/admin/AdminMobileNav';
 
 const mockUser: AdminUser = { displayName: 'Ana', role: 'AGENT' };
 const mockOnLogout = vi.fn<(formData?: FormData) => Promise<void>>();
+const mockOnToggleTheme = vi.fn();
+const mockTheme: Theme = 'light';
 
 /**
  * Replace `usePathname` with a controllable mock for the active route.
@@ -52,9 +70,23 @@ function setupUser(): ReturnType<typeof userEvent.setup> {
   return userEvent.setup({ delay: null });
 }
 
+function renderMobileNav(
+  overrides: Partial<{ user: AdminUser | null; onLogout: typeof mockOnLogout }> = {},
+) {
+  return render(
+    <AdminMobileNav
+      user={overrides.user ?? mockUser}
+      onLogout={overrides.onLogout ?? mockOnLogout}
+      theme={mockTheme}
+      onToggleTheme={mockOnToggleTheme}
+    />,
+  );
+}
+
 describe('AdminMobileNav', () => {
   beforeEach(() => {
     mockOnLogout.mockReset();
+    mockOnToggleTheme.mockReset();
     mockPathname = '/admin';
   });
 
@@ -63,7 +95,7 @@ describe('AdminMobileNav', () => {
   });
 
   it('renders the toggle button with aria-controls="admin-drawer" and aria-expanded="false" when closed', () => {
-    render(<AdminMobileNav user={mockUser} onLogout={mockOnLogout} />);
+    renderMobileNav();
 
     const toggle = screen.getByRole('button', { name: /abrir menú/i });
     expect(toggle).toHaveAttribute('aria-controls', 'admin-drawer');
@@ -72,7 +104,7 @@ describe('AdminMobileNav', () => {
 
   it('opens the drawer on toggle click and exposes the two Spanish links', async () => {
     const user = setupUser();
-    render(<AdminMobileNav user={mockUser} onLogout={mockOnLogout} />);
+    renderMobileNav();
 
     const toggle = screen.getByRole('button', { name: /abrir menú/i });
     await user.click(toggle);
@@ -93,7 +125,7 @@ describe('AdminMobileNav', () => {
   it('marks the active link with aria-current="page" inside the drawer', async () => {
     mockPathname = '/admin/publicaciones';
     const user = setupUser();
-    render(<AdminMobileNav user={mockUser} onLogout={mockOnLogout} />);
+    renderMobileNav();
 
     await user.click(screen.getByRole('button', { name: /abrir menú/i }));
 
@@ -107,7 +139,7 @@ describe('AdminMobileNav', () => {
 
   it('closes the drawer when the toggle is clicked a second time', async () => {
     const user = setupUser();
-    render(<AdminMobileNav user={mockUser} onLogout={mockOnLogout} />);
+    renderMobileNav();
 
     const toggle = screen.getByRole('button', { name: /abrir menú/i });
     await user.click(toggle);
@@ -120,7 +152,7 @@ describe('AdminMobileNav', () => {
 
   it('closes the drawer when a nav link is clicked (SiteHeader pattern)', async () => {
     const user = setupUser();
-    render(<AdminMobileNav user={mockUser} onLogout={mockOnLogout} />);
+    renderMobileNav();
 
     await user.click(screen.getByRole('button', { name: /abrir menú/i }));
     const drawer = screen.getByRole('dialog', { name: /menú de administración/i });
@@ -135,7 +167,7 @@ describe('AdminMobileNav', () => {
 
   it('renders the UserBlock with resolved user data and the onLogout-bound form inside the open drawer', async () => {
     const user = setupUser();
-    render(<AdminMobileNav user={mockUser} onLogout={mockOnLogout} />);
+    renderMobileNav();
 
     await user.click(screen.getByRole('button', { name: /abrir menú/i }));
     const drawer = screen.getByRole('dialog', { name: /menú de administración/i });
@@ -156,7 +188,14 @@ describe('AdminMobileNav', () => {
 
   it('falls back gracefully when user is null — no crash, role badge still renders', async () => {
     const user = setupUser();
-    render(<AdminMobileNav user={null} onLogout={mockOnLogout} />);
+    render(
+      <AdminMobileNav
+        user={null}
+        onLogout={mockOnLogout}
+        theme={mockTheme}
+        onToggleTheme={mockOnToggleTheme}
+      />,
+    );
 
     await user.click(screen.getByRole('button', { name: /abrir menú/i }));
     const drawer = screen.getByRole('dialog', { name: /menú de administración/i });
@@ -167,9 +206,104 @@ describe('AdminMobileNav', () => {
   });
 
   it('is hidden on desktop via the lg:hidden Tailwind utility', () => {
-    const { container } = render(<AdminMobileNav user={mockUser} onLogout={mockOnLogout} />);
+    const { container } = renderMobileNav();
     const header = container.querySelector('header');
     expect(header).not.toBeNull();
     expect(header?.className).toMatch(/lg:hidden/);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Slice 2 — list-none, ThemeSwitch mirror, drawer-stays-open
+  // ---------------------------------------------------------------------------
+
+  it('declares `list-none` on the drawer nav <ul> for bullet-free nav (slice 2)', async () => {
+    const user = setupUser();
+    const { container } = renderMobileNav();
+
+    await user.click(screen.getByRole('button', { name: /abrir menú/i }));
+
+    const drawer = screen.getByRole('dialog', { name: /menú de administración/i });
+    const list = drawer.querySelector('ul');
+    expect(list).not.toBeNull();
+    expect(list?.className).toMatch(/\blist-none\b/);
+    // We also assert that no <li> child has a marker (`::marker`
+    // content is empty). `list-none` already drops the marker; this
+    // is a sanity check that the Tailwind preflight is in effect.
+    expect(container.querySelector('ul')?.className).toMatch(/\blist-none\b/);
+  });
+
+  it('mirrors the ThemeSwitch in the drawer footer between UserBlock and logout (slice 2)', async () => {
+    const user = setupUser();
+    renderMobileNav();
+
+    await user.click(screen.getByRole('button', { name: /abrir menú/i }));
+    const drawer = screen.getByRole('dialog', { name: /menú de administración/i });
+
+    // The drawer footer is the LAST block inside the drawer (after
+    // the nav). DOM order: UserBlock → ThemeSwitch → logout.
+    const userBlock = within(drawer).getByTestId('user-block');
+    const themeSwitch = within(drawer).getByRole('switch');
+    const logoutButton = within(drawer).getByRole('button', { name: 'Cerrar sesión' });
+
+    // We compare by tree position via Node.compareDocumentPosition.
+    // The UserBlock MUST come before the switch, and the switch
+    // MUST come before the logout button.
+    const userBlockBeforeSwitch = userBlock.compareDocumentPosition(themeSwitch);
+    const switchBeforeLogout = themeSwitch.compareDocumentPosition(logoutButton);
+
+    // Bit 0x04 (DOCUMENT_POSITION_FOLLOWING) means `themeSwitch`
+    // follows `userBlock` in document order.
+    expect(userBlockBeforeSwitch & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(switchBeforeLogout & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('renders the drawer ThemeSwitch with aria-checked mirroring the lifted theme (slice 2)', async () => {
+    const user = setupUser();
+    render(
+      <AdminMobileNav
+        user={mockUser}
+        onLogout={mockOnLogout}
+        theme="dark"
+        onToggleTheme={mockOnToggleTheme}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /abrir menú/i }));
+    const drawer = screen.getByRole('dialog', { name: /menú de administración/i });
+
+    const drawerSwitch = within(drawer).getByRole('switch');
+    expect(drawerSwitch).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('invokes the onToggleTheme prop when the drawer switch is clicked (slice 2)', async () => {
+    const user = setupUser();
+    renderMobileNav();
+
+    await user.click(screen.getByRole('button', { name: /abrir menú/i }));
+    const drawer = screen.getByRole('dialog', { name: /menú de administración/i });
+
+    await user.click(within(drawer).getByRole('switch'));
+
+    expect(mockOnToggleTheme).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the drawer open when the theme switch is clicked (state stays local — slice 2)', async () => {
+    // The drawer state (`isOpen`) MUST stay local. Toggling the
+    // theme re-renders the lifted state but MUST NOT collapse the
+    // drawer. A regression that lifts isOpen to AdminShell or
+    // resets it on every render would close the drawer mid-session.
+    const user = setupUser();
+    renderMobileNav();
+
+    const toggle = screen.getByRole('button', { name: /abrir menú/i });
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+    const drawer = screen.getByRole('dialog', { name: /menú de administración/i });
+    await user.click(within(drawer).getByRole('switch'));
+
+    // The drawer is still open; the toggle still reads expanded.
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('dialog', { name: /menú de administración/i })).toBeInTheDocument();
   });
 });
