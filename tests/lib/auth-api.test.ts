@@ -143,6 +143,54 @@ describe('login', () => {
     expect(result).toEqual({ ok: false });
   });
 
+  it('returns ok:false when the role is outside the USER_ROLES whitelist (admin-dashboard design D8)', async () => {
+    // The login envelope schema uses `z.enum(USER_ROLES)` so an
+    // unknown role fails `safeParse` loudly. This is the design
+    // contract that prevents a backend role drift from leaking
+    // untyped values into `AuthUser.role`. The error branch is
+    // collapsed to `{ ok: false }` per the non-disclosure contract.
+    vi.stubEnv('API_BASE_URL', TEST_BASE);
+    const baseUser = successEnvelope().data!.user;
+    server.use(
+      http.post(`${TEST_BASE}/auth/login`, () =>
+        HttpResponse.json({
+          ...successEnvelope(),
+          data: {
+            accessToken: 'jwt-access',
+            refreshToken: 'uuid-refresh',
+            user: { ...baseUser, role: 'SUPERUSER' },
+          },
+        }),
+      ),
+    );
+
+    const result = await login(validCredentials);
+    expect(result).toEqual({ ok: false });
+  });
+
+  it('returns ok:false when the role is a number (defense against non-string backend values)', async () => {
+    // The schema must reject non-string shapes; the test runs through
+    // the full MSW contract so the same envelope-to-result pipeline
+    // is exercised.
+    vi.stubEnv('API_BASE_URL', TEST_BASE);
+    const baseUser = successEnvelope().data!.user;
+    server.use(
+      http.post(`${TEST_BASE}/auth/login`, () =>
+        HttpResponse.json({
+          ...successEnvelope(),
+          data: {
+            accessToken: 'jwt-access',
+            refreshToken: 'uuid-refresh',
+            user: { ...baseUser, role: 42 as unknown as string },
+          },
+        }),
+      ),
+    );
+
+    const result = await login(validCredentials);
+    expect(result).toEqual({ ok: false });
+  });
+
   it('accepts intentional extra response fields without exposing them', async () => {
     vi.stubEnv('API_BASE_URL', TEST_BASE);
     const envelope = successEnvelope();

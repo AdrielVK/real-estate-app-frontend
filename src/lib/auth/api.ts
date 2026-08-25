@@ -35,6 +35,7 @@ import { z } from 'zod';
 
 import type { LoginCredentials, LoginResult, LogoutResult, RefreshResult } from '@/types/auth';
 import { clearAuthCookies, setAuthCookies } from '@/lib/auth/cookies';
+import { USER_ROLES } from '@/lib/auth/roles';
 
 const LoginResponseSchema = z.object({
   success: z.literal(true),
@@ -44,7 +45,11 @@ const LoginResponseSchema = z.object({
     user: z.object({
       id: z.string().min(1),
       email: z.string().min(1),
-      role: z.string().min(1),
+      // `z.enum(USER_ROLES)` is the design D8 boundary: an unknown
+      // role fails `safeParse` loudly so a backend drift cannot
+      // leak untyped values into `AuthUser.role`. The failure branch
+      // collapses to `{ ok: false }` per the non-disclosure contract.
+      role: z.enum(USER_ROLES),
     }),
   }),
 });
