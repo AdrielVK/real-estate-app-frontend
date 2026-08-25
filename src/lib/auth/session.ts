@@ -77,8 +77,13 @@ export type ResolvedSession = AnonymousSession | AuthenticatedSession;
  *
  * Returns `null` for whitespace-only / non-string inputs so the
  * caller does not need to repeat the trim logic.
+ *
+ * Exported (not private) so the admin-zone `resolveAdminUser` can
+ * reuse the exact same fallback chain — both the public AuthSection
+ * and the admin UserBlock render the same display name for the same
+ * payload. Single source of truth for "what does the user see?".
  */
-function resolveDisplayName(payload: Record<string, unknown>): string | null {
+export function resolveDisplayName(payload: Record<string, unknown>): string | null {
   const rawUsername = payload.username;
   if (typeof rawUsername === 'string') {
     const trimmed = rawUsername.trim();
