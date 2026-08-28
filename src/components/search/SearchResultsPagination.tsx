@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import type { SearchFilters } from '@/types/publication';
+import { computePageWindow } from '@/lib/pagination';
 import { serializeFilters } from '@/lib/search/url';
 import { cn } from '@/lib/utils';
 
@@ -145,42 +146,12 @@ export function SearchResultsPagination({
 /*  Page-window algorithm                                               */
 /* ------------------------------------------------------------------ */
 
-type PageEntry = { kind: 'page'; page: number } | { kind: 'gap' };
-
 /**
- * Build the list of page numbers + gaps to render, always including
- * the first and last pages and a window of `windowSize` pages on
- * each side of the current page.
+ * The window algorithm lives in `@/lib/pagination` so the admin
+ * properties pagination can reuse the exact same shape. Kept as
+ * a single import above; the previous local copy was the source of
+ * truth for this file.
  */
-function computePageWindow(
-  currentPage: number,
-  totalPages: number,
-  windowSize: number,
-): PageEntry[] {
-  const result: PageEntry[] = [];
-  const from = Math.max(2, currentPage - windowSize);
-  const to = Math.min(totalPages - 1, currentPage + windowSize);
-
-  result.push({ kind: 'page', page: 1 });
-
-  if (from > 2) {
-    result.push({ kind: 'gap' });
-  }
-
-  for (let page = from; page <= to; page++) {
-    result.push({ kind: 'page', page });
-  }
-
-  if (to < totalPages - 1) {
-    result.push({ kind: 'gap' });
-  }
-
-  if (totalPages > 1) {
-    result.push({ kind: 'page', page: totalPages });
-  }
-
-  return result;
-}
 
 /* ------------------------------------------------------------------ */
 /*  Slot helpers                                                       */
