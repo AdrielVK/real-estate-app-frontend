@@ -97,7 +97,7 @@ describe('Sidebar', () => {
     expect(nav).toBeInTheDocument();
 
     const propiedades = within(nav).getByRole('link', { name: 'Propiedades' });
-    expect(propiedades).toHaveAttribute('href', '/admin/propiedades');
+    expect(propiedades).toHaveAttribute('href', '/admin/properties');
 
     const publicaciones = within(nav).getByRole('link', { name: 'Publicaciones' });
     expect(publicaciones).toHaveAttribute('href', '/admin/publicaciones');
@@ -116,8 +116,8 @@ describe('Sidebar', () => {
     expect(publicaciones).toHaveAttribute('aria-current', 'page');
   });
 
-  it('marks Propiedades as current when the active path is /admin/propiedades', () => {
-    mockPathname = '/admin/propiedades';
+  it('marks Propiedades as current when the active path is /admin/properties', () => {
+    mockPathname = '/admin/properties';
     renderSidebar();
 
     const nav = screen.getByRole('navigation', { name: /navegación de administración/i });

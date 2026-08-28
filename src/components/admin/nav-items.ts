@@ -30,6 +30,6 @@ export interface AdminNavItem {
  * (publications reference propiedades).
  */
 export const ADMIN_NAV_ITEMS: readonly AdminNavItem[] = [
-  { label: 'Propiedades', href: '/admin/propiedades' },
+  { label: 'Propiedades', href: '/admin/properties' },
   { label: 'Publicaciones', href: '/admin/publicaciones' },
 ] as const;

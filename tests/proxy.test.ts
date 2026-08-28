@@ -70,7 +70,7 @@ describe('decideGuardOutcome (pure decision function)', () => {
     const result = decideGuardOutcome({
       hasAccess: true,
       hasRefresh: false,
-      currentPath: '/admin/propiedades',
+      currentPath: '/admin/properties',
       role: 'ADMINISTRATIVE',
     });
     expect(result).toEqual({ kind: 'next' });

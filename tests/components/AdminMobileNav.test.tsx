@@ -117,7 +117,7 @@ describe('AdminMobileNav', () => {
     expect(drawer).toHaveAttribute('id', 'admin-drawer');
 
     const propiedades = within(drawer).getByRole('link', { name: 'Propiedades' });
-    expect(propiedades).toHaveAttribute('href', '/admin/propiedades');
+    expect(propiedades).toHaveAttribute('href', '/admin/properties');
 
     const publicaciones = within(drawer).getByRole('link', { name: 'Publicaciones' });
     expect(publicaciones).toHaveAttribute('href', '/admin/publicaciones');
