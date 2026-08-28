@@ -6,10 +6,12 @@
  * import via `@/components/admin/properties` (single import path)
  * instead of reaching into individual files.
  *
- * The barrel ships in two slices:
- * - **PR 2 (this file)**: `PropertyCard`, `PropertyToolbar`.
- * - **PR 3 (later)**: `PropertyPagination` will be added once the
- *   windowed pagination component lands.
+ * Slice history:
+ * - **PR 2**: `PropertyCard`, `PropertyToolbar`.
+ * - **PR 3**: `PropertyPagination` (windowed URL-driven control
+ *   for the admin listing, reusing `computePageWindow` from
+ *   `@/lib/pagination`).
  */
 export { PropertyCard } from './PropertyCard';
+export { PropertyPagination } from './PropertyPagination';
 export { PropertyToolbar } from './PropertyToolbar';
