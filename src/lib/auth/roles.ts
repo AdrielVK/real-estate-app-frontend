@@ -89,3 +89,42 @@ export type UserRole = (typeof USER_ROLES)[number];
 export function isPrivilegedRole(value: unknown): value is PrivilegedRole {
   return typeof value === 'string' && (PRIVILEGED_ROLES as readonly string[]).includes(value);
 }
+
+/**
+ * Roles that may CREATE properties (see `admin-property-skeleton`
+ * spec "Role Predicate" / "Role-Gated Create Affordance"). Pinned
+ * as a strict whitelist so adding a new privileged role does not
+ * silently grant write access.
+ *
+ * Why ADMINISTRATIVE is NOT a creator:
+ * - ADMINISTRATIVE is the read+manage role (publish/unpublish,
+ *   moderate) but does not own listings. Only ADMIN and AGENT
+ *   author properties. The toolbar CTA is gated on this predicate.
+ */
+export const PROPERTY_CREATOR_ROLES = ['ADMIN', 'AGENT'] as const;
+export type PropertyCreatorRole = (typeof PROPERTY_CREATOR_ROLES)[number];
+
+/**
+ * Predicate that decides whether a user role may see the
+ * "Crear propiedad" CTA. True ONLY for `ADMIN` and `AGENT`; every
+ * other input — including privileged-but-non-creator roles like
+ * `ADMINISTRATIVE`, the non-privileged `CLIENT`, and any non-string
+ * payload — returns `false` (fail-closed).
+ *
+ * Why fail-closed?
+ * - The toolbar MUST NOT show a CTA the user cannot honor; a
+ *   server-rendered `Link` to `/admin/properties/create` followed
+ *   by a 403 from the API is a worse UX than a missing button.
+ */
+export function canCreateProperty(role: unknown): boolean {
+  return typeof role === 'string' && (PROPERTY_CREATOR_ROLES as readonly string[]).includes(role);
+}
+
+/**
+ * Alias of `isPrivilegedRole` so call sites in RSC pages and the
+ * admin toolbar read in domain terms: `canViewProperties(user.role)`
+ * instead of `isPrivilegedRole(user.role)`. The alias keeps the
+ * type-guard signature so RSC consumers retain their narrowing
+ * (`if (canViewProperties(role)) { ... }`).
+ */
+export const canViewProperties: typeof isPrivilegedRole = isPrivilegedRole;

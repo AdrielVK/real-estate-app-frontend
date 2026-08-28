@@ -8,6 +8,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  canCreateProperty,
+  canViewProperties,
   isPrivilegedRole,
   PRIVILEGED_ROLES,
   type Role,
@@ -113,5 +115,108 @@ describe('type-level role unions', () => {
     expect(isPrivilegedRole(accepted[0])).toBe(true);
     expect(isPrivilegedRole(accepted[3])).toBe(false);
     expect(accepted).toHaveLength(4);
+  });
+});
+
+describe('canCreateProperty predicate', () => {
+  // Spec "Role Predicate" / "Role-Gated Create Affordance" — only
+  // ADMIN and AGENT can create properties; ADMINISTRATIVE sees the
+  // listing without the CTA; CLIENT is not privileged at all.
+
+  it('returns true for ADMIN (creator role)', () => {
+    expect(canCreateProperty('ADMIN')).toBe(true);
+  });
+
+  it('returns true for AGENT (creator role)', () => {
+    expect(canCreateProperty('AGENT')).toBe(true);
+  });
+
+  it('returns false for ADMINISTRATIVE (privileged but not a creator)', () => {
+    // ADMINISTRATIVE can view the listing (canViewProperties) but
+    // MUST NOT see the "Crear propiedad" CTA — design D2 + spec
+    // "Non-creator privileged" scenario.
+    expect(canCreateProperty('ADMINISTRATIVE')).toBe(false);
+  });
+
+  it('returns false for CLIENT (non-privileged)', () => {
+    expect(canCreateProperty('CLIENT')).toBe(false);
+  });
+
+  it('returns false for null (fail-closed)', () => {
+    expect(canCreateProperty(null)).toBe(false);
+  });
+
+  it('returns false for undefined (fail-closed)', () => {
+    expect(canCreateProperty(undefined)).toBe(false);
+  });
+
+  it('returns false for non-string inputs (number, object, array, boolean)', () => {
+    // Same defense as `isPrivilegedRole` — the function must hold
+    // against every runtime shape the JWT claim could carry.
+    expect(canCreateProperty(42)).toBe(false);
+    expect(canCreateProperty({ role: 'ADMIN' })).toBe(false);
+    expect(canCreateProperty(['ADMIN'])).toBe(false);
+    expect(canCreateProperty(true)).toBe(false);
+    expect(canCreateProperty('')).toBe(false);
+  });
+
+  it('returns false for unknown / future role strings (fail-closed)', () => {
+    expect(canCreateProperty('SUPERUSER')).toBe(false);
+    expect(canCreateProperty('admin')).toBe(false); // case-sensitive
+  });
+});
+
+describe('canViewProperties alias', () => {
+  // Spec "Role Predicate" — `canViewProperties` is an alias of
+  // `isPrivilegedRole` so the call site reads in domain terms.
+  // The alias MUST keep the type-guard signature (no widening)
+  // so call sites can narrow `unknown` to `PrivilegedRole`.
+
+  it('returns true for every privileged role (mirrors isPrivilegedRole)', () => {
+    for (const role of PRIVILEGED_ROLES) {
+      expect(canViewProperties(role)).toBe(true);
+    }
+  });
+
+  it('returns true for ADMINISTRATIVE (the third privileged role)', () => {
+    // Pin the "non-creator privileged" scenario explicitly so a
+    // future refactor that narrows the list cannot silently drop it.
+    expect(canViewProperties('ADMINISTRATIVE')).toBe(true);
+  });
+
+  it('returns false for CLIENT (non-privileged)', () => {
+    expect(canViewProperties('CLIENT')).toBe(false);
+  });
+
+  it('returns false for null / non-string inputs (same defense as isPrivilegedRole)', () => {
+    expect(canViewProperties(null)).toBe(false);
+    expect(canViewProperties(undefined)).toBe(false);
+    expect(canViewProperties(42)).toBe(false);
+    expect(canViewProperties({ role: 'ADMIN' })).toBe(false);
+  });
+
+  it('preserves the type-guard signature (narrowing unknown to PrivilegedRole)', () => {
+    // Compile-time proof: the alias must keep the same narrowing as
+    // `isPrivilegedRole`. If the alias signature ever widens to
+    // `boolean`, every RSC consumer that branches on
+    // `canViewProperties(user?.role)` would lose its type narrowing.
+    //
+    // The runtime check confirms the alias returns true for a value
+    // that is one of the three privileged literals; the narrowing
+    // itself is enforced by the `const role: Role = narrowed`
+    // assignment inside the branch (a wrong signature would fail
+    // compilation). The `else` branch throws so a regression that
+    // made the predicate return false for a known role does NOT
+    // silently "pass" with an empty test body.
+    const narrowed: unknown = 'AGENT';
+    if (canViewProperties(narrowed)) {
+      const role: Role = narrowed;
+      // Real assertion: the alias must have narrowed to 'AGENT',
+      // which is the only privileged literal the runtime anchor
+      // returns true for at this input.
+      expect([role]).toEqual(['AGENT']);
+    } else {
+      throw new Error('alias did not narrow as expected');
+    }
   });
 });
