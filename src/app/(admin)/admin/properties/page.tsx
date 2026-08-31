@@ -11,8 +11,9 @@ const TOTAL_PAGES = 5;
 
 interface PageProps {
   /**
-   * Next 16 hands the page the parsed query string. We only read
-   * `page`; the rest is left to the future filtering slice.
+   * Next 16 hands the page the parsed query string. We read `page`
+   * (clamp) and `created` (success banner after the create flow
+   * redirects here); the rest is left to the future filtering slice.
    */
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
@@ -90,6 +91,8 @@ function clampPage(raw: string | string[] | undefined, totalPages: number): numb
  *   gates the toolbar CTA.
  * - "Property Toolbar" → always present, search + filters.
  * - "Paginated Listing" → windowed pagination, URL-driven.
+ * - "Created banner" (admin-property-create-form) → `?created=1`
+ *   paints a success banner; any other value paints nothing.
  */
 export default async function AdminPropertiesPage({ searchParams }: PageProps) {
   const cookieStore = await cookies();
@@ -99,6 +102,10 @@ export default async function AdminPropertiesPage({ searchParams }: PageProps) {
 
   const params = await searchParams;
   const currentPage = clampPage(params.page, TOTAL_PAGES);
+  // Strict equality on '1': the create action's redirect is the only
+  // producer of this flag, and a forged/stale query string must not
+  // paint a success message.
+  const justCreated = params.created === '1';
 
   const allProperties = buildMockProperties();
   const start = (currentPage - 1) * PAGE_SIZE;
@@ -113,6 +120,18 @@ export default async function AdminPropertiesPage({ searchParams }: PageProps) {
           posterior.
         </p>
       </header>
+
+      {/* Success banner for the create flow (201 → redirect here with
+          `?created=1`). `role="status"` announces it to assistive tech
+          without stealing focus; tokens only, no hex. */}
+      {justCreated ? (
+        <div
+          role="status"
+          className="glass-panel rounded-xl border border-border px-4 py-3 text-sm"
+        >
+          Propiedad creada correctamente.
+        </div>
+      ) : null}
 
       <PropertyToolbar canCreate={canCreate} />
 

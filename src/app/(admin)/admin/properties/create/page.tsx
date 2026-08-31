@@ -1,42 +1,57 @@
+/**
+ * `/admin/properties/create` — RSC wrapper for the create flow.
+ *
+ * Why an RSC page (not a client guard, design D4)?
+ * - The spec pins the contract: ADMINISTRATIVE/unauthenticated must
+ *   receive NO form HTML. A client-side guard ships the form to the
+ *   browser first and hides it — the redirect has to happen on the
+ *   server, before a single form byte is serialized. `redirect`
+ *   throws `NEXT_REDIRECT`, so the island never renders for a role
+ *   the backend will reject anyway.
+ *
+ * Why re-resolve the user here (the layout already does it)?
+ * - Same reason as the listing page (see `../page.tsx`): layouts
+ *   cannot pass props to pages, and the cookie read is request-
+ *   scoped and cheap. The 3-line pipeline (cookies →
+ *   `resolveAdminUser` → `canCreateProperty`) keeps this page's
+ *   snapshot identical to the layout's within the request.
+ *
+ * Why does the island get a boolean and not the role?
+ * - Boundary minimization (design D4): the only fact the client
+ *   needs is "may this user create?". The raw role stays server-side;
+ *   the island's `canCreate=false → null` guard is defense in depth
+ *   for a mis-wired parent, not the gate itself.
+ *
+ * Chrome parity (admin-property-skeleton DELTA):
+ * - This file renders INSIDE `(admin)/admin/layout.tsx`'s
+ *   `AdminShell`. It MUST NOT add another shell — a duplicate would
+ *   render two sidebars. The heading + island sit in the same
+ *   `Container py-8` treatment as the rest of the zone.
+ */
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+
+import { resolveAdminUser } from '@/lib/auth/admin-session';
+import { canCreateProperty } from '@/lib/auth/roles';
+
+import { PropertyCreateForm } from '@/components/admin/properties';
 import { Container } from '@/components/ui/Container';
 
-/**
- * `/admin/properties/create` — RSC placeholder for the create flow.
- *
- * Why a placeholder (not a form yet)?
- * - The skeleton scope is the listing + create affordance. The
- *   real create form lands in a later change once the backend
- *   contract for property mutations ships. This page exists so the
- *   "Crear propiedad" CTA in the toolbar lands somewhere coherent
- *   — a real route the auth guard already protects, with the same
- *   chrome as the listing.
- *
- * Why an RSC (no `'use client'`)?
- * - The placeholder is a static heading + muted message. There is
- *   nothing to hydrate. Keeping it RSC preserves the
- *   "only the toolbar ships JS" boundary from the listing page.
- *
- * Why inherit the AdminShell chrome (no new shell)?
- * - Spec "Shared Admin Chrome" pins the contract: both
- *   `/admin/properties` and `/admin/properties/create` render
- *   inside `(admin)/admin/layout.tsx`, which already provides the
- *   `AdminShell`. This file MUST NOT add another shell — a
- *   duplicate shell would render two sidebars and break the layout.
- *
- * Accessibility:
- * - The heading is the first thing in the document, the muted
- *   message is a `<p>` so screen readers announce it after the
- *   heading. The route is reachable by direct URL (and the
- *   toolbar's CTA) and the auth guard stays in `proxy.ts`.
- */
-export default function AdminPropertiesCreatePage() {
+export default async function AdminPropertiesCreatePage() {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get('auth.accessToken')?.value;
+  const user = resolveAdminUser(accessToken);
+  const canCreate = canCreateProperty(user?.role);
+
+  // The gate runs BEFORE any form markup exists: `redirect` throws,
+  // so nothing below this line — and no form HTML — reaches a role
+  // that cannot honor it.
+  if (!canCreate) redirect('/admin/properties');
+
   return (
     <Container className="space-y-4 py-8">
       <h1 className="text-2xl font-semibold leading-tight sm:text-3xl">Crear propiedad</h1>
-      <p className="text-sm text-muted-foreground">
-        Próximamente: formulario de alta de propiedades. Esta vista placeholder se publica junto al
-        skeleton del listado para mantener la coherencia visual de la zona admin.
-      </p>
+      <PropertyCreateForm canCreate={canCreate} />
     </Container>
   );
 }

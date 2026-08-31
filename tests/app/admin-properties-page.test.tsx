@@ -248,4 +248,37 @@ describe('AdminPropertiesPage', () => {
     expect(current).toHaveTextContent('2');
     expect(current).toHaveAttribute('aria-current', 'page');
   });
+
+  // Spec (admin-property-create-form, task 3.6): the create action
+  // redirects to `/admin/properties?created=1`. The listing reads the
+  // flag server-side (RSC searchParams) and paints a success banner.
+  it('shows the success banner when ?created=1 is present', async () => {
+    mockCookies.mockResolvedValue(makeCookieStore('fake-jwt'));
+    mockResolveAdminUser.mockReturnValue(makeUser('ADMIN'));
+
+    const element = await AdminPropertiesPage({
+      searchParams: makeSearchParams({ created: '1' }),
+    });
+    render(element);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Propiedad creada correctamente.');
+  });
+
+  // Triangulation: the banner is the `created=1` path only. Other
+  // values (and the absent param) must not paint a success message —
+  // the listing is reachable with a stale or forged query string.
+  it.each([{ created: undefined }, { created: '0' }, { created: 'yes' }])(
+    'omits the success banner when created=$created',
+    async ({ created }) => {
+      mockCookies.mockResolvedValue(makeCookieStore('fake-jwt'));
+      mockResolveAdminUser.mockReturnValue(makeUser('ADMIN'));
+
+      const element = await AdminPropertiesPage({
+        searchParams: makeSearchParams({ created }),
+      });
+      render(element);
+
+      expect(screen.queryByRole('status')).toBeNull();
+    },
+  );
 });
