@@ -24,9 +24,17 @@
  * keeps a unique id/label association across rows.
  */
 
+import { Plus, Tag, Trash2 } from 'lucide-react';
+
 import { CHARACTERISTIC_CATEGORIES } from '@/lib/validation/property-create.schema';
 
-import { CONTROL_CLASSES, Field, FieldError } from './form-fields';
+import {
+  CONTROL_CLASSES,
+  Field,
+  FieldError,
+  SectionShell,
+  SLUG_PREVIEW_CLASSES,
+} from './form-fields';
 
 /** One etiqueta row — all strings (the schema coerces/validates). */
 export interface CharacteristicRowValues {
@@ -53,71 +61,93 @@ export function CharacteristicsSection({
   onChange,
 }: CharacteristicsSectionProps) {
   return (
-    <fieldset className="grid gap-4">
-      <legend className="text-base font-semibold">Etiquetas</legend>
-
+    <SectionShell
+      eyebrow="04 · Etiquetas"
+      title="Etiquetas"
+      description="Atributos libres que enriquecen la ficha (amenidades, servicios)."
+      hasError={Boolean(error)}
+    >
       {rows.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Sin etiquetas. Agregá la primera con el botón de abajo.
-        </p>
-      ) : null}
-
-      {rows.map((row, index) => (
-        <div
-          key={index}
-          data-testid="characteristic-row"
-          className="grid gap-4 rounded-xl border border-border p-4 sm:grid-cols-2"
-        >
-          <Field id={`characteristic-name-${index}`} label="Nombre" required>
-            <input
-              className={CONTROL_CLASSES}
-              value={row.name}
-              onChange={(event) => onChange(index, 'name', event.target.value)}
-            />
-          </Field>
-          <div className="grid content-start gap-2">
-            <Field id={`characteristic-category-${index}`} label="Categoría" required>
-              <select
-                className={CONTROL_CLASSES}
-                value={row.category}
-                onChange={(event) => onChange(index, 'category', event.target.value)}
-              >
-                <option value="">Seleccionar…</option>
-                {CHARACTERISTIC_CATEGORIES.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <p className="text-xs text-muted-foreground">
-              Slug: {row.slug === '' ? '—' : row.slug}
+        <div className="grid place-items-center gap-3 rounded-xl border border-dashed border-border bg-muted/20 px-6 py-8 text-center">
+          <span className="grid size-10 place-items-center rounded-full bg-muted text-muted-foreground">
+            <Tag aria-hidden="true" className="size-5" />
+          </span>
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Sin etiquetas aún</p>
+            <p className="mx-auto max-w-[36ch] text-xs leading-relaxed text-muted-foreground">
+              Agregá amenidades, servicios o condiciones destacadas. Cada etiqueta genera un slug
+              automático.
             </p>
           </div>
-          <div className="sm:col-span-2">
-            <button
-              type="button"
-              aria-label="Eliminar etiqueta"
-              onClick={() => onRemove(index)}
-              className="text-sm text-destructive hover:underline"
-            >
-              Eliminar
-            </button>
-          </div>
         </div>
-      ))}
+      ) : null}
+
+      {rows.length > 0 ? (
+        <div className="grid gap-3">
+          {rows.map((row, index) => (
+            <div
+              key={index}
+              data-testid="characteristic-row"
+              className="grid gap-4 rounded-xl border border-border bg-card/40 p-4 shadow-sm transition hover:shadow-md sm:grid-cols-2 motion-safe:animate-[fade-up_0.28s_var(--ease-out-strong)_both]"
+              style={{ animationDelay: `${Math.min(index * 40, 160)}ms` } as React.CSSProperties}
+            >
+              <Field id={`characteristic-name-${index}`} label="Nombre" required>
+                <input
+                  className={CONTROL_CLASSES}
+                  value={row.name}
+                  onChange={(event) => onChange(index, 'name', event.target.value)}
+                />
+              </Field>
+              <div className="grid content-start gap-2">
+                <Field id={`characteristic-category-${index}`} label="Categoría" required>
+                  <select
+                    className={CONTROL_CLASSES}
+                    value={row.category}
+                    onChange={(event) => onChange(index, 'category', event.target.value)}
+                  >
+                    <option value="">Seleccionar…</option>
+                    {CHARACTERISTIC_CATEGORIES.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <p className={SLUG_PREVIEW_CLASSES}>Slug: {row.slug === '' ? '—' : row.slug}</p>
+              </div>
+              <div className="flex justify-end sm:col-span-2">
+                <button
+                  type="button"
+                  aria-label="Eliminar etiqueta"
+                  onClick={() => onRemove(index)}
+                  className="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 text-sm font-medium text-destructive transition hover:bg-destructive/10 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                >
+                  <Trash2 aria-hidden="true" className="size-4" />
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <FieldError message={error} />
 
-      <div>
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={onAdd}
-          className="rounded-xl border border-input bg-background/40 px-4 py-2 text-sm font-medium transition focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="inline-flex min-h-[44px] cursor-pointer items-center gap-2 rounded-full border border-input bg-background/40 px-5 text-sm font-medium transition hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
         >
+          <Plus aria-hidden="true" className="size-4" />
           Agregar etiqueta
         </button>
+        {rows.length > 0 ? (
+          <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
+            {rows.length} {rows.length === 1 ? 'etiqueta' : 'etiquetas'}
+          </span>
+        ) : null}
       </div>
-    </fieldset>
+    </SectionShell>
   );
 }

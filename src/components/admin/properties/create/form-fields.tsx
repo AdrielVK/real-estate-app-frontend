@@ -112,10 +112,10 @@ export function SectionShell({
         className,
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <legend className="sr-only">{title}</legend>
+      <div aria-hidden="true" className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <p
-            aria-hidden="true"
             className={cn(
               'font-mono text-[11px] font-medium uppercase tracking-[0.14em]',
               hasError ? 'text-destructive' : 'text-muted-foreground',
@@ -123,9 +123,7 @@ export function SectionShell({
           >
             {eyebrow}
           </p>
-          <legend className="p-0 text-[15px] font-semibold leading-none tracking-tight">
-            {title}
-          </legend>
+          <p className="text-[15px] font-semibold leading-none tracking-tight">{title}</p>
           {description ? (
             <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
               {description}

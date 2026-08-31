@@ -27,7 +27,7 @@
 
 import { PROPERTY_STATUSES, PROPERTY_TYPES } from '@/lib/validation/property-create.schema';
 
-import { CONTROL_CLASSES, Field } from './form-fields';
+import { CONTROL_CLASSES, Field, SectionShell } from './form-fields';
 
 /** Controlled string values for the five basic-info fields. */
 export interface BasicInfoValues {
@@ -46,9 +46,20 @@ export interface BasicInfoSectionProps {
 }
 
 export function BasicInfoSection({ values, errors, onChange }: BasicInfoSectionProps) {
+  const hasError = Boolean(
+    errors.internalCode ??
+    errors.propertyType ??
+    errors.status ??
+    errors.ownerProfileId ??
+    errors.agentProfileId,
+  );
   return (
-    <fieldset className="grid gap-4">
-      <legend className="text-base font-semibold">Datos básicos</legend>
+    <SectionShell
+      eyebrow="01 · Básico"
+      title="Datos básicos"
+      description="Identificación y tipificación de la propiedad."
+      hasError={hasError}
+    >
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
           id="internalCode"
@@ -114,6 +125,6 @@ export function BasicInfoSection({ values, errors, onChange }: BasicInfoSectionP
           />
         </Field>
       </div>
-    </fieldset>
+    </SectionShell>
   );
 }

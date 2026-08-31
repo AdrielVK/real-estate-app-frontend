@@ -20,7 +20,13 @@
  * strategy (design D2).
  */
 
-import { CONTROL_CLASSES, Field } from './form-fields';
+import { useId, useState } from 'react';
+
+import { ChevronDown } from 'lucide-react';
+
+import { cn } from '@/lib/utils';
+
+import { CONTROL_CLASSES, Field, SectionShell } from './form-fields';
 
 /** Controlled string values for the eleven address fields. */
 export interface AddressValues {
@@ -45,9 +51,41 @@ export interface AddressSectionProps {
 }
 
 export function AddressSection({ values, errors, onChange }: AddressSectionProps) {
+  const hasRequiredError = Boolean(
+    errors.addressFormatted ?? errors.addressCity ?? errors.addressCountry,
+  );
+  const hasOptionalError = Boolean(
+    errors.addressPlaceId ??
+    errors.addressStreet ??
+    errors.addressStreetNumber ??
+    errors.addressNeighborhood ??
+    errors.addressState ??
+    errors.addressPostalCode ??
+    errors.addressLatitude ??
+    errors.addressLongitude,
+  );
+  // Progressive disclosure: if any optional is filled or errored, start open so the user sees it.
+  const hasOptionalValue = Boolean(
+    values.addressPlaceId ||
+    values.addressStreet ||
+    values.addressStreetNumber ||
+    values.addressNeighborhood ||
+    values.addressState ||
+    values.addressPostalCode ||
+    values.addressLatitude ||
+    values.addressLongitude,
+  );
+  const shouldStartOpen = hasOptionalError || hasOptionalValue;
+  const [open, setOpen] = useState(shouldStartOpen);
+  const disclosureId = useId();
+
   return (
-    <fieldset className="grid gap-4">
-      <legend className="text-base font-semibold">Dirección</legend>
+    <SectionShell
+      eyebrow="02 · Dirección"
+      title="Dirección"
+      description="Ubicación principal y georreferenciación."
+      hasError={hasRequiredError || hasOptionalError}
+    >
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
           id="addressFormatted"
@@ -75,65 +113,94 @@ export function AddressSection({ values, errors, onChange }: AddressSectionProps
             onChange={(event) => onChange('addressCountry', event.target.value)}
           />
         </Field>
-        <Field id="addressPlaceId" label="Place ID" error={errors.addressPlaceId}>
-          <input
-            className={CONTROL_CLASSES}
-            value={values.addressPlaceId}
-            onChange={(event) => onChange('addressPlaceId', event.target.value)}
-          />
-        </Field>
-        <Field id="addressStreet" label="Calle" error={errors.addressStreet}>
-          <input
-            className={CONTROL_CLASSES}
-            value={values.addressStreet}
-            onChange={(event) => onChange('addressStreet', event.target.value)}
-          />
-        </Field>
-        <Field id="addressStreetNumber" label="Número" error={errors.addressStreetNumber}>
-          <input
-            className={CONTROL_CLASSES}
-            value={values.addressStreetNumber}
-            onChange={(event) => onChange('addressStreetNumber', event.target.value)}
-          />
-        </Field>
-        <Field id="addressNeighborhood" label="Barrio" error={errors.addressNeighborhood}>
-          <input
-            className={CONTROL_CLASSES}
-            value={values.addressNeighborhood}
-            onChange={(event) => onChange('addressNeighborhood', event.target.value)}
-          />
-        </Field>
-        <Field id="addressState" label="Provincia" error={errors.addressState}>
-          <input
-            className={CONTROL_CLASSES}
-            value={values.addressState}
-            onChange={(event) => onChange('addressState', event.target.value)}
-          />
-        </Field>
-        <Field id="addressPostalCode" label="Código postal" error={errors.addressPostalCode}>
-          <input
-            className={CONTROL_CLASSES}
-            value={values.addressPostalCode}
-            onChange={(event) => onChange('addressPostalCode', event.target.value)}
-          />
-        </Field>
-        <Field id="addressLatitude" label="Latitud" error={errors.addressLatitude}>
-          <input
-            className={CONTROL_CLASSES}
-            inputMode="decimal"
-            value={values.addressLatitude}
-            onChange={(event) => onChange('addressLatitude', event.target.value)}
-          />
-        </Field>
-        <Field id="addressLongitude" label="Longitud" error={errors.addressLongitude}>
-          <input
-            className={CONTROL_CLASSES}
-            inputMode="decimal"
-            value={values.addressLongitude}
-            onChange={(event) => onChange('addressLongitude', event.target.value)}
-          />
-        </Field>
       </div>
-    </fieldset>
+
+      <div className="grid gap-3">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={disclosureId}
+          onClick={() => setOpen((prev) => !prev)}
+          className="inline-flex min-h-[44px] w-fit cursor-pointer items-center gap-2 rounded-full border border-border bg-background/60 px-4 py-2 text-sm font-medium transition hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+        >
+          <ChevronDown
+            aria-hidden="true"
+            className={cn('size-4 transition-transform duration-200', open && 'rotate-180')}
+          />
+          {open ? 'Ocultar detalles opcionales' : 'Mostrar detalles opcionales (8 campos)'}
+          {hasOptionalError ? (
+            <span className="inline-flex size-2 rounded-full bg-destructive" aria-hidden="true" />
+          ) : null}
+        </button>
+
+        <div
+          id={disclosureId}
+          hidden={!open}
+          className={cn(
+            'grid gap-4 sm:grid-cols-2',
+            open && 'motion-safe:animate-[fade-up_0.28s_var(--ease-out-strong)_both]',
+          )}
+        >
+          <Field id="addressPlaceId" label="Place ID" error={errors.addressPlaceId}>
+            <input
+              className={CONTROL_CLASSES}
+              value={values.addressPlaceId}
+              onChange={(event) => onChange('addressPlaceId', event.target.value)}
+            />
+          </Field>
+          <Field id="addressStreet" label="Calle" error={errors.addressStreet}>
+            <input
+              className={CONTROL_CLASSES}
+              value={values.addressStreet}
+              onChange={(event) => onChange('addressStreet', event.target.value)}
+            />
+          </Field>
+          <Field id="addressStreetNumber" label="Número" error={errors.addressStreetNumber}>
+            <input
+              className={CONTROL_CLASSES}
+              value={values.addressStreetNumber}
+              onChange={(event) => onChange('addressStreetNumber', event.target.value)}
+            />
+          </Field>
+          <Field id="addressNeighborhood" label="Barrio" error={errors.addressNeighborhood}>
+            <input
+              className={CONTROL_CLASSES}
+              value={values.addressNeighborhood}
+              onChange={(event) => onChange('addressNeighborhood', event.target.value)}
+            />
+          </Field>
+          <Field id="addressState" label="Provincia" error={errors.addressState}>
+            <input
+              className={CONTROL_CLASSES}
+              value={values.addressState}
+              onChange={(event) => onChange('addressState', event.target.value)}
+            />
+          </Field>
+          <Field id="addressPostalCode" label="Código postal" error={errors.addressPostalCode}>
+            <input
+              className={CONTROL_CLASSES}
+              value={values.addressPostalCode}
+              onChange={(event) => onChange('addressPostalCode', event.target.value)}
+            />
+          </Field>
+          <Field id="addressLatitude" label="Latitud" error={errors.addressLatitude}>
+            <input
+              className={CONTROL_CLASSES}
+              inputMode="decimal"
+              value={values.addressLatitude}
+              onChange={(event) => onChange('addressLatitude', event.target.value)}
+            />
+          </Field>
+          <Field id="addressLongitude" label="Longitud" error={errors.addressLongitude}>
+            <input
+              className={CONTROL_CLASSES}
+              inputMode="decimal"
+              value={values.addressLongitude}
+              onChange={(event) => onChange('addressLongitude', event.target.value)}
+            />
+          </Field>
+        </div>
+      </div>
+    </SectionShell>
   );
 }

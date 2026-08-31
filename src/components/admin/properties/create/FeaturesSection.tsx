@@ -29,9 +29,10 @@
  * truth: `CONSERVATION_STATES` from the schema module).
  */
 
+import { cn } from '@/lib/utils';
 import { CONSERVATION_STATES } from '@/lib/validation/property-create.schema';
 
-import { CONTROL_CLASSES, Field } from './form-fields';
+import { CONTROL_CLASSES, Field, SectionShell } from './form-fields';
 
 /** Controlled string values for the nine feature fields. */
 export interface FeaturesValues {
@@ -64,29 +65,52 @@ export function FeaturesSection({
   onChange,
   onToggle,
 }: FeaturesSectionProps) {
-  return (
-    <fieldset className="grid gap-4">
-      <legend className="text-base font-semibold">Características físicas</legend>
+  const hasError = Boolean(
+    errors.featuresTotalAreaM2 ??
+    errors.featuresCoveredAreaM2 ??
+    errors.featuresConservationState ??
+    errors.featuresRooms ??
+    errors.featuresBedrooms ??
+    errors.featuresBathrooms ??
+    errors.featuresGarages ??
+    errors.featuresFloor ??
+    errors.featuresAgeYears,
+  );
 
-      <div className="grid gap-2">
-        <label htmlFor="featuresEnabled" className="flex items-center gap-2 text-sm font-medium">
+  return (
+    <SectionShell
+      eyebrow="03 · Física"
+      title="Características físicas"
+      description="Superficies y estado edilicio."
+      hasError={hasError && enabled}
+    >
+      <div
+        className={cn(
+          'flex flex-col gap-3 rounded-xl border px-4 py-3 transition-colors duration-200',
+          enabled ? 'border-copper/30 bg-copper/[0.06]' : 'border-border bg-muted/30',
+        )}
+      >
+        <label
+          htmlFor="featuresEnabled"
+          className="flex cursor-pointer items-center gap-2 text-sm font-medium"
+        >
           <input
             id="featuresEnabled"
             name="featuresEnabled"
             type="checkbox"
-            className="size-4 cursor-pointer accent-primary"
+            className="size-4 cursor-pointer rounded border-input accent-primary focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
             checked={enabled}
             onChange={(event) => onToggle(event.target.checked)}
           />
           Agregar características físicas
         </label>
-        <p className="text-xs text-muted-foreground">
+        <p className="max-w-[36ch] text-xs leading-relaxed text-muted-foreground">
           Opcional. Si lo dejás desactivado, la propiedad se crea sin datos físicos.
         </p>
       </div>
 
       {enabled ? (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 motion-safe:animate-[fade-up_0.28s_var(--ease-out-strong)_both]">
           <Field
             id="featuresTotalAreaM2"
             label="Superficie total (m²)"
@@ -181,7 +205,11 @@ export function FeaturesSection({
             />
           </Field>
         </div>
-      ) : null}
-    </fieldset>
+      ) : (
+        <p className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+          Activá el interruptor para cargar superficies, ambientes y estado de conservación.
+        </p>
+      )}
+    </SectionShell>
   );
 }
