@@ -619,6 +619,11 @@ async function fillValidRequiredFields(user: ReturnType<typeof setupUser>) {
   await user.type(screen.getByLabelText('País'), 'Uruguay');
 }
 
+/** Row containers in DOM order (the section's structural anchor). */
+function characteristicRows(): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('[data-testid="characteristic-row"]'));
+}
+
 describe('PropertyCreateForm', () => {
   beforeEach(() => {
     mockCreatePropertyAction.mockReset();
@@ -627,14 +632,16 @@ describe('PropertyCreateForm', () => {
     mockCreatePropertyAction.mockResolvedValue(INITIAL_ACTION_STATE);
   });
 
-  it('renders the two PR-2 fieldsets in spec order: Datos básicos, Dirección', () => {
+  it('renders the four fieldsets in spec order: Datos básicos, Dirección, Características físicas, Etiquetas', () => {
     render(<PropertyCreateForm canCreate />);
 
     const fieldsets = Array.from(document.querySelectorAll('fieldset'));
-    expect(fieldsets).toHaveLength(2);
+    expect(fieldsets).toHaveLength(4);
     expect(fieldsets.map((f) => f.querySelector('legend')?.textContent)).toEqual([
       'Datos básicos',
       'Dirección',
+      'Características físicas',
+      'Etiquetas',
     ]);
   });
 
@@ -644,8 +651,10 @@ describe('PropertyCreateForm', () => {
     const controls = Array.from(
       document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select'),
     );
-    // 5 basic-info + 11 address — exact count pins "no orphan controls".
-    expect(controls).toHaveLength(16);
+    // 5 basic-info + 11 address + 1 features toggle. With the toggle
+    // off the feature inputs are not rendered, and the characteristics
+    // section has zero rows — no orphan controls either way.
+    expect(controls).toHaveLength(17);
     for (const control of controls) {
       expect(control.id).not.toBe('');
       const labels = Array.from(control.labels ?? []);
@@ -700,7 +709,8 @@ describe('PropertyCreateForm', () => {
     // Coercion: the string "-34.6" becomes a real number (design D2).
     expect(payload.address.latitude).toBeCloseTo(-34.6, 10);
     expect(payload.address.formattedAddress).toBe('Calle 1 1234');
-    // PR 2 scope: features/characteristics are not part of the payload yet.
+    // Features toggle defaults to off and no rows were added: both
+    // keys are absent from the payload (design D7 — omit entirely).
     expect(payload.features).toBeUndefined();
     expect(payload.characteristics).toBeUndefined();
   });
@@ -772,6 +782,137 @@ describe('PropertyCreateForm', () => {
 
     expect(screen.getByLabelText('Dirección formateada')).not.toHaveAttribute('aria-invalid');
     expect(screen.queryByText('La dirección formateada es obligatoria')).not.toBeInTheDocument();
+  });
+
+  // ---- PR 3 integration: features toggle + characteristics rows ----
+
+  it('sends coerced features in the payload when the toggle is on', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await fillValidRequiredFields(user);
+    await user.click(screen.getByLabelText('Agregar características físicas'));
+    await user.type(screen.getByLabelText('Superficie total (m²)'), '80');
+    await user.type(screen.getByLabelText('Superficie cubierta (m²)'), '75');
+    await user.selectOptions(screen.getByLabelText('Estado de conservación'), 'bueno');
+    await user.type(screen.getByLabelText('Ambientes'), '4');
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+
+    expect(mockCreatePropertyAction).toHaveBeenCalledTimes(1);
+    const [, payload] = mockCreatePropertyAction.mock.calls[0];
+    // Coercion happens once, in the schema (design D2): the string
+    // "80" reaches the action as the number 80; blank counts drop.
+    expect(payload.features).toEqual({
+      totalAreaM2: 80,
+      coveredAreaM2: 75,
+      conservationState: 'bueno',
+      rooms: 4,
+    });
+    expect(payload.characteristics).toBeUndefined();
+  });
+
+  it('blocks the action and flags the feature fields when the toggle is on but areas are empty', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await fillValidRequiredFields(user);
+    await user.click(screen.getByLabelText('Agregar características físicas'));
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+
+    expect(mockCreatePropertyAction).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Superficie total (m²)')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Superficie cubierta (m²)')).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+    expect(screen.getByLabelText('Estado de conservación')).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('clears the feature errors when the toggle goes back off', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await fillValidRequiredFields(user);
+    const toggle = screen.getByLabelText('Agregar características físicas');
+    await user.click(toggle);
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+    expect(screen.getByLabelText('Superficie total (m²)')).toHaveAttribute('aria-invalid', 'true');
+
+    await user.click(toggle);
+
+    // The hidden fields cannot carry visible errors, and the stale
+    // client errors must not keep the aria-live summary lit.
+    expect(screen.queryByLabelText('Superficie total (m²)')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('');
+  });
+
+  it('derives the slug live when a characteristic name is typed', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await user.click(screen.getByRole('button', { name: 'Agregar etiqueta' }));
+    const [row] = characteristicRows();
+    expect(row).toBeDefined();
+    await user.type(within(row).getByLabelText('Nombre'), 'Pileta Grande');
+
+    expect(within(row).getByText('Slug: pileta-grande')).toBeInTheDocument();
+  });
+
+  it('sends the characteristic rows in the payload and drops removed rows', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await fillValidRequiredFields(user);
+    const add = screen.getByRole('button', { name: 'Agregar etiqueta' });
+    await user.click(add);
+    await user.click(add);
+
+    const [firstRow, secondRow] = characteristicRows();
+    expect(firstRow).toBeDefined();
+    expect(secondRow).toBeDefined();
+    await user.type(within(firstRow).getByLabelText('Nombre'), 'WiFi');
+    await user.selectOptions(within(firstRow).getByLabelText('Categoría'), 'amenidad');
+    await user.type(within(secondRow).getByLabelText('Nombre'), 'Pileta');
+    await user.selectOptions(within(secondRow).getByLabelText('Categoría'), 'servicio');
+
+    await user.click(within(secondRow).getByRole('button', { name: 'Eliminar etiqueta' }));
+    expect(characteristicRows()).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+
+    expect(mockCreatePropertyAction).toHaveBeenCalledTimes(1);
+    const [, payload] = mockCreatePropertyAction.mock.calls[0];
+    // Slug arrives pre-derived and pre-normalized (design D6).
+    expect(payload.characteristics).toEqual([{ name: 'WiFi', slug: 'wifi', category: 'amenidad' }]);
+  });
+
+  it('rejects duplicate slug + category rows before submit without calling the action', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await fillValidRequiredFields(user);
+    const add = screen.getByRole('button', { name: 'Agregar etiqueta' });
+    await user.click(add);
+    await user.click(add);
+
+    const [rowA, rowB] = characteristicRows();
+    expect(rowA).toBeDefined();
+    expect(rowB).toBeDefined();
+    // Both names slugify to `wifi` — same slug, same category.
+    await user.type(within(rowA).getByLabelText('Nombre'), 'WiFi');
+    await user.selectOptions(within(rowA).getByLabelText('Categoría'), 'amenidad');
+    await user.type(within(rowB).getByLabelText('Nombre'), 'Wifi');
+    await user.selectOptions(within(rowB).getByLabelText('Categoría'), 'amenidad');
+
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+
+    // Pre-submit guard (design D6): the client gate fails, the action
+    // never runs, and the group error explains why.
+    expect(mockCreatePropertyAction).not.toHaveBeenCalled();
+    expect(
+      screen.getByText('Ya hay una etiqueta con el mismo slug y categoría.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Revisá los campos marcados.');
   });
 
   it('renders nothing for a non-creator (fail-closed island, defense in depth)', () => {

@@ -269,6 +269,22 @@ function mapErrorEnvelope(error: {
 }
 
 /**
+ * Resolve a dot-notation issue path to the form's `FieldKey`.
+ *
+ * Exact map first; then any `characteristics.*` path (row-scoped,
+ * e.g. `characteristics.0.category`, or the group-level refine issue
+ * already in the map) collapses onto the single `characteristics`
+ * slot — the form renders one error line for the whole section, so
+ * a per-row path has no control to attach to and must NOT be
+ * dropped.
+ */
+function resolveFieldKey(path: string): FieldKey | undefined {
+  const mapped = FIELD_PATH_MAP[path];
+  if (mapped) return mapped;
+  return path.startsWith('characteristics.') ? 'characteristics' : undefined;
+}
+
+/**
  * Map a Zod issues array (server re-parse failure) to the form's
  * `FieldKey` map. Unknown paths are dropped (the form cannot render
  * them anyway).
@@ -283,7 +299,7 @@ function mapIssuesToFieldErrors(
     // is a safe per-segment coercion and the final dot-joined key
     // matches the backend's dot notation.
     const path = issue.path.map((segment) => String(segment)).join('.');
-    const key = FIELD_PATH_MAP[path];
+    const key = resolveFieldKey(path);
     if (key && !fieldErrors[key]) {
       fieldErrors[key] = issue.message;
     }
@@ -294,7 +310,8 @@ function mapIssuesToFieldErrors(
 /**
  * Map the backend's `details` object (400 VALIDATION_ERROR) to the
  * form's `FieldKey` map. The backend reports paths with the same
- * dot notation the schema uses, so the same `FIELD_PATH_MAP` works.
+ * dot notation the schema uses, so the same `FIELD_PATH_MAP` works
+ * (including the `characteristics.*` row-path collapse).
  */
 function mapDetailsToFieldErrors(
   details: Record<string, unknown>,
@@ -302,7 +319,7 @@ function mapDetailsToFieldErrors(
   const fieldErrors: Partial<Record<FieldKey, string>> = {};
   for (const [path, value] of Object.entries(details)) {
     if (typeof value !== 'string') continue;
-    const key = FIELD_PATH_MAP[path];
+    const key = resolveFieldKey(path);
     if (key && !fieldErrors[key]) {
       fieldErrors[key] = value;
     }

@@ -158,6 +158,13 @@ const characteristicSchema = z.object({
 /* -------------------------------------------------------------------------- */
 
 /**
+ * Duplicate-guard copy. Pinned verbatim by the form, action, and
+ * section tests — the string is the cross-layer contract for the
+ * `characteristics` FieldKey.
+ */
+const DUPLICATE_CHARACTERISTIC_ERROR = 'Ya hay una etiqueta con el mismo slug y categoría.';
+
+/**
  * Full payload mirror of `CreatePropertyDto`. All fields are
  * optional except those the backend marks `@IsNotEmpty()`:
  * `propertyType`, `address.formattedAddress`, `address.city`,
@@ -166,17 +173,47 @@ const characteristicSchema = z.object({
  *
  * `status` defaults to `disponible` so a fresh listing is
  * immediately visible.
+ *
+ * Why the duplicate `slug + category` check lives in the schema
+ * (not only in the form)?
+ * - The spec pins the guard as PRE-SUBMIT ("rejected pre-submit"),
+ *   and the design (D6) frames it as avoiding a 409 roundtrip. The
+ *   form gate calls `safeParse`, so a `superRefine` on the schema
+ *   makes the duplicate fail the same single validation point as
+ *   every other rule — client and server re-parse get it for free,
+ *   and there is no second gate to forget. The issue path is the
+ *   group-level `characteristics` (no single row is at fault),
+ *   which both error maps already resolve to the `characteristics`
+ *   FieldKey.
  */
-export const propertyCreateSchema = z.object({
-  internalCode: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-  propertyType: z.enum(PROPERTY_TYPES),
-  status: z.enum(PROPERTY_STATUSES).default('disponible'),
-  ownerProfileId: z.preprocess(emptyToUndefined, z.uuid().optional()),
-  agentProfileId: z.preprocess(emptyToUndefined, z.uuid().optional()),
-  address: addressSchema,
-  features: featuresSchema.optional(),
-  characteristics: z.array(characteristicSchema).optional(),
-});
+export const propertyCreateSchema = z
+  .object({
+    internalCode: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+    propertyType: z.enum(PROPERTY_TYPES),
+    status: z.enum(PROPERTY_STATUSES).default('disponible'),
+    ownerProfileId: z.preprocess(emptyToUndefined, z.uuid().optional()),
+    agentProfileId: z.preprocess(emptyToUndefined, z.uuid().optional()),
+    address: addressSchema,
+    features: featuresSchema.optional(),
+    characteristics: z.array(characteristicSchema).optional(),
+  })
+  .superRefine((data, ctx) => {
+    const seen = new Set<string>();
+    for (const row of data.characteristics ?? []) {
+      const pair = `${row.slug}\u0000${row.category}`;
+      if (seen.has(pair)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['characteristics'],
+          message: DUPLICATE_CHARACTERISTIC_ERROR,
+        });
+        // One group-level issue is enough — the form renders a single
+        // slot and a second copy would only duplicate the message.
+        return;
+      }
+      seen.add(pair);
+    }
+  });
 
 /**
  * Inferred input shape. Coerced numerics become `number`; empty

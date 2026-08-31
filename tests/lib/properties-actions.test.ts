@@ -285,6 +285,41 @@ describe('createPropertyAction — trust boundary (re-safeParse)', () => {
     expect(result.fieldErrors.featuresTotalAreaM2).toBeTruthy();
     expect(result.fieldErrors.featuresCoveredAreaM2).toBeTruthy();
   });
+
+  it('collapses a row-scoped characteristics path onto the group FieldKey without calling authFetch', async () => {
+    // Zod reports `characteristics.0.category` (numeric index). The
+    // form has no per-row error slot, so the mapper must collapse any
+    // `characteristics.*` path onto the group key instead of dropping
+    // the issue into the void.
+    const malformed = {
+      propertyType: 'casa',
+      address: { formattedAddress: 'foo', city: 'bar', country: 'AR' },
+      characteristics: [{ name: 'WiFi', slug: 'wifi', category: 'desconocida' }],
+    };
+
+    const result = await createPropertyAction(INITIAL_STATE, malformed as never);
+
+    expect(authFetchMock).not.toHaveBeenCalled();
+    expect(result.fieldErrors.characteristics).toBeTruthy();
+  });
+
+  it('surfaces the duplicate slug+category refine on the characteristics FieldKey', async () => {
+    const duplicated = {
+      propertyType: 'casa',
+      address: { formattedAddress: 'foo', city: 'bar', country: 'AR' },
+      characteristics: [
+        { name: 'WiFi', slug: 'wifi', category: 'amenidad' },
+        { name: 'Wifi', slug: 'wifi', category: 'amenidad' },
+      ],
+    };
+
+    const result = await createPropertyAction(INITIAL_STATE, duplicated as never);
+
+    expect(authFetchMock).not.toHaveBeenCalled();
+    expect(result.fieldErrors.characteristics).toBe(
+      'Ya hay una etiqueta con el mismo slug y categoría.',
+    );
+  });
 });
 
 describe('createPropertyAction — backend error mapping', () => {

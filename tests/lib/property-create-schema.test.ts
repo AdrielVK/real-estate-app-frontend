@@ -561,6 +561,34 @@ describe('propertyCreateSchema — characteristics', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('rejects two rows sharing slug + category (pre-submit duplicate guard)', () => {
+    const result = propertyCreateSchema.safeParse({
+      ...baseValidPayload(),
+      characteristics: [
+        { name: 'WiFi', slug: 'wifi', category: 'amenidad' },
+        { name: 'Wifi', slug: 'wifi', category: 'amenidad' },
+      ],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      // The issue lands on the group path — the form's `characteristics`
+      // FieldKey renders it, and the action's map resolves it too.
+      const issue = result.error.issues.find((i) => i.path.join('.') === 'characteristics');
+      expect(issue?.message).toBe('Ya hay una etiqueta con el mismo slug y categoría.');
+    }
+  });
+
+  it('accepts the same slug under different categories', () => {
+    const result = propertyCreateSchema.safeParse({
+      ...baseValidPayload(),
+      characteristics: [
+        { name: 'WiFi', slug: 'wifi', category: 'amenidad' },
+        { name: 'WiFi', slug: 'wifi', category: 'servicio' },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe('CreatePropertyInput', () => {

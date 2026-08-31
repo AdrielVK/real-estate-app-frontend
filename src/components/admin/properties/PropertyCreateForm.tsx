@@ -1,23 +1,25 @@
 /**
  * `PropertyCreateForm` — the client island for `/admin/properties/create`.
  *
- * PR 2 scope: sections 1-2 (Datos básicos, Dirección). Sections 3-4
- * (Características físicas, Etiquetas) and the RSC wrapper land in
- * PR 3; the page placeholder stays untouched until then, so this
- * component is currently only exercised by tests (tasks workload
- * table: "page still placeholder — jsdom RTL is the proof").
+ * PR 2 shipped sections 1-2 (Datos básicos, Dirección); PR 3 wires
+ * sections 3-4 (Características físicas, Etiquetas) and the RSC
+ * wrapper lands alongside this integration.
  *
  * ## What this component owns (design component tree)
  *
  * 1. Controlled state for every input, as a flat string record keyed
- *    by `FieldKey`. Inputs stay strings; the schema is the single
- *    coercion point (design D2). Manual controlled state instead of
- *    RHF (design D1 — the spec NFR bans new dependencies and ~20
- *    fields do not justify the resolver).
+ *    by `FieldKey` (plus the features toggle boolean and the
+ *    characteristics row array — neither is a "field"). Inputs stay
+ *    strings; the schema is the single coercion point (design D2).
+ *    Manual controlled state instead of RHF (design D1 — the spec NFR
+ *    bans new dependencies and ~20 fields do not justify the
+ *    resolver).
  * 2. The client Zod gate: `propertyCreateSchema.safeParse` at submit.
  *    Invalid → inline field errors + `aria-live` summary, and the
  *    server action is NEVER invoked (no fetch, no roundtrip). The
- *    server action re-validates as its own trust boundary.
+ *    duplicate `slug + category` guard is a schema `superRefine`, so
+ *    it fails through this same gate (design D6). The server action
+ *    re-validates as its own trust boundary.
  * 3. The `useActionState` wiring to `createPropertyAction`: the bound
  *    `formAction` receives the PARSED payload (coerced numbers,
  *    empty optionals dropped) so the action's re-parse is a no-op
@@ -34,10 +36,11 @@
  *
  * Why the issue-path map is duplicated from `actions.ts`?
  * - `actions.ts` is a `'use server'` module; importing anything from
- *   it into the client bundle is not allowed. The map is a 16-entry
- *   constant (PR 2 scope: basic + address leaves); PR 3 extends both
- *   copies together. The tests pin the contract end-to-end, which is
- *   what keeps the copies honest.
+ *   it into the client bundle is not allowed. The map is a 26-entry
+ *   constant (basic + address + features leaves + the
+ *   `characteristics` group slot) with the same row-path collapse;
+ *   the two copies move together. The tests pin the contract
+ *   end-to-end, which is what keeps the copies honest.
  *
  * Accessibility (spec "Design Tokens & A11y"):
  * - `aria-live="polite"` + `role="status"` summary with `min-h-5`
@@ -55,14 +58,20 @@ import { type FormEvent, startTransition, useActionState, useState } from 'react
 import type { CreatePropertyActionState, FieldKey } from '@/types/properties';
 import { createPropertyAction } from '@/lib/properties/actions';
 import { propertyCreateSchema } from '@/lib/validation/property-create.schema';
+import { slugify } from '@/lib/validation/slug';
 
 import { Button } from '@/components/ui/Button';
 
 import { AddressSection, type AddressValues } from './create/AddressSection';
 import { BasicInfoSection, type BasicInfoValues } from './create/BasicInfoSection';
+import {
+  type CharacteristicRowValues,
+  CharacteristicsSection,
+} from './create/CharacteristicsSection';
+import { FeaturesSection, type FeaturesValues } from './create/FeaturesSection';
 
-/** Full PR 2 form state — sections 3-4 extend it in PR 3. */
-type FormValues = BasicInfoValues & AddressValues;
+/** Full form state — the features fields ride the flat string record. */
+type FormValues = BasicInfoValues & AddressValues & FeaturesValues;
 
 const INITIAL_VALUES: FormValues = {
   internalCode: '',
@@ -81,7 +90,33 @@ const INITIAL_VALUES: FormValues = {
   addressPostalCode: '',
   addressLatitude: '',
   addressLongitude: '',
+  featuresTotalAreaM2: '',
+  featuresCoveredAreaM2: '',
+  featuresConservationState: '',
+  featuresRooms: '',
+  featuresBedrooms: '',
+  featuresBathrooms: '',
+  featuresGarages: '',
+  featuresFloor: '',
+  featuresAgeYears: '',
 };
+
+/**
+ * The feature `FieldKey`s, used to drop stale errors when the
+ * toggle hides their controls (a hidden field must not keep the
+ * aria-live summary lit).
+ */
+const FEATURE_FIELD_KEYS: FieldKey[] = [
+  'featuresTotalAreaM2',
+  'featuresCoveredAreaM2',
+  'featuresConservationState',
+  'featuresRooms',
+  'featuresBedrooms',
+  'featuresBathrooms',
+  'featuresGarages',
+  'featuresFloor',
+  'featuresAgeYears',
+];
 
 const INITIAL_STATE: CreatePropertyActionState = { fieldErrors: {}, formError: null };
 
@@ -92,7 +127,8 @@ const SUMMARY_ERROR = 'Revisá los campos marcados.';
  * Zod issue paths (dot notation) → the form's flat `FieldKey`. Mirrors
  * the action's `FIELD_PATH_MAP` (see duplication note above). Unknown
  * paths are dropped — the form cannot render an error for a field it
- * does not own.
+ * does not own — EXCEPT `characteristics.*` row paths, which collapse
+ * onto the group slot (see `resolveFieldKey`).
  */
 const ISSUE_PATH_TO_FIELD: Record<string, FieldKey> = {
   internalCode: 'internalCode',
@@ -111,15 +147,43 @@ const ISSUE_PATH_TO_FIELD: Record<string, FieldKey> = {
   'address.postalCode': 'addressPostalCode',
   'address.latitude': 'addressLatitude',
   'address.longitude': 'addressLongitude',
+  'features.totalAreaM2': 'featuresTotalAreaM2',
+  'features.coveredAreaM2': 'featuresCoveredAreaM2',
+  'features.conservationState': 'featuresConservationState',
+  'features.rooms': 'featuresRooms',
+  'features.bedrooms': 'featuresBedrooms',
+  'features.bathrooms': 'featuresBathrooms',
+  'features.garages': 'featuresGarages',
+  'features.floor': 'featuresFloor',
+  'features.ageYears': 'featuresAgeYears',
+  characteristics: 'characteristics',
 };
 
 /**
- * Flatten the controlled record into the nested shape the schema
- * declares. Pure function — no state reads, trivially testable, and
- * PR 3 adds `features`/`characteristics` entries here only.
+ * Resolve a dot-notation issue path to a `FieldKey`. Mirrors the
+ * action's `resolveFieldKey` exactly: exact map first, then any
+ * row-scoped `characteristics.*` path collapses onto the group slot
+ * (the section renders a single error line, not one per row).
  */
-function buildPayload(values: FormValues) {
-  return {
+function resolveFieldKey(path: string): FieldKey | undefined {
+  const mapped = ISSUE_PATH_TO_FIELD[path];
+  if (mapped) return mapped;
+  return path.startsWith('characteristics.') ? 'characteristics' : undefined;
+}
+
+/**
+ * Flatten the controlled record into the nested shape the schema
+ * declares. Pure function — no state reads. The features toggle is
+ * the payload switch (design D7): off means the `features` KEY is
+ * absent, not an empty object. Rows are only sent when at least one
+ * exists, matching `buildDto`'s whitelist downstream.
+ */
+function buildPayload(
+  values: FormValues,
+  featuresEnabled: boolean,
+  characteristics: readonly CharacteristicRowValues[],
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
     internalCode: values.internalCode,
     propertyType: values.propertyType,
     status: values.status,
@@ -139,6 +203,26 @@ function buildPayload(values: FormValues) {
       longitude: values.addressLongitude,
     },
   };
+
+  if (featuresEnabled) {
+    payload.features = {
+      totalAreaM2: values.featuresTotalAreaM2,
+      coveredAreaM2: values.featuresCoveredAreaM2,
+      conservationState: values.featuresConservationState,
+      rooms: values.featuresRooms,
+      bedrooms: values.featuresBedrooms,
+      bathrooms: values.featuresBathrooms,
+      garages: values.featuresGarages,
+      floor: values.featuresFloor,
+      ageYears: values.featuresAgeYears,
+    };
+  }
+
+  if (characteristics.length > 0) {
+    payload.characteristics = characteristics;
+  }
+
+  return payload;
 }
 
 /** First issue per field wins — same rule the action's mapper uses. */
@@ -148,7 +232,7 @@ function mapIssuesToFieldErrors(
   const fieldErrors: Partial<Record<FieldKey, string>> = {};
   for (const issue of issues) {
     const path = issue.path.map((segment) => String(segment)).join('.');
-    const key = ISSUE_PATH_TO_FIELD[path];
+    const key = resolveFieldKey(path);
     if (key && !fieldErrors[key]) {
       fieldErrors[key] = issue.message;
     }
@@ -172,8 +256,27 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
   const [state, formAction, isPending] = useActionState(createPropertyAction, INITIAL_STATE);
   const [values, setValues] = useState<FormValues>(INITIAL_VALUES);
   const [clientErrors, setClientErrors] = useState<Partial<Record<FieldKey, string>>>({});
+  // Neither of these fits the flat string record: the toggle is a
+  // boolean that decides payload SHAPE (design D7), and the rows are
+  // an array. Both live as their own state cells.
+  const [featuresEnabled, setFeaturesEnabled] = useState(false);
+  const [characteristics, setCharacteristics] = useState<CharacteristicRowValues[]>([]);
 
   if (!canCreate) return null;
+
+  /** Drop the given keys from the client-error record (clear family). */
+  const clearClientErrors = (keys: readonly FieldKey[]) => {
+    setClientErrors((prev) => {
+      const removed = new Set<string>(keys);
+      const next = Object.fromEntries(
+        Object.entries(prev).filter(([key]) => !removed.has(key)),
+      ) as Partial<Record<FieldKey, string>>;
+      // Same-reference return when nothing matched keeps React's
+      // bail-out cheap and mirrors the per-field clear-on-edit path.
+      if (Object.keys(next).length === Object.keys(prev).length) return prev;
+      return next;
+    });
+  };
 
   const handleChange = (key: FieldKey, value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -189,11 +292,43 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
     });
   };
 
+  const handleFeaturesToggle = (enabled: boolean) => {
+    setFeaturesEnabled(enabled);
+    // Turning the section off hides its controls; stale errors on
+    // hidden fields would keep the aria-live summary lit forever.
+    if (!enabled) clearClientErrors(FEATURE_FIELD_KEYS);
+  };
+
+  const handleRowChange = (index: number, key: 'name' | 'category', value: string) => {
+    setCharacteristics((prev) =>
+      prev.map((row, i) => {
+        if (i !== index) return row;
+        // Slug derives from the name (design D6): the live preview
+        // and the payload always carry the normalized form.
+        if (key === 'name') return { ...row, name: value, slug: slugify(value) };
+        return { ...row, category: value };
+      }),
+    );
+    clearClientErrors(['characteristics']);
+  };
+
+  const handleRowAdd = () => {
+    setCharacteristics((prev) => [...prev, { name: '', slug: '', category: '' }]);
+    clearClientErrors(['characteristics']);
+  };
+
+  const handleRowRemove = (index: number) => {
+    setCharacteristics((prev) => prev.filter((_, i) => i !== index));
+    clearClientErrors(['characteristics']);
+  };
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     // The client gate owns submission: the action only runs with a
     // payload that already parsed (coerced numbers, dropped empties).
     event.preventDefault();
-    const parsed = propertyCreateSchema.safeParse(buildPayload(values));
+    const parsed = propertyCreateSchema.safeParse(
+      buildPayload(values, featuresEnabled, characteristics),
+    );
     if (!parsed.success) {
       setClientErrors(mapIssuesToFieldErrors(parsed.error.issues));
       return;
@@ -226,6 +361,20 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
     >
       <BasicInfoSection values={values} errors={fieldErrors} onChange={handleChange} />
       <AddressSection values={values} errors={fieldErrors} onChange={handleChange} />
+      <FeaturesSection
+        enabled={featuresEnabled}
+        values={values}
+        errors={fieldErrors}
+        onChange={handleChange}
+        onToggle={handleFeaturesToggle}
+      />
+      <CharacteristicsSection
+        rows={characteristics}
+        error={fieldErrors.characteristics}
+        onAdd={handleRowAdd}
+        onRemove={handleRowRemove}
+        onChange={handleRowChange}
+      />
 
       {/* Reserved-space error region — see LoginForm for the rationale. */}
       <p aria-live="polite" role="status" className="min-h-5 text-sm text-destructive">
