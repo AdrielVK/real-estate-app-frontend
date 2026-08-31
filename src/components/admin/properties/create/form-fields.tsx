@@ -1,57 +1,147 @@
 /**
  * Shared form primitives for the admin property-create form.
  *
- * Why these live in `create/form-fields.tsx` (not `src/components/ui/`)?
- * - Design decision: single consumer (the create form and its sections),
- *   so they stay local to the feature — the LoginForm precedent. A
- *   `ui/` primitive would imply a second consumer that does not exist
- *   yet, and Knip would (correctly) flag the dead export surface.
+ * Redesign (ops-team job: speed + scan-able error mapping):
+ * - Tokens stay on CSS vars (`border-input`, `bg-background/40`, etc.) — no hex.
+ * - Controls keep `h-11` (44 px touch target) and gain `text-[16px] sm:text-sm`
+ *   so iOS never auto-zooms on focus (ux `readable-font-size`).
+ * - `SectionShell` is the signature element: a left-rule (copper when
+ *   active/focus-within, destructive when errored, muted otherwise) that
+ *   turns validation state into ambient spatial info for vertical scanning.
+ *   Quiet by default, the single deliberate risk the frontend-design
+ *   brief asks for.
+ * - Transitions respect `prefers-reduced-motion` via globals.css.
  *
- * Why raw `<input>`/`<select>` children instead of a controlled
- * `Field` that renders the control itself?
- * - The design pins "raw inputs with token class constants + local
- *   Field/FieldError". Sections own the control element (type, value,
- *   onChange, inputMode); `Field` owns the label association, the
- *   `id`/`name` wiring, and the ARIA error contract. `cloneElement`
- *   is the seam that keeps both halves declarative without a
- *   render-prop.
+ * Why these live in `create/form-fields.tsx` (not `src/components/ui/`)?
+ * - Single consumer (create form + its 4 sections), so they stay local to
+ *   the feature — the LoginForm precedent. A `ui/` primitive would imply
+ *   a second consumer that does not exist yet.
+ *
+ * Why raw `<input>`/`<select>` children instead of a controlled `Field`
+ * that renders the control itself?
+ * - Sections own control props (type/value/onChange/inputMode); `Field`
+ *   owns label association + `id`/`name`/`aria-*` wiring via `cloneElement`.
  *
  * Accessibility contract (spec "Design Tokens & A11y"):
- * - Every control gets an `id`; the `<label htmlFor>` matches it.
- * - Error state → `aria-invalid="true"` + `aria-describedby` pointing
- *   at the inline message, so assistive tech announces the reason.
- * - Hint (no error) → `aria-describedby` points at the hint instead,
- *   so the guidance is still attached to the control.
+ * - Every control gets `id`; `<label htmlFor>` matches it.
+ * - Error → `aria-invalid="true"` + `aria-describedby` on the inline message.
+ * - Hint (no error) → `aria-describedby` points at the hint.
  *
  * Token discipline (spec NFR "Design Token Compliance"):
  * - `border-input`, `bg-background/40`, `text-muted-foreground`,
- *   `text-destructive` via the shared constants below — no hex.
- *   `aria-invalid:border-destructive` styles the error border off the
- *   ARIA attribute itself, so visuals and semantics can never drift.
+ *   `text-destructive` only — no hex. `aria-invalid:border-destructive`
+ *   couples visuals to semantics.
  */
 
 import { cloneElement, type ReactElement, type ReactNode } from 'react';
+
+import { cn } from '@/lib/utils';
 
 /* -------------------------------------------------------------------------- */
 /* Token class constants — the single styling source for the create form.     */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Shared control classes for raw `<input>` and native `<select>`
- * elements. Mirrors the LoginForm input treatment (height, radius,
- * focus ring) so the create form reads as the same product surface.
+ * Shared control classes for raw `<input>` and native `<select>` elements.
+ * `text-[16px]` on mobile prevents iOS auto-zoom; `sm:text-sm` restores the
+ * tighter ops density on ≥640 px. `placeholder:text-muted-foreground/60`
+ * keeps guidance visible but quiet.
  */
 export const CONTROL_CLASSES =
-  'h-11 w-full rounded-xl border border-input bg-background/40 px-3 text-sm outline-none transition aria-invalid:border-destructive focus-visible:ring-3 focus-visible:ring-ring/50';
+  'h-11 min-h-[44px] w-full rounded-xl border border-input bg-background/40 px-3 text-[16px] outline-none transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-muted-foreground/60 aria-invalid:border-destructive focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 sm:text-sm';
 
-/** Label treatment — same as LoginForm's `text-sm font-medium`. */
-const LABEL_CLASSES = 'text-sm font-medium';
+/** Label treatment — `text-sm font-medium` with tight tracking for hierarchy. */
+const LABEL_CLASSES = 'text-sm font-medium leading-none tracking-tight';
 
 /** Inline field-error copy — destructive token, never hex. */
-const ERROR_CLASSES = 'text-sm text-destructive';
+const ERROR_CLASSES = 'text-sm leading-snug text-destructive';
 
 /** Optional hint copy — muted token. */
-const HINT_CLASSES = 'text-xs text-muted-foreground';
+const HINT_CLASSES = 'text-xs leading-relaxed text-muted-foreground';
+
+/** Slug/mono preview — utility face for derived system values. */
+export const SLUG_PREVIEW_CLASSES =
+  'inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2.5 py-1 font-mono text-xs text-muted-foreground';
+
+/* -------------------------------------------------------------------------- */
+/* Section chrome — the signature left-rule card                                */
+/* -------------------------------------------------------------------------- */
+
+export interface SectionShellProps {
+  /** Eyebrow step label, e.g. "01 · Básico". Rendered as aria-hidden decoration. */
+  eyebrow: string;
+  /** Visible legend text (Spanish). */
+  title: string;
+  /** Short descriptor under the legend. */
+  description?: string;
+  /** When true, paints the left-rule + header in destructive tones. */
+  hasError?: boolean;
+  /** When true, marks the section as completed in the stepper context. */
+  completed?: boolean;
+  children: ReactNode;
+  className?: string;
+}
+
+/**
+ * `SectionShell` — fieldset chrome for the redesign.
+ *
+ * Signature: a 2 px left-rule that encodes state peripherally:
+ * - default: `border-border` muted
+ * - focus-within: `border-copper/50` + subtle `bg-copper/[0.04]` tint
+ * - error: `border-destructive` + `bg-destructive/[0.04]`
+ * This lets an ops user scanning vertically spot "where am I broken?"
+ * without reading every inline error. Motion is limited to border/background
+ * transitions (transform/opacity only when lists stagger).
+ */
+export function SectionShell({
+  eyebrow,
+  title,
+  description,
+  hasError,
+  children,
+  className,
+}: SectionShellProps) {
+  return (
+    <fieldset
+      className={cn(
+        'group/section relative grid gap-5 overflow-hidden rounded-2xl border bg-card/50 p-4 shadow-[0_1px_2px_color-mix(in_oklch,var(--border)_60%,transparent)] transition-[border-color,background-color,box-shadow] duration-200 sm:p-5',
+        'border-l-[3px]',
+        hasError
+          ? 'border-border border-l-destructive bg-destructive/[0.04] focus-within:border-l-destructive'
+          : 'border-border border-l-border focus-within:border-l-copper/60 focus-within:bg-copper/[0.04] focus-within:shadow-[0_8px_24px_-16px_color-mix(in_oklch,var(--primary)_30%,transparent)]',
+        className,
+      )}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <p
+            aria-hidden="true"
+            className={cn(
+              'font-mono text-[11px] font-medium uppercase tracking-[0.14em]',
+              hasError ? 'text-destructive' : 'text-muted-foreground',
+            )}
+          >
+            {eyebrow}
+          </p>
+          <legend className="p-0 text-[15px] font-semibold leading-none tracking-tight">
+            {title}
+          </legend>
+          {description ? (
+            <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
+              {description}
+            </p>
+          ) : null}
+        </div>
+        {hasError ? (
+          <span className="inline-flex items-center rounded-full bg-destructive px-2.5 py-1 text-[11px] font-medium leading-none text-white">
+            Revisar
+          </span>
+        ) : null}
+      </div>
+      {children}
+    </fieldset>
+  );
+}
 
 /* -------------------------------------------------------------------------- */
 /* FieldError                                                                 */
