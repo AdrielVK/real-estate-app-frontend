@@ -54,7 +54,6 @@ export const PROPERTY_TYPES = [
   'cochera',
   'galpon',
 ] as const;
-export type PropertyType = (typeof PROPERTY_TYPES)[number];
 
 /** `PropertyStatus` slug — 6 backend values, lowercase, verbatim. */
 export const PROPERTY_STATUSES = [
@@ -65,7 +64,6 @@ export const PROPERTY_STATUSES = [
   'en_proceso',
   'no_disponible',
 ] as const;
-export type PropertyStatus = (typeof PROPERTY_STATUSES)[number];
 
 /** `ConservationState` — 6 backend values, lowercase, verbatim. */
 export const CONSERVATION_STATES = [
@@ -76,11 +74,9 @@ export const CONSERVATION_STATES = [
   'regular',
   'a_refaccionar',
 ] as const;
-export type ConservationState = (typeof CONSERVATION_STATES)[number];
 
 /** `CharacteristicCategory` — 4 backend values, lowercase, verbatim. */
 export const CHARACTERISTIC_CATEGORIES = ['servicio', 'amenidad', 'condicion', 'material'] as const;
-export type CharacteristicCategory = (typeof CHARACTERISTIC_CATEGORIES)[number];
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */

@@ -19,8 +19,6 @@
  *   errors only on leaf paths; the union is the contract that keeps
  *   the mapper honest.
  */
-import type { CreatePropertyInput } from '@/lib/validation/property-create.schema';
-
 export type { CreatePropertyInput } from '@/lib/validation/property-create.schema';
 
 /**
@@ -75,13 +73,3 @@ export interface CreatePropertyActionState {
   fieldErrors: Partial<Record<FieldKey, string>>;
   formError: string | null;
 }
-
-/**
- * Field-keyed input shape that the action receives after the client
- * schema has coerced and trimmed the form. Identical to
- * `CreatePropertyInput` semantically; the alias exists so the
- * action's signature reads in lifecycle terms ("what the form
- * hands us") rather than DTO terms.
- */
-
-export type CreatePropertyFormInput = CreatePropertyInput;

@@ -100,9 +100,14 @@ export function isPrivilegedRole(value: unknown): value is PrivilegedRole {
  * - ADMINISTRATIVE is the read+manage role (publish/unpublish,
  *   moderate) but does not own listings. Only ADMIN and AGENT
  *   author properties. The toolbar CTA is gated on this predicate.
+ *
+ * Why module-private (not exported)?
+ * - The predicate below is the only sanctioned read path — an
+ *   exported array invites `roles.includes(...)` at call sites and
+ *   bypasses the fail-closed narrowing contract. Knip confirms no
+ *   consumer imports the raw list.
  */
-export const PROPERTY_CREATOR_ROLES = ['ADMIN', 'AGENT'] as const;
-export type PropertyCreatorRole = (typeof PROPERTY_CREATOR_ROLES)[number];
+const PROPERTY_CREATOR_ROLES = ['ADMIN', 'AGENT'] as const;
 
 /**
  * Predicate that decides whether a user role may see the
@@ -126,5 +131,13 @@ export function canCreateProperty(role: unknown): boolean {
  * instead of `isPrivilegedRole(user.role)`. The alias keeps the
  * type-guard signature so RSC consumers retain their narrowing
  * (`if (canViewProperties(role)) { ... }`).
+ *
+ * Why a wrapper function (not `const x = isPrivilegedRole`)?
+ * - Knip flags two named exports pointing at one symbol as a
+ *   duplicate export. The wrapper is a distinct symbol with the
+ *   same contract; the `auth-roles` suite pins behavior AND the
+ *   narrowing, so the wrapper cannot drift silently.
  */
-export const canViewProperties: typeof isPrivilegedRole = isPrivilegedRole;
+export function canViewProperties(value: unknown): value is PrivilegedRole {
+  return isPrivilegedRole(value);
+}

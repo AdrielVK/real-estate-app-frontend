@@ -3,7 +3,12 @@ import { Building } from 'lucide-react';
 import { Badge, type BadgeVariant } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 
-export interface PropertyCardBadge {
+/**
+ * Badge slot shape for `PropertyCard`. Module-private: consumers pass
+ * the object literal through `PropertyCardProps.badge`, so exporting
+ * the interface only widens the public surface (knip).
+ */
+interface PropertyCardBadge {
   /** Badge text (Spanish). */
   label: string;
   /** Badge tone; maps to the `Badge` primitive's `data-variant`. */
