@@ -981,3 +981,48 @@ describe('UX polish — radius + typography (REQ-001, REQ-002)', () => {
     expect(form?.className).not.toContain('rounded-2xl');
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* UX polish slice 2 — responsive grid + alignment (REQ-003 / S1)             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * REQ-003 pins the exact grid utilities (`md:grid-cols-3`, `md:grid-cols-2`,
+ * `gap-4 items-start`) as the acceptance criteria and task 2.2 instructs
+ * asserting them — jsdom cannot resolve media queries, so the class IS the
+ * only observable contract at this layer (visual QA @1024 px happens in
+ * the verify phase per the tasks workload table).
+ */
+describe('UX polish — responsive grid (REQ-003, S1)', () => {
+  it('places Estado, Código interno and Tipo in one md:grid-cols-3 row', () => {
+    render(<BasicInfoSection values={BASIC_VALUES} errors={{}} onChange={noop} />);
+
+    for (const label of ['Estado', 'Código interno', 'Tipo de propiedad']) {
+      const row = screen.getByLabelText(label).closest('[class*="md:grid-cols-3"]');
+      expect(row, `${label} must live in the 3-col grid`).not.toBeNull();
+      expect(row?.className).toContain('grid-cols-1');
+      expect(row?.className).toContain('gap-4');
+      expect(row?.className).toContain('items-start');
+    }
+  });
+
+  it('places agent and owner profiles in their own md:grid-cols-2 row', () => {
+    render(<BasicInfoSection values={BASIC_VALUES} errors={{}} onChange={noop} />);
+
+    for (const label of ['Perfil del propietario', 'Perfil del agente']) {
+      const row = screen.getByLabelText(label).closest('[class*="md:grid-cols-2"]');
+      expect(row, `${label} must live in the 2-col grid`).not.toBeNull();
+      expect(row?.className).toContain('grid-cols-1');
+      expect(row?.className).toContain('items-start');
+    }
+
+    // Triangulation: the two rows are distinct containers — profiles are
+    // NOT in the 3-col row and the short fields are NOT in the 2-col row.
+    const statusRow = screen.getByLabelText('Estado').closest('[class*="md:grid-cols-3"]');
+    const profileRow = screen
+      .getByLabelText('Perfil del agente')
+      .closest('[class*="md:grid-cols-2"]');
+    expect(statusRow).not.toBe(profileRow);
+    expect(profileRow?.querySelector('[id="status"]')).toBeNull();
+  });
+});

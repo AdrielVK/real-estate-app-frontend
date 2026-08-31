@@ -60,7 +60,21 @@ export function BasicInfoSection({ values, errors, onChange }: BasicInfoSectionP
       description="Identificación y tipificación de la propiedad."
       hasError={hasError}
     >
-      <div className="grid gap-4 sm:grid-cols-2">
+      {/* Row 1 — short fields: one 3-col line on md+, full-width stack below (REQ-003/S1). */}
+      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-3">
+        <Field id="status" label="Estado" error={errors.status}>
+          <select
+            className={CONTROL_CLASSES}
+            value={values.status}
+            onChange={(event) => onChange('status', event.target.value)}
+          >
+            {PROPERTY_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field
           id="internalCode"
           label="Código interno"
@@ -87,19 +101,9 @@ export function BasicInfoSection({ values, errors, onChange }: BasicInfoSectionP
             ))}
           </select>
         </Field>
-        <Field id="status" label="Estado" error={errors.status}>
-          <select
-            className={CONTROL_CLASSES}
-            value={values.status}
-            onChange={(event) => onChange('status', event.target.value)}
-          >
-            {PROPERTY_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
-        </Field>
+      </div>
+      {/* Row 2 — profile fields: 2-col line on md+ (REQ-003/S1). */}
+      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
         <Field
           id="ownerProfileId"
           label="Perfil del propietario"
