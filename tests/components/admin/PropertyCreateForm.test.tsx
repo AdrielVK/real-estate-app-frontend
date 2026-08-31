@@ -35,7 +35,11 @@ import {
   FeaturesSection,
   type FeaturesValues,
 } from '@/components/admin/properties/create/FeaturesSection';
-import { Field, FieldError } from '@/components/admin/properties/create/form-fields';
+import {
+  CONTROL_CLASSES,
+  Field,
+  FieldError,
+} from '@/components/admin/properties/create/form-fields';
 
 vi.mock('@/lib/properties/actions', () => ({
   createPropertyAction: vi.fn(),
@@ -926,5 +930,54 @@ describe('PropertyCreateForm', () => {
   it('renders nothing for a non-creator (fail-closed island, defense in depth)', () => {
     const { container } = render(<PropertyCreateForm canCreate={false} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* UX polish slice 1 — radius straightening + typography unification          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * These assertions pin the EXACT utility classes because the spec's
+ * requirements ARE the classes (REQ-001/REQ-002 name `rounded-md`,
+ * `rounded-lg`, `rounded-xl` and the `font-sans text-xs …` stack as the
+ * acceptance criteria — same precedent as the Dialog radius test, which
+ * predates this change and asserts `rounded-3xl` verbatim).
+ */
+describe('UX polish — radius + typography (REQ-001, REQ-002)', () => {
+  it('pins the shared control radius to rounded-md (no rounded-xl left)', () => {
+    expect(CONTROL_CLASSES).toContain('rounded-md');
+    expect(CONTROL_CLASSES).not.toContain('rounded-xl');
+  });
+
+  it('straightens the SectionShell panel to rounded-lg and un-mono the eyebrow', () => {
+    render(<BasicInfoSection values={BASIC_VALUES} errors={{}} onChange={noop} />);
+
+    const fieldset = screen.getByRole('group', { name: 'Datos básicos' });
+    expect(fieldset.className).toContain('rounded-lg');
+    expect(fieldset.className).not.toContain('rounded-2xl');
+
+    const eyebrow = screen.getByText('01 · Básico');
+    expect(eyebrow.className).toMatch(/\bfont-sans\b/);
+    expect(eyebrow.className).toMatch(/\btext-xs\b/);
+    expect(eyebrow.className).toMatch(/\btracking-tight\b/);
+    expect(eyebrow.className).toMatch(/\bfont-medium\b/);
+    expect(eyebrow.className).not.toMatch(/\bfont-mono\b/);
+    expect(eyebrow.className).not.toMatch(/tracking-\[0\.14em\]/);
+  });
+
+  it('straightens the stepper progress copy and the form shell radius', () => {
+    render(<PropertyCreateForm canCreate />);
+
+    const progress = screen.getByText(/Progreso ·/);
+    expect(progress.className).toMatch(/\bfont-sans\b/);
+    expect(progress.className).toMatch(/\btext-xs\b/);
+    expect(progress.className).toMatch(/\btracking-tight\b/);
+    expect(progress.className).not.toMatch(/\bfont-mono\b/);
+
+    const form = document.querySelector('form');
+    expect(form).not.toBeNull();
+    expect(form?.className).toContain('rounded-lg');
+    expect(form?.className).not.toContain('rounded-2xl');
   });
 });

@@ -405,13 +405,13 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
       <form
         noValidate
         onSubmit={handleSubmit}
-        className="glass-panel grid gap-6 rounded-2xl p-4 sm:p-6"
+        className="glass-panel grid gap-6 rounded-lg p-4 sm:p-6"
         style={{ scrollPaddingBottom: '88px' } as React.CSSProperties}
       >
         {/* Stepper header — ops progress at a glance */}
         <div className="grid gap-3 rounded-xl border border-border bg-card/40 px-4 py-3 sm:px-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            <p className="font-sans text-xs font-medium tracking-tight text-muted-foreground">
               Progreso · {completedSteps} de 4 secciones
             </p>
             <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">

@@ -141,7 +141,7 @@ export function Dialog({ open, onOpenChange, labelledBy, className, children }: 
       // host app's layer graph.
       style={DIALOG_STYLE}
       className={cn(
-        'glass-panel relative rounded-3xl border border-border/70 p-6',
+        'glass-panel relative rounded-xl border border-border/70 p-6',
         'max-w-lg w-[calc(100%-2rem)]',
         'backdrop:bg-black/50 backdrop:backdrop-blur-sm',
         'text-foreground',

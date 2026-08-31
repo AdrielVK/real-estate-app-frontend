@@ -141,7 +141,8 @@ describe('Dialog', () => {
   });
 
   // Visual contract — ensures the styling hooks are present.
-  it('applies the glass-panel, rounded-3xl, and backdrop classes (DIALOG-2)', () => {
+  // REQ-001 (admin-property-create-ux-polish): surface straightened 3xl→xl.
+  it('applies the glass-panel, rounded-xl, and backdrop classes (DIALOG-2, REQ-001)', () => {
     render(
       <Dialog open onOpenChange={vi.fn()}>
         body
@@ -149,7 +150,8 @@ describe('Dialog', () => {
     );
     const dialog = screen.getByRole('dialog');
     expect(dialog.className).toMatch(/\bglass-panel\b/);
-    expect(dialog.className).toMatch(/\brounded-3xl\b/);
+    expect(dialog.className).toMatch(/\brounded-xl\b/);
+    expect(dialog.className).not.toMatch(/\brounded-3xl\b/);
     expect(dialog.className).toMatch(/\bbackdrop:bg-black\/50\b/);
   });
 

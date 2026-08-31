@@ -48,7 +48,7 @@ import { cn } from '@/lib/utils';
  * keeps guidance visible but quiet.
  */
 export const CONTROL_CLASSES =
-  'h-11 min-h-[44px] w-full rounded-xl border border-input bg-background/40 px-3 text-[16px] outline-none transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-muted-foreground/60 aria-invalid:border-destructive focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 sm:text-sm';
+  'h-11 min-h-[44px] w-full rounded-md border border-input bg-background/40 px-3 text-[16px] outline-none transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-muted-foreground/60 aria-invalid:border-destructive focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 sm:text-sm';
 
 /** Label treatment — `text-sm font-medium` with tight tracking for hierarchy. */
 const LABEL_CLASSES = 'text-sm font-medium leading-none tracking-tight';
@@ -104,7 +104,7 @@ export function SectionShell({
   return (
     <fieldset
       className={cn(
-        'group/section relative grid gap-5 overflow-hidden rounded-2xl border bg-card/50 p-4 shadow-[0_1px_2px_color-mix(in_oklch,var(--border)_60%,transparent)] transition-[border-color,background-color,box-shadow] duration-200 sm:p-5',
+        'group/section relative grid gap-5 overflow-hidden rounded-lg border bg-card/50 p-4 shadow-[0_1px_2px_color-mix(in_oklch,var(--border)_60%,transparent)] transition-[border-color,background-color,box-shadow] duration-200 sm:p-5',
         'border-l-[3px]',
         hasError
           ? 'border-border border-l-destructive bg-destructive/[0.04] focus-within:border-l-destructive'
@@ -117,7 +117,7 @@ export function SectionShell({
         <div className="space-y-1">
           <p
             className={cn(
-              'font-mono text-[11px] font-medium uppercase tracking-[0.14em]',
+              'font-sans text-xs font-medium tracking-tight',
               hasError ? 'text-destructive' : 'text-muted-foreground',
             )}
           >
