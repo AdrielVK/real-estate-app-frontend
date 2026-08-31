@@ -287,7 +287,9 @@ describe('AddressSection', () => {
 
     const input = screen.getByLabelText('Dirección formateada');
     expect(input).toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByText('La dirección formateada es obligatoria')).toBeInTheDocument();
+    expect(
+      screen.getByText('La dirección formateada es obligatoria', { selector: 'p' }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -596,7 +598,7 @@ describe('CharacteristicsSection', () => {
     );
 
     expect(
-      screen.getByText('Ya hay una etiqueta con el mismo slug y categoría.'),
+      screen.getByText('Ya hay una etiqueta con el mismo slug y categoría.', { selector: 'p' }),
     ).toBeInTheDocument();
   });
 });
@@ -674,7 +676,9 @@ describe('PropertyCreateForm', () => {
 
     expect(screen.getByLabelText('Tipo de propiedad')).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByLabelText('Dirección formateada')).toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByText('La dirección formateada es obligatoria')).toBeInTheDocument();
+    expect(
+      screen.getByText('La dirección formateada es obligatoria', { selector: 'p' }),
+    ).toBeInTheDocument();
   });
 
   it('surfaces an aria-live summary with reserved space when invalid', async () => {
@@ -742,7 +746,9 @@ describe('PropertyCreateForm', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('Código interno')).toHaveAttribute('aria-invalid', 'true'),
     );
-    expect(screen.getByText('El código interno ya está en uso')).toBeInTheDocument();
+    expect(
+      screen.getByText('El código interno ya está en uso', { selector: 'p' }),
+    ).toBeInTheDocument();
   });
 
   it('disables the submit button while the action is pending', async () => {
@@ -781,7 +787,9 @@ describe('PropertyCreateForm', () => {
     await user.type(screen.getByLabelText('Dirección formateada'), 'Av. Libertador 900');
 
     expect(screen.getByLabelText('Dirección formateada')).not.toHaveAttribute('aria-invalid');
-    expect(screen.queryByText('La dirección formateada es obligatoria')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('La dirección formateada es obligatoria', { selector: 'p' }),
+    ).not.toBeInTheDocument();
   });
 
   // ---- PR 3 integration: features toggle + characteristics rows ----
@@ -910,7 +918,7 @@ describe('PropertyCreateForm', () => {
     // never runs, and the group error explains why.
     expect(mockCreatePropertyAction).not.toHaveBeenCalled();
     expect(
-      screen.getByText('Ya hay una etiqueta con el mismo slug y categoría.'),
+      screen.getByText('Ya hay una etiqueta con el mismo slug y categoría.', { selector: 'p' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Revisá los campos marcados.');
   });

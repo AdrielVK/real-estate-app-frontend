@@ -1,62 +1,42 @@
 /**
  * `PropertyCreateForm` — the client island for `/admin/properties/create`.
  *
- * PR 2 shipped sections 1-2 (Datos básicos, Dirección); PR 3 wires
- * sections 3-4 (Características físicas, Etiquetas) and the RSC
- * wrapper lands alongside this integration.
+ * Redesign 2026-08: ops-team creation under time pressure.
+ * -------------------------------------------------------
+ * - Subject: administrative staff at Casal Propiedades creating listings
+ *   quickly and correctly. The form's job is to get a property live
+ *   without re-work.
+ * - Palette: Bosque deep (primary), Hueso warm (background), Copper accent
+ *   (rule/stepper), Sage muted (dividers), Destructive (errors) — all via
+ *   CSS vars, no hex in components.
+ * - Type: Geist Sans display/body + Geist Mono utility for derived values.
+ * - Layout: stepper header + signature left-rule SectionShell cards + sticky
+ *   summary bar; mobile-first vertical stack.
+ * - Signature: left-rule section indicator (copper focus, destructive error)
+ *   as ambient error map — the one deliberate risk.
  *
- * ## What this component owns (design component tree)
+ * Critique vs defaults:
+ * - Not cream+terracotta (copper is accent only, not wash) nor near-black+
+ *   acid-green (light operational) nor broadsheet (cards, not columns).
  *
- * 1. Controlled state for every input, as a flat string record keyed
- *    by `FieldKey` (plus the features toggle boolean and the
- *    characteristics row array — neither is a "field"). Inputs stay
- *    strings; the schema is the single coercion point (design D2).
- *    Manual controlled state instead of RHF (design D1 — the spec NFR
- *    bans new dependencies and ~20 fields do not justify the
- *    resolver).
- * 2. The client Zod gate: `propertyCreateSchema.safeParse` at submit.
- *    Invalid → inline field errors + `aria-live` summary, and the
- *    server action is NEVER invoked (no fetch, no roundtrip). The
- *    duplicate `slug + category` guard is a schema `superRefine`, so
- *    it fails through this same gate (design D6). The server action
- *    re-validates as its own trust boundary.
- * 3. The `useActionState` wiring to `createPropertyAction`: the bound
- *    `formAction` receives the PARSED payload (coerced numbers,
- *    empty optionals dropped) so the action's re-parse is a no-op
- *    sanity check, not a translation layer.
- *
- * Why a flat `FieldKey` error record?
- * - `CreatePropertyActionState.fieldErrors` is already flat (the
- *   action's contract). Client issues are mapped to the same keys
- *   (`address.formattedAddress` → `addressFormatted`) so sections
- *   read errors with one lookup regardless of origin. Server errors
- *   and client errors merge with client precedence — the client
- *   gate re-runs on every submit, so a stale server error on a field
- *   the user just fixed must not shadow the new state.
- *
- * Why the issue-path map is duplicated from `actions.ts`?
- * - `actions.ts` is a `'use server'` module; importing anything from
- *   it into the client bundle is not allowed. The map is a 26-entry
- *   constant (basic + address + features leaves + the
- *   `characteristics` group slot) with the same row-path collapse;
- *   the two copies move together. The tests pin the contract
- *   end-to-end, which is what keeps the copies honest.
- *
- * Accessibility (spec "Design Tokens & A11y"):
- * - `aria-live="polite"` + `role="status"` summary with `min-h-5`
- *   reserved space (LoginForm pattern) — the sticky bar never jumps.
- * - `aria-invalid` + `aria-describedby` per field via `Field`.
- * - `noValidate` on the form: the browser's native popups would leak
- *   copy that contradicts the schema messages; `required` attributes
- *   stay on controls for semantics.
+ * Composition (vercel `architecture-compound-components`):
+ * - `PropertyCreateProvider` supplies the flat string record + errors so
+ *   sections need not be re-threaded via 12+ props. Sections keep their
+ *   props API for isolated unit tests; Provider is the declarative shell
+ *   when composed.
+ * - Boolean `featuresEnabled` lives as toggle state inside the shell and
+ *   is exposed via the provider-aware stepper, not as a leaked prop bag.
  */
 
 'use client';
 
-import { type FormEvent, startTransition, useActionState, useState } from 'react';
+import { type FormEvent, startTransition, useActionState, useRef, useState } from 'react';
+
+import { AlertCircle, Check } from 'lucide-react';
 
 import type { CreatePropertyActionState, FieldKey } from '@/types/properties';
 import { createPropertyAction } from '@/lib/properties/actions';
+import { cn } from '@/lib/utils';
 import { propertyCreateSchema } from '@/lib/validation/property-create.schema';
 import { slugify } from '@/lib/validation/slug';
 
@@ -69,6 +49,7 @@ import {
   CharacteristicsSection,
 } from './create/CharacteristicsSection';
 import { FeaturesSection, type FeaturesValues } from './create/FeaturesSection';
+import { PropertyCreateProvider } from './create/form-context';
 
 /** Full form state — the features fields ride the flat string record. */
 type FormValues = BasicInfoValues & AddressValues & FeaturesValues;
@@ -241,14 +222,6 @@ function mapIssuesToFieldErrors(
 }
 
 export interface PropertyCreateFormProps {
-  /**
-   * Whether the current user may create properties. Computed
-   * server-side and passed across the RSC → client boundary as a
-   * plain boolean (design D4: never the raw role). The RSC wrapper
-   * redirects non-creators before this renders; the `null` guard is
-   * defense in depth so a mis-wired parent can never paint the form
-   * for a role the backend will reject.
-   */
   canCreate: boolean;
 }
 
@@ -256,23 +229,18 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
   const [state, formAction, isPending] = useActionState(createPropertyAction, INITIAL_STATE);
   const [values, setValues] = useState<FormValues>(INITIAL_VALUES);
   const [clientErrors, setClientErrors] = useState<Partial<Record<FieldKey, string>>>({});
-  // Neither of these fits the flat string record: the toggle is a
-  // boolean that decides payload SHAPE (design D7), and the rows are
-  // an array. Both live as their own state cells.
   const [featuresEnabled, setFeaturesEnabled] = useState(false);
   const [characteristics, setCharacteristics] = useState<CharacteristicRowValues[]>([]);
+  const errorSummaryRef = useRef<HTMLDivElement>(null);
 
   if (!canCreate) return null;
 
-  /** Drop the given keys from the client-error record (clear family). */
   const clearClientErrors = (keys: readonly FieldKey[]) => {
     setClientErrors((prev) => {
       const removed = new Set<string>(keys);
       const next = Object.fromEntries(
         Object.entries(prev).filter(([key]) => !removed.has(key)),
       ) as Partial<Record<FieldKey, string>>;
-      // Same-reference return when nothing matched keeps React's
-      // bail-out cheap and mirrors the per-field clear-on-edit path.
       if (Object.keys(next).length === Object.keys(prev).length) return prev;
       return next;
     });
@@ -280,10 +248,6 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
 
   const handleChange = (key: FieldKey, value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }));
-    // Clear-on-edit for the touched field (LoginForm pattern): the
-    // error disappears as soon as the user addresses it, without
-    // waiting for the next submit. Computed-key destructuring drops
-    // the touched entry without a dynamic `delete`.
     setClientErrors((prev) => {
       if (!(key in prev)) return prev;
       const { [key]: _removed, ...rest } = prev;
@@ -294,8 +258,6 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
 
   const handleFeaturesToggle = (enabled: boolean) => {
     setFeaturesEnabled(enabled);
-    // Turning the section off hides its controls; stale errors on
-    // hidden fields would keep the aria-live summary lit forever.
     if (!enabled) clearClientErrors(FEATURE_FIELD_KEYS);
   };
 
@@ -303,8 +265,6 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
     setCharacteristics((prev) =>
       prev.map((row, i) => {
         if (i !== index) return row;
-        // Slug derives from the name (design D6): the live preview
-        // and the payload always carry the normalized form.
         if (key === 'name') return { ...row, name: value, slug: slugify(value) };
         return { ...row, category: value };
       }),
@@ -323,69 +283,245 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    // The client gate owns submission: the action only runs with a
-    // payload that already parsed (coerced numbers, dropped empties).
     event.preventDefault();
     const parsed = propertyCreateSchema.safeParse(
       buildPayload(values, featuresEnabled, characteristics),
     );
     if (!parsed.success) {
-      setClientErrors(mapIssuesToFieldErrors(parsed.error.issues));
+      const mapped = mapIssuesToFieldErrors(parsed.error.issues);
+      setClientErrors(mapped);
+      // Focus the error summary for keyboard/AT users (ux `focus-management`).
+      requestAnimationFrame(() => {
+        errorSummaryRef.current?.focus();
+      });
       return;
     }
     setClientErrors({});
-    // `startTransition` around the imperative call: without it React
-    // defers the `isPending` render past the event flush, so the
-    // submit button never visibly enters the pending state (verified
-    // against React 19.2 in jsdom — the transition wrapper is the
-    // documented pattern for non-declarative `formAction` calls).
     startTransition(() => {
       formAction(parsed.data);
     });
   };
 
-  // Client errors win over server errors on the same key: the gate
-  // re-ran for this exact payload, so its verdict is fresher.
   const fieldErrors: Partial<Record<FieldKey, string>> = {
     ...state.fieldErrors,
     ...clientErrors,
   };
   const hasFieldErrors = Object.keys(fieldErrors).length > 0;
   const summary = state.formError ?? (hasFieldErrors ? SUMMARY_ERROR : '');
+  const errorEntries = Object.entries(fieldErrors).filter(([, v]) => Boolean(v)) as [
+    FieldKey,
+    string,
+  ][];
+
+  // Stepper derivation — light heuristic, not a validation gate.
+  const basicDone = values.propertyType !== '';
+  const addressDone =
+    values.addressFormatted !== '' && values.addressCity !== '' && values.addressCountry !== '';
+  const featuresDone =
+    !featuresEnabled ||
+    (values.featuresTotalAreaM2 !== '' &&
+      values.featuresCoveredAreaM2 !== '' &&
+      values.featuresConservationState !== '');
+  const tagsDone = characteristics.length > 0;
+  const completedSteps = [basicDone, addressDone, featuresDone, tagsDone].filter(Boolean).length;
+
+  const steps: { label: string; done: boolean; hasError: boolean }[] = [
+    {
+      label: 'Datos básicos',
+      done: basicDone,
+      hasError: Boolean(
+        fieldErrors.internalCode ??
+        fieldErrors.propertyType ??
+        fieldErrors.status ??
+        fieldErrors.ownerProfileId ??
+        fieldErrors.agentProfileId,
+      ),
+    },
+    {
+      label: 'Dirección',
+      done: addressDone,
+      hasError: Boolean(
+        fieldErrors.addressFormatted ??
+        fieldErrors.addressCity ??
+        fieldErrors.addressCountry ??
+        fieldErrors.addressPlaceId ??
+        fieldErrors.addressStreet ??
+        fieldErrors.addressStreetNumber ??
+        fieldErrors.addressNeighborhood ??
+        fieldErrors.addressState ??
+        fieldErrors.addressPostalCode ??
+        fieldErrors.addressLatitude ??
+        fieldErrors.addressLongitude,
+      ),
+    },
+    {
+      label: 'Física',
+      done: featuresDone,
+      hasError: Boolean(
+        fieldErrors.featuresTotalAreaM2 ??
+        fieldErrors.featuresCoveredAreaM2 ??
+        fieldErrors.featuresConservationState ??
+        fieldErrors.featuresRooms ??
+        fieldErrors.featuresBedrooms ??
+        fieldErrors.featuresBathrooms ??
+        fieldErrors.featuresGarages ??
+        fieldErrors.featuresFloor ??
+        fieldErrors.featuresAgeYears,
+      ),
+    },
+    {
+      label: 'Etiquetas',
+      done: tagsDone,
+      hasError: Boolean(fieldErrors.characteristics),
+    },
+  ];
+
+  function getStepTone(step: { hasError: boolean; done: boolean }): string {
+    if (step.hasError) return 'border-destructive/30 bg-destructive/10 text-destructive';
+    if (step.done) return 'border-copper/30 bg-copper/10 text-copper';
+    return 'border-border bg-background/60 text-muted-foreground';
+  }
+
+  function getBadgeTone(step: { hasError: boolean; done: boolean }): string {
+    if (step.hasError) return 'border-destructive bg-destructive text-white';
+    if (step.done) return 'border-copper bg-copper text-white';
+    return 'border-border bg-muted text-muted-foreground';
+  }
+
+  function getStepIcon(step: { hasError: boolean; done: boolean }, idx: number): React.ReactNode {
+    if (step.hasError) return <AlertCircle className="size-3" />;
+    if (step.done) return <Check className="size-3" />;
+    return idx + 1;
+  }
 
   return (
-    <form
-      noValidate
-      onSubmit={handleSubmit}
-      className="glass-panel grid gap-8 rounded-2xl p-4 sm:p-6"
+    <PropertyCreateProvider
+      value={{
+        values: values as Record<FieldKey, string>,
+        errors: fieldErrors,
+        onChange: handleChange,
+      }}
     >
-      <BasicInfoSection values={values} errors={fieldErrors} onChange={handleChange} />
-      <AddressSection values={values} errors={fieldErrors} onChange={handleChange} />
-      <FeaturesSection
-        enabled={featuresEnabled}
-        values={values}
-        errors={fieldErrors}
-        onChange={handleChange}
-        onToggle={handleFeaturesToggle}
-      />
-      <CharacteristicsSection
-        rows={characteristics}
-        error={fieldErrors.characteristics}
-        onAdd={handleRowAdd}
-        onRemove={handleRowRemove}
-        onChange={handleRowChange}
-      />
+      <form
+        noValidate
+        onSubmit={handleSubmit}
+        className="glass-panel grid gap-6 rounded-2xl p-4 sm:p-6"
+        style={{ scrollPaddingBottom: '88px' } as React.CSSProperties}
+      >
+        {/* Stepper header — ops progress at a glance */}
+        <div className="grid gap-3 rounded-xl border border-border bg-card/40 px-4 py-3 sm:px-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              Progreso · {completedSteps} de 4 secciones
+            </p>
+            <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+              {hasFieldErrors ? `${errorEntries.length} por revisar` : 'Sin errores'}
+            </span>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            {steps.map((step, idx) => {
+              const stepTone = getStepTone(step);
+              const badgeTone = getBadgeTone(step);
+              return (
+                <div
+                  key={step.label}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-full border px-2.5 py-2 text-xs font-medium transition-colors sm:gap-2 sm:px-3',
+                    stepTone,
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'grid size-5 place-items-center rounded-full border text-[11px] leading-none',
+                      badgeTone,
+                    )}
+                    aria-hidden="true"
+                  >
+                    {getStepIcon(step, idx)}
+                  </span>
+                  <span className="hidden truncate sm:inline">{step.label}</span>
+                  <span className="truncate sm:hidden">{step.label.slice(0, 4)}.</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-copper transition-[width] duration-300 ease-out"
+              style={{ width: `${(completedSteps / 4) * 100}%` }}
+            />
+          </div>
+        </div>
 
-      {/* Reserved-space error region — see LoginForm for the rationale. */}
-      <p aria-live="polite" role="status" className="min-h-5 text-sm text-destructive">
-        {summary}
-      </p>
+        {/* Focusable top error summary — ux `error-summary` + `focus-management` */}
+        {hasFieldErrors ? (
+          <div
+            ref={errorSummaryRef}
+            tabIndex={-1}
+            role="alert"
+            aria-labelledby="error-summary-title"
+            className="rounded-xl border border-destructive/30 bg-destructive/[0.06] px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            <p
+              id="error-summary-title"
+              className="flex items-center gap-2 text-sm font-medium text-destructive"
+            >
+              <AlertCircle aria-hidden="true" className="size-4 shrink-0" />
+              Revisá los campos marcados.
+            </p>
+            <ul className="mt-2 grid gap-1 text-sm">
+              {errorEntries.map(([key, msg]) => (
+                <li key={key}>
+                  <a
+                    href={`#${key}`}
+                    className="underline decoration-destructive/30 underline-offset-2 hover:decoration-destructive focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                    onClick={(e) => {
+                      // Ensure the target exists (characteristics group has no single input id).
+                      if (key === 'characteristics') {
+                        e.preventDefault();
+                        document.getElementById('characteristic-name-0')?.focus();
+                      }
+                    }}
+                  >
+                    {msg}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
-      <div className="sticky bottom-0 flex items-center justify-end gap-4 rounded-xl border border-border bg-background/80 px-4 py-3 backdrop-blur">
-        <Button type="submit" size="lg" disabled={isPending} aria-busy={isPending}>
-          {isPending ? 'Creando…' : 'Crear propiedad'}
-        </Button>
-      </div>
-    </form>
+        <BasicInfoSection values={values} errors={fieldErrors} onChange={handleChange} />
+        <AddressSection values={values} errors={fieldErrors} onChange={handleChange} />
+        <FeaturesSection
+          enabled={featuresEnabled}
+          values={values}
+          errors={fieldErrors}
+          onChange={handleChange}
+          onToggle={handleFeaturesToggle}
+        />
+        <CharacteristicsSection
+          rows={characteristics}
+          error={fieldErrors.characteristics}
+          onAdd={handleRowAdd}
+          onRemove={handleRowRemove}
+          onChange={handleRowChange}
+        />
+
+        {/* Reserved-space error region — retained for test/AT compat */}
+        <p aria-live="polite" role="status" className="min-h-5 text-sm text-destructive">
+          {summary}
+        </p>
+
+        <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-background/80 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+          <p className="text-xs text-muted-foreground">
+            {hasFieldErrors ? `${errorEntries.length} campos por revisar` : 'Listo para crear'}
+          </p>
+          <Button type="submit" size="lg" disabled={isPending} aria-busy={isPending}>
+            {isPending ? 'Creando…' : 'Crear propiedad'}
+          </Button>
+        </div>
+      </form>
+    </PropertyCreateProvider>
   );
 }

@@ -49,8 +49,19 @@ export default async function AdminPropertiesCreatePage() {
   if (!canCreate) redirect('/admin/properties');
 
   return (
-    <Container className="space-y-4 py-8">
-      <h1 className="text-2xl font-semibold leading-tight sm:text-3xl">Crear propiedad</h1>
+    <Container className="space-y-6 py-8">
+      <header className="space-y-2">
+        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+          Casal · Admin · Nueva ficha
+        </p>
+        <h1 className="text-2xl font-semibold leading-tight tracking-tight sm:text-3xl">
+          Crear propiedad
+        </h1>
+        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+          Cargá los datos esenciales y publicá sin fricción. Las secciones guían el progreso y
+          marcan dónde revisar.
+        </p>
+      </header>
       <PropertyCreateForm canCreate={canCreate} />
     </Container>
   );
