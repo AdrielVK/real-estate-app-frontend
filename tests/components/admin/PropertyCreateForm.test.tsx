@@ -20,12 +20,22 @@
  * promise open.
  */
 
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createPropertyAction } from '@/lib/properties/actions';
+
+import { PropertyCreateForm } from '@/components/admin/properties';
 import { AddressSection } from '@/components/admin/properties/create/AddressSection';
 import { BasicInfoSection } from '@/components/admin/properties/create/BasicInfoSection';
 import { Field, FieldError } from '@/components/admin/properties/create/form-fields';
+
+vi.mock('@/lib/properties/actions', () => ({
+  createPropertyAction: vi.fn(),
+}));
+
+const mockCreatePropertyAction = vi.mocked(createPropertyAction);
 
 /* -------------------------------------------------------------------------- */
 /* 2.1 — Field / FieldError primitives                                        */
@@ -272,5 +282,184 @@ describe('AddressSection', () => {
     const input = screen.getByLabelText('Dirección formateada');
     expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByText('La dirección formateada es obligatoria')).toBeInTheDocument();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 2.4/2.6 — PropertyCreateForm shell (state owner + Zod gate)                */
+/* -------------------------------------------------------------------------- */
+
+const INITIAL_ACTION_STATE = { fieldErrors: {}, formError: null };
+
+function setupUser() {
+  // `delay: null` keeps every keystroke synchronous (LoginForm precedent).
+  return userEvent.setup({ delay: null });
+}
+
+async function fillValidRequiredFields(user: ReturnType<typeof setupUser>) {
+  await user.selectOptions(screen.getByLabelText('Tipo de propiedad'), 'casa');
+  await user.type(screen.getByLabelText('Dirección formateada'), 'Calle 1 1234');
+  await user.type(screen.getByLabelText('Ciudad'), 'Montevideo');
+  await user.type(screen.getByLabelText('País'), 'Uruguay');
+}
+
+describe('PropertyCreateForm', () => {
+  beforeEach(() => {
+    mockCreatePropertyAction.mockReset();
+    // Default: the action resolves cleanly (production redirects on
+    // success; the form only needs the returned state shape).
+    mockCreatePropertyAction.mockResolvedValue(INITIAL_ACTION_STATE);
+  });
+
+  it('renders the two PR-2 fieldsets in spec order: Datos básicos, Dirección', () => {
+    render(<PropertyCreateForm canCreate />);
+
+    const fieldsets = Array.from(document.querySelectorAll('fieldset'));
+    expect(fieldsets).toHaveLength(2);
+    expect(fieldsets.map((f) => f.querySelector('legend')?.textContent)).toEqual([
+      'Datos básicos',
+      'Dirección',
+    ]);
+  });
+
+  it('wires every label to its control via htmlFor/id', () => {
+    render(<PropertyCreateForm canCreate />);
+
+    const controls = Array.from(
+      document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select'),
+    );
+    // 5 basic-info + 11 address — exact count pins "no orphan controls".
+    expect(controls).toHaveLength(16);
+    for (const control of controls) {
+      expect(control.id).not.toBe('');
+      const labels = Array.from(control.labels ?? []);
+      expect(labels).toHaveLength(1);
+      expect(labels[0].htmlFor).toBe(control.id);
+    }
+  });
+
+  it('blocks the server action when required fields are missing and flags the controls', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+
+    // The fetch boundary is the action — never invoked on invalid input.
+    expect(mockCreatePropertyAction).not.toHaveBeenCalled();
+
+    expect(screen.getByLabelText('Tipo de propiedad')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Dirección formateada')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText('La dirección formateada es obligatoria')).toBeInTheDocument();
+  });
+
+  it('surfaces an aria-live summary with reserved space when invalid', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+
+    const status = screen.getByRole('status');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    // Reserved vertical space so the sticky bar never shifts (LoginForm pattern).
+    expect(status.className).toMatch(/\bmin-h-/);
+    expect(status).toHaveTextContent('Revisá los campos marcados.');
+  });
+
+  it('passes the coerced, schema-parsed payload to the action when valid', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await fillValidRequiredFields(user);
+    await user.type(screen.getByLabelText('Latitud'), '-34.6');
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+
+    expect(mockCreatePropertyAction).toHaveBeenCalledTimes(1);
+    const [prev, payload] = mockCreatePropertyAction.mock.calls[0];
+    expect(prev).toEqual(INITIAL_ACTION_STATE);
+    expect(payload.propertyType).toBe('casa');
+    // Schema default — the form never sends an empty status.
+    expect(payload.status).toBe('disponible');
+    // Empty optionals collapse to undefined (preprocess), never "".
+    expect(payload.internalCode).toBeUndefined();
+    // Coercion: the string "-34.6" becomes a real number (design D2).
+    expect(payload.address.latitude).toBeCloseTo(-34.6, 10);
+    expect(payload.address.formattedAddress).toBe('Calle 1 1234');
+    // PR 2 scope: features/characteristics are not part of the payload yet.
+    expect(payload.features).toBeUndefined();
+    expect(payload.characteristics).toBeUndefined();
+  });
+
+  it('rejects an out-of-range latitude through the schema gate without calling the action', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await fillValidRequiredFields(user);
+    await user.type(screen.getByLabelText('Latitud'), '200');
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+
+    expect(mockCreatePropertyAction).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Latitud')).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('renders server-returned field errors on the matching control', async () => {
+    mockCreatePropertyAction.mockResolvedValueOnce({
+      fieldErrors: { internalCode: 'El código interno ya está en uso' },
+      formError: null,
+    });
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await user.type(screen.getByLabelText('Código interno'), 'DUP-01');
+    await fillValidRequiredFields(user);
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Código interno')).toHaveAttribute('aria-invalid', 'true'),
+    );
+    expect(screen.getByText('El código interno ya está en uso')).toBeInTheDocument();
+  });
+
+  it('disables the submit button while the action is pending', async () => {
+    let resolveAction!: (value: typeof INITIAL_ACTION_STATE) => void;
+    mockCreatePropertyAction.mockImplementationOnce(
+      () =>
+        new Promise<typeof INITIAL_ACTION_STATE>((resolve) => {
+          resolveAction = resolve;
+        }),
+    );
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await fillValidRequiredFields(user);
+    const button = screen.getByRole('button', { name: 'Crear propiedad' });
+    await user.click(button);
+
+    // Same DOM node across the pending re-render — the label flips to
+    // "Creando…" and the button is disabled while the action awaits.
+    await waitFor(() => expect(button).toBeDisabled());
+    expect(button).toHaveAttribute('aria-busy', 'true');
+    expect(button).toHaveTextContent('Creando…');
+
+    await act(async () => {
+      resolveAction(INITIAL_ACTION_STATE);
+    });
+  });
+
+  it('clears the inline error of a field as soon as the user edits it', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+    expect(screen.getByLabelText('Dirección formateada')).toHaveAttribute('aria-invalid', 'true');
+
+    await user.type(screen.getByLabelText('Dirección formateada'), 'Av. Libertador 900');
+
+    expect(screen.getByLabelText('Dirección formateada')).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByText('La dirección formateada es obligatoria')).not.toBeInTheDocument();
+  });
+
+  it('renders nothing for a non-creator (fail-closed island, defense in depth)', () => {
+    const { container } = render(<PropertyCreateForm canCreate={false} />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

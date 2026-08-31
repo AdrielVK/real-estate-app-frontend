@@ -45,13 +45,13 @@ export const CONTROL_CLASSES =
   'h-11 w-full rounded-xl border border-input bg-background/40 px-3 text-sm outline-none transition aria-invalid:border-destructive focus-visible:ring-3 focus-visible:ring-ring/50';
 
 /** Label treatment — same as LoginForm's `text-sm font-medium`. */
-export const LABEL_CLASSES = 'text-sm font-medium';
+const LABEL_CLASSES = 'text-sm font-medium';
 
 /** Inline field-error copy — destructive token, never hex. */
-export const ERROR_CLASSES = 'text-sm text-destructive';
+const ERROR_CLASSES = 'text-sm text-destructive';
 
 /** Optional hint copy — muted token. */
-export const HINT_CLASSES = 'text-xs text-muted-foreground';
+const HINT_CLASSES = 'text-xs text-muted-foreground';
 
 /* -------------------------------------------------------------------------- */
 /* FieldError                                                                 */
@@ -82,6 +82,20 @@ export function FieldError({ id, message }: FieldErrorProps) {
 /* Field                                                                      */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The subset of control props `Field` injects via `cloneElement`.
+ * Both `<input>` and `<select>` attribute interfaces are structurally
+ * assignable to it — every key is an optional member they already
+ * declare.
+ */
+interface ControlProps {
+  id?: string;
+  name?: string;
+  required?: boolean;
+  'aria-invalid'?: boolean;
+  'aria-describedby'?: string;
+}
+
 export interface FieldProps {
   /** Control id — also used as the `name` and the error/hint id prefix. */
   id: string;
@@ -94,7 +108,7 @@ export interface FieldProps {
   /** Marks the control `required` for semantics/AT (the form is `noValidate`). */
   required?: boolean;
   /** The raw `<input>`/`<select>` element; `Field` wires id/name/aria onto it. */
-  children: ReactElement;
+  children: ReactElement<ControlProps>;
 }
 
 /**

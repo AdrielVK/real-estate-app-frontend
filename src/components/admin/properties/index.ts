@@ -11,7 +11,11 @@
  * - **PR 3**: `PropertyPagination` (windowed URL-driven control
  *   for the admin listing, reusing `computePageWindow` from
  *   `@/lib/pagination`).
+ * - **create-form PR 2**: `PropertyCreateForm` (client island for
+ *   `/admin/properties/create`; the RSC wrapper starts importing it
+ *   through this barrel in PR 3).
  */
 export { PropertyCard } from './PropertyCard';
+export { PropertyCreateForm } from './PropertyCreateForm';
 export { PropertyPagination } from './PropertyPagination';
 export { PropertyToolbar } from './PropertyToolbar';
