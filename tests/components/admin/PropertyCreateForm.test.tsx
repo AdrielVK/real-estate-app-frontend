@@ -1,6 +1,7 @@
 /**
  * Component tests for the admin property-create form (PR 2 scope:
- * field primitives + sections 1-2 + form shell).
+ * field primitives + sections 1-2 + form shell; PR 3 scope: sections
+ * 3-4 + form integration).
  *
  * Why these tests exist:
  * - The spec pins a DOM contract for the create form: `fieldset`/`legend`
@@ -20,7 +21,7 @@
  * promise open.
  */
 
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -29,6 +30,11 @@ import { createPropertyAction } from '@/lib/properties/actions';
 import { PropertyCreateForm } from '@/components/admin/properties';
 import { AddressSection } from '@/components/admin/properties/create/AddressSection';
 import { BasicInfoSection } from '@/components/admin/properties/create/BasicInfoSection';
+import { CharacteristicsSection } from '@/components/admin/properties/create/CharacteristicsSection';
+import {
+  FeaturesSection,
+  type FeaturesValues,
+} from '@/components/admin/properties/create/FeaturesSection';
 import { Field, FieldError } from '@/components/admin/properties/create/form-fields';
 
 vi.mock('@/lib/properties/actions', () => ({
@@ -282,6 +288,316 @@ describe('AddressSection', () => {
     const input = screen.getByLabelText('Dirección formateada');
     expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByText('La dirección formateada es obligatoria')).toBeInTheDocument();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 3.1 — FeaturesSection (Características físicas)                            */
+/* -------------------------------------------------------------------------- */
+
+const FEATURES_VALUES: FeaturesValues = {
+  featuresTotalAreaM2: '',
+  featuresCoveredAreaM2: '',
+  featuresConservationState: '',
+  featuresRooms: '',
+  featuresBedrooms: '',
+  featuresBathrooms: '',
+  featuresGarages: '',
+  featuresFloor: '',
+  featuresAgeYears: '',
+};
+
+/** All nine feature controls, in DOM order. */
+const FEATURE_FIELD_LABELS = [
+  'Superficie total (m²)',
+  'Superficie cubierta (m²)',
+  'Estado de conservación',
+  'Ambientes',
+  'Dormitorios',
+  'Baños',
+  'Cocheras',
+  'Piso',
+  'Antigüedad (años)',
+];
+
+describe('FeaturesSection', () => {
+  it('renders the "Características físicas" fieldset with the toggle and no fields while off', () => {
+    render(
+      <FeaturesSection
+        enabled={false}
+        values={FEATURES_VALUES}
+        errors={{}}
+        onChange={noop}
+        onToggle={noop}
+      />,
+    );
+
+    expect(screen.getByRole('group', { name: 'Características físicas' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Agregar características físicas')).toBeInTheDocument();
+    // Off hides every feature input. The exact label count pins the
+    // sweep so a typo cannot make the loop vacuously pass.
+    expect(FEATURE_FIELD_LABELS).toHaveLength(9);
+    for (const label of FEATURE_FIELD_LABELS) {
+      expect(screen.queryByLabelText(label)).toBeNull();
+    }
+  });
+
+  it('reveals all nine feature fields when the toggle is on', () => {
+    render(
+      <FeaturesSection
+        enabled
+        values={FEATURES_VALUES}
+        errors={{}}
+        onChange={noop}
+        onToggle={noop}
+      />,
+    );
+
+    expect(FEATURE_FIELD_LABELS).toHaveLength(9);
+    for (const label of FEATURE_FIELD_LABELS) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument();
+    }
+  });
+
+  it('marks areas and conservation required and offers the 6 conservation states', () => {
+    render(
+      <FeaturesSection
+        enabled
+        values={FEATURES_VALUES}
+        errors={{}}
+        onChange={noop}
+        onToggle={noop}
+      />,
+    );
+
+    expect(screen.getByLabelText('Superficie total (m²)')).toBeRequired();
+    expect(screen.getByLabelText('Superficie cubierta (m²)')).toBeRequired();
+
+    const select = screen.getByLabelText('Estado de conservación') as HTMLSelectElement;
+    expect(select).toBeRequired();
+    const optionValues = Array.from(select.options).map((option) => option.value);
+    expect(optionValues).toEqual([
+      '',
+      'a_estrenar',
+      'excelente',
+      'muy_bueno',
+      'bueno',
+      'regular',
+      'a_refaccionar',
+    ]);
+  });
+
+  it('uses the decimal keyboard hint on the eight numeric inputs', () => {
+    render(
+      <FeaturesSection
+        enabled
+        values={FEATURES_VALUES}
+        errors={{}}
+        onChange={noop}
+        onToggle={noop}
+      />,
+    );
+
+    // The conservation select is the only non-numeric control.
+    const numericLabels = FEATURE_FIELD_LABELS.filter(
+      (label) => label !== 'Estado de conservación',
+    );
+    expect(numericLabels).toHaveLength(8);
+    for (const label of numericLabels) {
+      expect(screen.getByLabelText(label)).toHaveAttribute('inputmode', 'decimal');
+    }
+  });
+
+  it('reports the toggle click through onToggle with the checked flag', async () => {
+    const user = userEvent.setup({ delay: null });
+    const onToggle = vi.fn();
+    render(
+      <FeaturesSection
+        enabled={false}
+        values={FEATURES_VALUES}
+        errors={{}}
+        onChange={noop}
+        onToggle={onToggle}
+      />,
+    );
+
+    await user.click(screen.getByLabelText('Agregar características físicas'));
+    expect(onToggle).toHaveBeenCalledWith(true);
+  });
+
+  it('reports typing on totalAreaM2 through onChange with the field key', () => {
+    const onChange = vi.fn();
+    render(
+      <FeaturesSection
+        enabled
+        values={FEATURES_VALUES}
+        errors={{}}
+        onChange={onChange}
+        onToggle={noop}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Superficie total (m²)'), { target: { value: '80' } });
+    expect(onChange).toHaveBeenCalledWith('featuresTotalAreaM2', '80');
+  });
+
+  it('wires the mapped error onto featuresTotalAreaM2 (aria-invalid + message)', () => {
+    render(
+      <FeaturesSection
+        enabled
+        values={FEATURES_VALUES}
+        errors={{ featuresTotalAreaM2: 'Debe ser mayor que 0' }}
+        onChange={noop}
+        onToggle={noop}
+      />,
+    );
+
+    expect(screen.getByLabelText('Superficie total (m²)')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText('Debe ser mayor que 0')).toBeInTheDocument();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 3.2 — CharacteristicsSection (Etiquetas)                                   */
+/* -------------------------------------------------------------------------- */
+
+describe('CharacteristicsSection', () => {
+  it('renders the "Etiquetas" fieldset with the add control and no rows initially', () => {
+    render(<CharacteristicsSection rows={[]} onAdd={noop} onRemove={noop} onChange={noop} />);
+
+    expect(screen.getByRole('group', { name: 'Etiquetas' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Agregar etiqueta' })).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-testid="characteristic-row"]')).toHaveLength(0);
+  });
+
+  it('renders name, category and slug preview per row', () => {
+    render(
+      <CharacteristicsSection
+        rows={[{ name: 'Pileta Grande', slug: 'pileta-grande', category: 'amenidad' }]}
+        onAdd={noop}
+        onRemove={noop}
+        onChange={noop}
+      />,
+    );
+
+    const rows = Array.from(document.querySelectorAll('[data-testid="characteristic-row"]'));
+    expect(rows).toHaveLength(1);
+    const row = within(rows[0] as HTMLElement);
+    expect(row.getByLabelText('Nombre')).toHaveValue('Pileta Grande');
+    expect(row.getByLabelText('Categoría')).toHaveValue('amenidad');
+    // Live preview: the section renders whatever slug the parent state
+    // carries — derivation itself is pinned at the form level (3.3).
+    expect(row.getByText('Slug: pileta-grande')).toBeInTheDocument();
+  });
+
+  it('previews a dash while the slug is still empty', () => {
+    render(
+      <CharacteristicsSection
+        rows={[{ name: '', slug: '', category: '' }]}
+        onAdd={noop}
+        onRemove={noop}
+        onChange={noop}
+      />,
+    );
+
+    expect(screen.getByText('Slug: —')).toBeInTheDocument();
+  });
+
+  it('offers the 4 backend categories plus a placeholder option', () => {
+    render(
+      <CharacteristicsSection
+        rows={[{ name: 'WiFi', slug: 'wifi', category: '' }]}
+        onAdd={noop}
+        onRemove={noop}
+        onChange={noop}
+      />,
+    );
+
+    const select = screen.getByLabelText('Categoría') as HTMLSelectElement;
+    const optionValues = Array.from(select.options).map((option) => option.value);
+    expect(optionValues).toEqual(['', 'servicio', 'amenidad', 'condicion', 'material']);
+  });
+
+  it('reports name edits with the row index', () => {
+    const onChange = vi.fn();
+    render(
+      <CharacteristicsSection
+        rows={[
+          { name: 'WiFi', slug: 'wifi', category: 'servicio' },
+          { name: 'Pileta', slug: 'pileta', category: 'amenidad' },
+        ]}
+        onAdd={noop}
+        onRemove={noop}
+        onChange={onChange}
+      />,
+    );
+
+    const rows = Array.from(document.querySelectorAll('[data-testid="characteristic-row"]'));
+    fireEvent.change(within(rows[1] as HTMLElement).getByLabelText('Nombre'), {
+      target: { value: 'Pileta Grande' },
+    });
+    expect(onChange).toHaveBeenCalledWith(1, 'name', 'Pileta Grande');
+  });
+
+  it('reports category selection with the row index', () => {
+    const onChange = vi.fn();
+    render(
+      <CharacteristicsSection
+        rows={[{ name: 'WiFi', slug: 'wifi', category: '' }]}
+        onAdd={noop}
+        onRemove={noop}
+        onChange={onChange}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Categoría'), { target: { value: 'amenidad' } });
+    expect(onChange).toHaveBeenCalledWith(0, 'category', 'amenidad');
+  });
+
+  it('calls onAdd when the add button is clicked', () => {
+    const onAdd = vi.fn();
+    render(<CharacteristicsSection rows={[]} onAdd={onAdd} onRemove={noop} onChange={noop} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar etiqueta' }));
+    expect(onAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onRemove with the index of the clicked row', () => {
+    const onRemove = vi.fn();
+    render(
+      <CharacteristicsSection
+        rows={[
+          { name: 'WiFi', slug: 'wifi', category: 'servicio' },
+          { name: 'Pileta', slug: 'pileta', category: 'amenidad' },
+        ]}
+        onAdd={noop}
+        onRemove={onRemove}
+        onChange={noop}
+      />,
+    );
+
+    const rows = Array.from(document.querySelectorAll('[data-testid="characteristic-row"]'));
+    expect(rows).toHaveLength(2);
+    fireEvent.click(
+      within(rows[1] as HTMLElement).getByRole('button', { name: 'Eliminar etiqueta' }),
+    );
+    expect(onRemove).toHaveBeenCalledWith(1);
+  });
+
+  it('shows the group-level error message when provided', () => {
+    render(
+      <CharacteristicsSection
+        rows={[{ name: 'WiFi', slug: 'wifi', category: 'amenidad' }]}
+        error="Ya hay una etiqueta con el mismo slug y categoría."
+        onAdd={noop}
+        onRemove={noop}
+        onChange={noop}
+      />,
+    );
+
+    expect(
+      screen.getByText('Ya hay una etiqueta con el mismo slug y categoría.'),
+    ).toBeInTheDocument();
   });
 });
 
