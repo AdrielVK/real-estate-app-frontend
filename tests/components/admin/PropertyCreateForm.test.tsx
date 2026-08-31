@@ -20,9 +20,11 @@
  * promise open.
  */
 
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
+import { AddressSection } from '@/components/admin/properties/create/AddressSection';
+import { BasicInfoSection } from '@/components/admin/properties/create/BasicInfoSection';
 import { Field, FieldError } from '@/components/admin/properties/create/form-fields';
 
 /* -------------------------------------------------------------------------- */
@@ -100,5 +102,175 @@ describe('FieldError', () => {
     render(<FieldError id="x-error" message="Campo obligatorio" />);
     const error = screen.getByText('Campo obligatorio');
     expect(error).toHaveAttribute('id', 'x-error');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 2.2 — BasicInfoSection (Datos básicos)                                     */
+/* -------------------------------------------------------------------------- */
+
+/** Shared no-op handler for render-only cases (ESLint bans inline empty arrows). */
+const noop = vi.fn();
+
+const BASIC_VALUES = {
+  internalCode: '',
+  propertyType: '',
+  status: 'disponible',
+  ownerProfileId: '',
+  agentProfileId: '',
+};
+
+const ADDRESS_VALUES = {
+  addressFormatted: '',
+  addressCity: '',
+  addressCountry: '',
+  addressPlaceId: '',
+  addressStreet: '',
+  addressStreetNumber: '',
+  addressNeighborhood: '',
+  addressState: '',
+  addressPostalCode: '',
+  addressLatitude: '',
+  addressLongitude: '',
+};
+
+describe('BasicInfoSection', () => {
+  it('renders a fieldset grouped under the "Datos básicos" legend with all five fields', () => {
+    render(<BasicInfoSection values={BASIC_VALUES} errors={{}} onChange={noop} />);
+
+    // fieldset + legend → accessible group name.
+    expect(screen.getByRole('group', { name: 'Datos básicos' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Código interno')).toBeInTheDocument();
+    expect(screen.getByLabelText('Tipo de propiedad')).toBeInTheDocument();
+    expect(screen.getByLabelText('Estado')).toBeInTheDocument();
+    expect(screen.getByLabelText('Perfil del propietario')).toBeInTheDocument();
+    expect(screen.getByLabelText('Perfil del agente')).toBeInTheDocument();
+  });
+
+  it('offers the 8 backend property types plus an empty placeholder option', () => {
+    render(<BasicInfoSection values={BASIC_VALUES} errors={{}} onChange={noop} />);
+
+    const select = screen.getByLabelText('Tipo de propiedad') as HTMLSelectElement;
+    const optionValues = Array.from(select.options).map((option) => option.value);
+    expect(optionValues).toEqual([
+      '',
+      'casa',
+      'departamento',
+      'ph',
+      'local',
+      'oficina',
+      'terreno',
+      'cochera',
+      'galpon',
+    ]);
+  });
+
+  it('offers the 6 backend statuses and reflects the controlled value', () => {
+    render(
+      <BasicInfoSection
+        values={{ ...BASIC_VALUES, status: 'vendida' }}
+        errors={{}}
+        onChange={noop}
+      />,
+    );
+
+    const select = screen.getByLabelText('Estado') as HTMLSelectElement;
+    const optionValues = Array.from(select.options).map((option) => option.value);
+    expect(optionValues).toEqual([
+      'disponible',
+      'reservada',
+      'vendida',
+      'alquilada',
+      'en_proceso',
+      'no_disponible',
+    ]);
+    // Controlled: the rendered selection comes from `values`, not the component.
+    expect(select.value).toBe('vendida');
+  });
+
+  it('reports typing on internalCode through onChange with the field key', () => {
+    const onChange = vi.fn();
+    render(<BasicInfoSection values={BASIC_VALUES} errors={{}} onChange={onChange} />);
+
+    fireEvent.change(screen.getByLabelText('Código interno'), { target: { value: 'P-001' } });
+    expect(onChange).toHaveBeenCalledWith('internalCode', 'P-001');
+  });
+
+  it('marks propertyType aria-invalid with the mapped error message', () => {
+    render(
+      <BasicInfoSection
+        values={BASIC_VALUES}
+        errors={{ propertyType: 'Seleccioná un tipo' }}
+        onChange={noop}
+      />,
+    );
+
+    const select = screen.getByLabelText('Tipo de propiedad');
+    expect(select).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText('Seleccioná un tipo')).toBeInTheDocument();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 2.3 — AddressSection (Dirección)                                           */
+/* -------------------------------------------------------------------------- */
+
+describe('AddressSection', () => {
+  it('renders a fieldset grouped under the "Dirección" legend', () => {
+    render(<AddressSection values={ADDRESS_VALUES} errors={{}} onChange={noop} />);
+    expect(screen.getByRole('group', { name: 'Dirección' })).toBeInTheDocument();
+  });
+
+  it('marks the three required address fields as required', () => {
+    render(<AddressSection values={ADDRESS_VALUES} errors={{}} onChange={noop} />);
+
+    const requiredLabels = ['Dirección formateada', 'Ciudad', 'País'];
+    expect(requiredLabels).toHaveLength(3);
+    for (const label of requiredLabels) {
+      expect(screen.getByLabelText(label)).toBeRequired();
+    }
+  });
+
+  it('renders the eight optional address fields without required', () => {
+    render(<AddressSection values={ADDRESS_VALUES} errors={{}} onChange={noop} />);
+
+    const optionalLabels = [
+      'Place ID',
+      'Calle',
+      'Número',
+      'Barrio',
+      'Provincia',
+      'Código postal',
+      'Latitud',
+      'Longitud',
+    ];
+    expect(optionalLabels).toHaveLength(8);
+    for (const label of optionalLabels) {
+      const control = screen.getByLabelText(label);
+      expect(control).toBeInTheDocument();
+      expect(control).not.toBeRequired();
+    }
+  });
+
+  it('reports latitude edits through onChange with the field key', () => {
+    const onChange = vi.fn();
+    render(<AddressSection values={ADDRESS_VALUES} errors={{}} onChange={onChange} />);
+
+    fireEvent.change(screen.getByLabelText('Latitud'), { target: { value: '-34.6' } });
+    expect(onChange).toHaveBeenCalledWith('addressLatitude', '-34.6');
+  });
+
+  it('wires the mapped error onto addressFormatted (aria-invalid + message)', () => {
+    render(
+      <AddressSection
+        values={ADDRESS_VALUES}
+        errors={{ addressFormatted: 'La dirección formateada es obligatoria' }}
+        onChange={noop}
+      />,
+    );
+
+    const input = screen.getByLabelText('Dirección formateada');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText('La dirección formateada es obligatoria')).toBeInTheDocument();
   });
 });
