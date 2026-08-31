@@ -12,22 +12,23 @@
  *   the shell just stacks them — and a PR 3 section cannot "forget"
  *   its group wrapper.
  *
- * Enums come from the schema module (single source of truth): the
- * selects render `PROPERTY_TYPES` (8) and `PROPERTY_STATUSES` (6)
- * verbatim. Option labels are the backend slugs as-is — the DTO pins
- * them lowercase and verbatim, so the UI never invents a second
- * vocabulary that could drift from the payload.
+ * Enums come from the schema module (single source of truth). Since the
+ * UX-polish change the selects are app-styled `OptionSelect` listboxes
+ * (REQ-004): the trigger shows the SEMANTIC label via
+ * `PROPERTY_STATUS_LABEL` / the reused `PROPERTY_TYPE_LABEL`, while the
+ * committed value stays the backend slug (REQ-005) — the DTO pins slugs
+ * lowercase and verbatim, so the UI never invents a second vocabulary
+ * that could drift from the payload.
  *
- * `propertyType` gets an empty placeholder option because the schema
+ * `propertyType` gets a "Seleccionar…" placeholder because the schema
  * makes it required and the initial state is `''` — the gate then
  * surfaces the real Zod error instead of a silent default. `status`
  * needs none: the schema defaults it to `disponible` and the form's
  * initial state already selects it.
  */
 
-import { PROPERTY_STATUSES, PROPERTY_TYPES } from '@/lib/validation/property-create.schema';
-
-import { CONTROL_CLASSES, Field, SectionShell } from './form-fields';
+import { CONTROL_CLASSES, Field, OptionSelect, SectionShell } from './form-fields';
+import { buildPropertyTypeOptions, buildStatusOptions } from './property-create.labels';
 
 /** Controlled string values for the five basic-info fields. */
 export interface BasicInfoValues {
@@ -63,24 +64,14 @@ export function BasicInfoSection({ values, errors, onChange }: BasicInfoSectionP
       {/* Row 1 — short fields: one 3-col line on md+, full-width stack below (REQ-003/S1). */}
       <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-3">
         <Field id="status" label="Estado" error={errors.status}>
-          <select
-            className={CONTROL_CLASSES}
+          <OptionSelect
             value={values.status}
-            onChange={(event) => onChange('status', event.target.value)}
-          >
-            {PROPERTY_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
+            options={buildStatusOptions()}
+            error={errors.status}
+            onChange={(next) => onChange('status', next)}
+          />
         </Field>
-        <Field
-          id="internalCode"
-          label="Código interno"
-          error={errors.internalCode}
-          hint="Opcional. Dejar vacío para que lo derive el backend"
-        >
+        <Field id="internalCode" label="Código interno" error={errors.internalCode} hint="Opcional">
           <input
             className={CONTROL_CLASSES}
             value={values.internalCode}
@@ -88,27 +79,22 @@ export function BasicInfoSection({ values, errors, onChange }: BasicInfoSectionP
           />
         </Field>
         <Field id="propertyType" label="Tipo de propiedad" error={errors.propertyType} required>
-          <select
-            className={CONTROL_CLASSES}
+          <OptionSelect
             value={values.propertyType}
-            onChange={(event) => onChange('propertyType', event.target.value)}
-          >
-            <option value="">Seleccionar…</option>
-            {PROPERTY_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
+            placeholder="Seleccionar…"
+            options={buildPropertyTypeOptions()}
+            error={errors.propertyType}
+            onChange={(next) => onChange('propertyType', next)}
+          />
         </Field>
       </div>
       {/* Row 2 — profile fields: 2-col line on md+ (REQ-003/S1). */}
       <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
         <Field
           id="ownerProfileId"
-          label="Perfil del propietario"
+          label="Seleccionar un propietario"
           error={errors.ownerProfileId}
-          hint="UUID opcional; el backend valida que exista"
+          hint="Opcional"
         >
           <input
             className={CONTROL_CLASSES}
@@ -118,9 +104,9 @@ export function BasicInfoSection({ values, errors, onChange }: BasicInfoSectionP
         </Field>
         <Field
           id="agentProfileId"
-          label="Perfil del agente"
+          label="Asignar propiedad a un agente"
           error={errors.agentProfileId}
-          hint="UUID opcional; el backend valida que exista"
+          hint="Opcional"
         >
           <input
             className={CONTROL_CLASSES}

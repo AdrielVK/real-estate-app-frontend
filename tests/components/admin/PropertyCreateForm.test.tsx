@@ -26,6 +26,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createPropertyAction } from '@/lib/properties/actions';
+import { PROPERTY_STATUSES, PROPERTY_TYPES } from '@/lib/validation/property-create.schema';
 
 import { PropertyCreateForm } from '@/components/admin/properties';
 import { AddressSection } from '@/components/admin/properties/create/AddressSection';
@@ -39,7 +40,13 @@ import {
   CONTROL_CLASSES,
   Field,
   FieldError,
+  OptionSelect,
 } from '@/components/admin/properties/create/form-fields';
+import {
+  buildPropertyTypeOptions,
+  buildStatusOptions,
+  PROPERTY_STATUS_LABEL,
+} from '@/components/admin/properties/create/property-create.labels';
 
 vi.mock('@/lib/properties/actions', () => ({
   createPropertyAction: vi.fn(),
@@ -163,29 +170,36 @@ describe('BasicInfoSection', () => {
     expect(screen.getByLabelText('Código interno')).toBeInTheDocument();
     expect(screen.getByLabelText('Tipo de propiedad')).toBeInTheDocument();
     expect(screen.getByLabelText('Estado')).toBeInTheDocument();
-    expect(screen.getByLabelText('Perfil del propietario')).toBeInTheDocument();
-    expect(screen.getByLabelText('Perfil del agente')).toBeInTheDocument();
+    // REQ-007 renames: profiles are no longer "Perfil del …" inputs.
+    expect(screen.getByLabelText('Seleccionar un propietario')).toBeInTheDocument();
+    expect(screen.getByLabelText('Asignar propiedad a un agente')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Perfil del propietario')).toBeNull();
+    expect(screen.queryByLabelText('Perfil del agente')).toBeNull();
   });
 
-  it('offers the 8 backend property types plus an empty placeholder option', () => {
+  it('shows the placeholder on Tipo and offers the 8 semantic options in the listbox', async () => {
+    const user = userEvent.setup({ delay: null });
     render(<BasicInfoSection values={BASIC_VALUES} errors={{}} onChange={noop} />);
 
-    const select = screen.getByLabelText('Tipo de propiedad') as HTMLSelectElement;
-    const optionValues = Array.from(select.options).map((option) => option.value);
-    expect(optionValues).toEqual([
-      '',
-      'casa',
-      'departamento',
-      'ph',
-      'local',
-      'oficina',
-      'terreno',
-      'cochera',
-      'galpon',
+    const trigger = screen.getByLabelText('Tipo de propiedad');
+    expect(trigger).toHaveTextContent('Seleccionar…');
+
+    await user.click(trigger);
+    const options = within(screen.getByRole('listbox')).getAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual([
+      'Casa',
+      'Departamento',
+      'PH',
+      'Local',
+      'Oficina',
+      'Terreno',
+      'Cochera',
+      'Galpón',
     ]);
   });
 
-  it('offers the 6 backend statuses and reflects the controlled value', () => {
+  it('reflects the controlled status as a semantic label and lists the 6 statuses', async () => {
+    const user = userEvent.setup({ delay: null });
     render(
       <BasicInfoSection
         values={{ ...BASIC_VALUES, status: 'vendida' }}
@@ -194,18 +208,24 @@ describe('BasicInfoSection', () => {
       />,
     );
 
-    const select = screen.getByLabelText('Estado') as HTMLSelectElement;
-    const optionValues = Array.from(select.options).map((option) => option.value);
-    expect(optionValues).toEqual([
-      'disponible',
-      'reservada',
-      'vendida',
-      'alquilada',
-      'en_proceso',
-      'no_disponible',
+    const trigger = screen.getByLabelText('Estado');
+    // REQ-005/S2 display side: slug `vendida` renders as "Vendida".
+    expect(trigger).toHaveTextContent('Vendida');
+
+    await user.click(trigger);
+    const options = within(screen.getByRole('listbox')).getAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual([
+      'Disponible',
+      'Reservada',
+      'Vendida',
+      'Alquilada',
+      'En Proceso',
+      'No Disponible',
     ]);
-    // Controlled: the rendered selection comes from `values`, not the component.
-    expect(select.value).toBe('vendida');
+    expect(screen.getByRole('option', { name: 'Vendida' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
   });
 
   it('reports typing on internalCode through onChange with the field key', () => {
@@ -225,9 +245,35 @@ describe('BasicInfoSection', () => {
       />,
     );
 
-    const select = screen.getByLabelText('Tipo de propiedad');
-    expect(select).toHaveAttribute('aria-invalid', 'true');
+    const trigger = screen.getByLabelText('Tipo de propiedad');
+    expect(trigger).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByText('Seleccioná un tipo')).toBeInTheDocument();
+  });
+
+  it('shows a shortened "Opcional" inline hint on the label row for the three optional fields (REQ-006/S3)', () => {
+    render(<BasicInfoSection values={BASIC_VALUES} errors={{}} onChange={noop} />);
+
+    // The three optional controls carry the hint; required Tipo does not.
+    const hints = screen.getAllByText('Opcional');
+    expect(hints).toHaveLength(3);
+    for (const hint of hints) {
+      // Inline = same row as its field's label (label and hint share a parent).
+      const label = hint.parentElement?.querySelector('label');
+      expect(label).not.toBeNull();
+      expect(hint.parentElement).toBe(label?.parentElement);
+    }
+    const tipoLabel = screen.getByText('Tipo de propiedad');
+    expect(tipoLabel.parentElement?.textContent).toBe('Tipo de propiedad');
+  });
+
+  it('keeps the semantic label while committing the slug through onChange (REQ-005)', async () => {
+    const user = userEvent.setup({ delay: null });
+    const onChange = vi.fn();
+    render(<BasicInfoSection values={BASIC_VALUES} errors={{}} onChange={onChange} />);
+
+    await user.click(screen.getByLabelText('Estado'));
+    await user.click(screen.getByRole('option', { name: 'En Proceso' }));
+    expect(onChange).toHaveBeenCalledWith('status', 'en_proceso');
   });
 });
 
@@ -618,8 +664,14 @@ function setupUser() {
   return userEvent.setup({ delay: null });
 }
 
+/** Open the Tipo combobox and pick "Casa" (slice 3: native select is gone). */
+async function selectCasa(user: ReturnType<typeof setupUser>) {
+  await user.click(screen.getByLabelText('Tipo de propiedad'));
+  await user.click(screen.getByRole('option', { name: 'Casa' }));
+}
+
 async function fillValidRequiredFields(user: ReturnType<typeof setupUser>) {
-  await user.selectOptions(screen.getByLabelText('Tipo de propiedad'), 'casa');
+  await selectCasa(user);
   await user.type(screen.getByLabelText('Dirección formateada'), 'Calle 1 1234');
   await user.type(screen.getByLabelText('Ciudad'), 'Montevideo');
   await user.type(screen.getByLabelText('País'), 'Uruguay');
@@ -654,18 +706,25 @@ describe('PropertyCreateForm', () => {
   it('wires every label to its control via htmlFor/id', () => {
     render(<PropertyCreateForm canCreate />);
 
+    // Union of native controls + ARIA combobox triggers (slice 3 replaced
+    // the two native selects with OptionSelect buttons; dedupe covers the
+    // ProfileCombobox inputs, which are both `input` and `role=combobox`).
     const controls = Array.from(
-      document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select'),
+      new Set([
+        ...document.querySelectorAll('input, select'),
+        ...document.querySelectorAll('[role="combobox"]'),
+      ]),
     );
     // 5 basic-info + 11 address + 1 features toggle. With the toggle
     // off the feature inputs are not rendered, and the characteristics
     // section has zero rows — no orphan controls either way.
     expect(controls).toHaveLength(17);
     for (const control of controls) {
-      expect(control.id).not.toBe('');
-      const labels = Array.from(control.labels ?? []);
+      const labeled = control as HTMLInputElement;
+      expect(labeled.id).not.toBe('');
+      const labels = Array.from(labeled.labels ?? []);
       expect(labels).toHaveLength(1);
-      expect(labels[0].htmlFor).toBe(control.id);
+      expect(labels[0].htmlFor).toBe(labeled.id);
     }
   });
 
@@ -1009,7 +1068,7 @@ describe('UX polish — responsive grid (REQ-003, S1)', () => {
   it('places agent and owner profiles in their own md:grid-cols-2 row', () => {
     render(<BasicInfoSection values={BASIC_VALUES} errors={{}} onChange={noop} />);
 
-    for (const label of ['Perfil del propietario', 'Perfil del agente']) {
+    for (const label of ['Seleccionar un propietario', 'Asignar propiedad a un agente']) {
       const row = screen.getByLabelText(label).closest('[class*="md:grid-cols-2"]');
       expect(row, `${label} must live in the 2-col grid`).not.toBeNull();
       expect(row?.className).toContain('grid-cols-1');
@@ -1020,9 +1079,175 @@ describe('UX polish — responsive grid (REQ-003, S1)', () => {
     // NOT in the 3-col row and the short fields are NOT in the 2-col row.
     const statusRow = screen.getByLabelText('Estado').closest('[class*="md:grid-cols-3"]');
     const profileRow = screen
-      .getByLabelText('Perfil del agente')
+      .getByLabelText('Asignar propiedad a un agente')
       .closest('[class*="md:grid-cols-2"]');
     expect(statusRow).not.toBe(profileRow);
     expect(profileRow?.querySelector('[id="status"]')).toBeNull();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* UX polish slice 3 — labels module, OptionSelect, inline hints              */
+/* -------------------------------------------------------------------------- */
+
+describe('property-create labels (REQ-005)', () => {
+  it('maps every backend status slug to a semantic Spanish label', () => {
+    expect(PROPERTY_STATUS_LABEL).toEqual({
+      disponible: 'Disponible',
+      reservada: 'Reservada',
+      vendida: 'Vendida',
+      alquilada: 'Alquilada',
+      en_proceso: 'En Proceso',
+      no_disponible: 'No Disponible',
+    });
+  });
+
+  it('builds status options keeping the slug as the submitted value', () => {
+    const options = buildStatusOptions();
+    expect(options.map((option) => option.value)).toEqual([...PROPERTY_STATUSES]);
+    expect(options.find((option) => option.value === 'en_proceso')?.label).toBe('En Proceso');
+  });
+
+  it('builds type options from the reused PROPERTY_TYPE_LABEL map', () => {
+    const options = buildPropertyTypeOptions();
+    expect(options).toHaveLength(PROPERTY_TYPES.length);
+    expect(options.find((option) => option.value === 'galpon')?.label).toBe('Galpón');
+    expect(options.find((option) => option.value === 'casa')?.label).toBe('Casa');
+  });
+});
+
+describe('OptionSelect (REQ-004)', () => {
+  const OPTIONS = [
+    { value: 'disponible', label: 'Disponible' },
+    { value: 'en_proceso', label: 'En Proceso' },
+    { value: 'vendida', label: 'Vendida' },
+  ];
+
+  function renderSelect(override: Partial<{ value: string; onChange: (v: string) => void }> = {}) {
+    render(
+      <Field id="status" label="Estado">
+        <OptionSelect
+          value={override.value ?? 'disponible'}
+          options={OPTIONS}
+          onChange={override.onChange ?? noop}
+        />
+      </Field>,
+    );
+    return screen.getByRole('combobox', { name: 'Estado' });
+  }
+
+  it('renders an app-styled combobox trigger with the semantic label of the value', () => {
+    const trigger = renderSelect({ value: 'en_proceso' });
+    expect(trigger).toHaveTextContent('En Proceso');
+    expect(trigger).toHaveAttribute('aria-haspopup', 'listbox');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    // Native OS select is gone (REQ-004): no <select> in the tree.
+    expect(document.querySelector('select')).toBeNull();
+  });
+
+  it('opens a portal listbox on click and closes on Escape', async () => {
+    const user = setupUser();
+    const trigger = renderSelect();
+
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const listbox = screen.getByRole('listbox');
+    // Portal target is the body — the listbox escapes the section stacking (design).
+    expect(listbox.parentElement).toBe(document.body);
+    expect(within(listbox).getAllByRole('option')).toHaveLength(3);
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('navigates with ArrowDown and commits with Enter, returning focus to the trigger', async () => {
+    const user = setupUser();
+    const onChange = vi.fn();
+    const trigger = renderSelect({ onChange });
+
+    await user.click(trigger);
+    await user.keyboard('{ArrowDown}');
+    // Highlight moved to index 1 and is announced via aria-activedescendant.
+    expect(trigger).toHaveAttribute('aria-activedescendant', 'status-option-en_proceso');
+    await user.keyboard('{Enter}');
+
+    expect(onChange).toHaveBeenCalledWith('en_proceso');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('supports Home/End to jump to the first/last option', async () => {
+    const user = setupUser();
+    const onChange = vi.fn();
+    const trigger = renderSelect({ onChange });
+
+    await user.click(trigger);
+    await user.keyboard('{End}');
+    expect(trigger).toHaveAttribute('aria-activedescendant', 'status-option-vendida');
+    await user.keyboard('{Home}');
+    expect(trigger).toHaveAttribute('aria-activedescendant', 'status-option-disponible');
+    await user.keyboard('{Enter}');
+    expect(onChange).toHaveBeenCalledWith('disponible');
+  });
+
+  it('closes on outside mousedown without committing a change', async () => {
+    const user = setupUser();
+    const onChange = vi.fn();
+    const trigger = renderSelect({ onChange });
+
+    await user.click(trigger);
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+    void user;
+  });
+
+  it('clicking an option commits its slug and marks it aria-selected while open', async () => {
+    const user = setupUser();
+    const onChange = vi.fn();
+    renderSelect({ value: 'en_proceso', onChange });
+
+    await user.click(screen.getByRole('combobox', { name: 'Estado' }));
+    expect(screen.getByRole('option', { name: 'En Proceso' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await user.click(screen.getByRole('option', { name: 'Vendida' }));
+    expect(onChange).toHaveBeenCalledWith('vendida');
+    expect(screen.queryByRole('listbox')).toBeNull();
+  });
+
+  it('shows the placeholder when no value is selected', () => {
+    render(
+      <Field id="propertyType" label="Tipo de propiedad" required>
+        <OptionSelect value="" placeholder="Seleccionar…" options={OPTIONS} onChange={noop} />
+      </Field>,
+    );
+    const trigger = screen.getByRole('combobox', { name: 'Tipo de propiedad' });
+    expect(trigger).toHaveTextContent('Seleccionar…');
+    expect(trigger).toBeRequired();
+  });
+});
+
+describe('UX polish — semantic labels survive the submit payload (S2)', () => {
+  it('keeps status `en_proceso` in the payload while the UI shows "En Proceso"', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await fillValidRequiredFields(user);
+    await user.click(screen.getByLabelText('Estado'));
+    await user.click(screen.getByRole('option', { name: 'En Proceso' }));
+    expect(screen.getByLabelText('Estado')).toHaveTextContent('En Proceso');
+
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+
+    expect(mockCreatePropertyAction).toHaveBeenCalledTimes(1);
+    const [, payload] = mockCreatePropertyAction.mock.calls[0];
+    expect(payload.status).toBe('en_proceso');
+    expect(payload.propertyType).toBe('casa');
   });
 });
