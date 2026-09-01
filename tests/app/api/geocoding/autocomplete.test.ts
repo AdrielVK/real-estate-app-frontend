@@ -231,3 +231,32 @@ describe('GET /api/geocoding/autocomplete — upstream failures (GP-5, GP-6)', (
     await expect(res.json()).resolves.toEqual({ error: 'upstream_error' });
   });
 });
+
+describe('GET /api/geocoding/autocomplete — injection guards (task 1.4)', () => {
+  it('returns 400 when input exceeds 200 chars, without calling Google', async () => {
+    const res = await GET(buildRequest({ input: 'a'.repeat(201) }));
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'invalid_request' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts an input of exactly 200 chars (boundary)', async () => {
+    fetchMock.mockResolvedValue(upstreamJson({ places: [] }));
+
+    const res = await GET(buildRequest({ input: 'a'.repeat(200) }));
+
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits a sessionToken that fails the opaque-token charset instead of forwarding it', async () => {
+    fetchMock.mockResolvedValue(upstreamJson({ places: [] }));
+
+    const res = await GET(buildRequest({ input: 'sesame', sessionToken: 'x"}{"inject' }));
+
+    expect(res.status).toBe(200);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ input: 'sesame' });
+  });
+});

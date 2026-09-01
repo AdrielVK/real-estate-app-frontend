@@ -162,3 +162,28 @@ describe('GET /api/geocoding/details — upstream failures (GP-5, GP-6)', () => 
     expect(JSON.stringify(body)).not.toContain('PERMISSION_DENIED');
   });
 });
+
+describe('GET /api/geocoding/details — injection guards (task 1.4)', () => {
+  it.each([
+    ['path traversal', '../../etc/passwd'],
+    ['query injection', `${PLACE_ID}?key=stolen`],
+    ['control chars', `place\u0000id`],
+    ['over 120 chars', 'a'.repeat(121)],
+  ])('returns 400 for a placeId with %s, without calling Google', async (_label, badId) => {
+    const res = await GET(buildRequest({ placeId: badId }));
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'invalid_request' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('omits a sessionToken that fails the opaque-token charset instead of forwarding it', async () => {
+    fetchMock.mockResolvedValue(upstreamJson(FULL_UPSTREAM));
+
+    const res = await GET(buildRequest({ placeId: PLACE_ID, sessionToken: 'zz/../evil' }));
+
+    expect(res.status).toBe(200);
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).not.toContain('sessionToken');
+  });
+});

@@ -46,6 +46,24 @@ const DETAILS_FIELD_MASK = 'id,formattedAddress,addressComponents,location';
 const DEFAULT_RETRY_AFTER = '1';
 
 /**
+ * Injection guards (task 1.4, threat matrix): adversarial query values must
+ * never reach the upstream URL path, body, or token passthrough.
+ * - `placeId` lands in a URL PATH → strict charset whitelist (traversal,
+ *   `?`, control chars all rejected) plus `encodeURIComponent` as
+ *   defense-in-depth.
+ * - `input` lands in a JSON body → length cap bounds quota abuse.
+ * - `sessionToken` is opaque → forwarded only when it matches the UUID-ish
+ *   shape the hook generates; anything else is silently omitted (GP-3).
+ */
+const PLACE_ID_PATTERN = /^[a-zA-Z0-9_-]{1,120}$/;
+const MAX_INPUT_LENGTH = 200;
+const SESSION_TOKEN_PATTERN = /^[0-9a-fA-F-]{1,64}$/;
+
+function sanitizeSessionToken(sessionToken: string | null): string | null {
+  return sessionToken && SESSION_TOKEN_PATTERN.test(sessionToken) ? sessionToken : null;
+}
+
+/**
  * Upstream shapes below are parsed with Zod and re-emitted in the
  * normalized contract only — any field not modeled here is dropped
  * (GP-6: raw envelope never reaches the client).
@@ -144,10 +162,14 @@ export async function autocomplete(
   if (typeof input !== 'string' || input.trim() === '') {
     throw new ProxyRequestError(400, 'invalid_request');
   }
+  if (input.length > MAX_INPUT_LENGTH) {
+    throw new ProxyRequestError(400, 'invalid_request');
+  }
   const key = readServerKey();
 
   const body: Record<string, string> = { input };
-  if (sessionToken) body.sessionToken = sessionToken;
+  const token = sanitizeSessionToken(sessionToken);
+  if (token) body.sessionToken = token;
 
   let response: Response;
   try {
@@ -187,13 +209,14 @@ export async function placeDetails(
   placeId: string | null,
   sessionToken: string | null,
 ): Promise<PlaceDetailsResponse> {
-  if (typeof placeId !== 'string' || placeId.trim() === '') {
+  if (typeof placeId !== 'string' || !PLACE_ID_PATTERN.test(placeId.trim())) {
     throw new ProxyRequestError(400, 'invalid_request');
   }
   const key = readServerKey();
 
   const url = new URL(`${DETAILS_BASE}/${encodeURIComponent(placeId.trim())}`);
-  if (sessionToken) url.searchParams.set('sessionToken', sessionToken);
+  const token = sanitizeSessionToken(sessionToken);
+  if (token) url.searchParams.set('sessionToken', token);
 
   let response: Response;
   try {
