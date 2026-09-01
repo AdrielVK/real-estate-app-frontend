@@ -115,8 +115,8 @@ describe('GET /api/geocoding/autocomplete — success path (GP-1, GP-6)', () => 
     expect(init.method).toBe('POST');
     const headers = init.headers as Record<string, string>;
     expect(headers['X-Goog-Api-Key']).toBe(TEST_KEY);
-    expect(headers['X-Goog-FieldMask']).toContain('places.id');
-    expect(headers['X-Goog-FieldMask']).toContain('places.text');
+    expect(headers['X-Goog-FieldMask']).toContain('suggestions.placePrediction.placeId');
+    expect(headers['X-Goog-FieldMask']).toContain('suggestions.placePrediction.text');
     expect(JSON.parse(init.body as string)).toEqual({ input: 'sesame st' });
   });
 });

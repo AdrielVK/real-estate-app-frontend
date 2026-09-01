@@ -38,7 +38,8 @@ import type {
 } from '@/types/geocoding';
 
 const AUTOCOMPLETE_URL = 'https://places.googleapis.com/v1/places:autocomplete';
-const AUTOCOMPLETE_FIELD_MASK = 'places.id,places.text';
+const AUTOCOMPLETE_FIELD_MASK =
+  'suggestions.placePrediction.placeId,suggestions.placePrediction.text,suggestions.placePrediction.structuredFormat.mainText,suggestions.placePrediction.structuredFormat.secondaryText';
 const DETAILS_BASE = 'https://places.googleapis.com/v1/places';
 const DETAILS_FIELD_MASK = 'id,formattedAddress,addressComponents,location';
 
@@ -55,7 +56,7 @@ const DEFAULT_RETRY_AFTER = '1';
  * - `sessionToken` is opaque → forwarded only when it matches the UUID-ish
  *   shape the hook generates; anything else is silently omitted (GP-3).
  */
-const PLACE_ID_PATTERN = /^[a-zA-Z0-9_-]{1,120}$/;
+const PLACE_ID_PATTERN = /^[A-Za-z0-9_-]{1,500}$/;
 const MAX_INPUT_LENGTH = 200;
 const SESSION_TOKEN_PATTERN = /^[0-9a-fA-F-]{1,64}$/;
 
@@ -74,7 +75,24 @@ const UpstreamPredictionSchema = z.object({
   structuredFormatting: z.object({ mainText: z.string(), secondaryText: z.string() }).optional(),
 });
 
+const PlacePredictionSchema = z.object({
+  placeId: z.string().min(1),
+  text: z.object({ text: z.string() }).optional(),
+  structuredFormat: z
+    .object({
+      mainText: z.object({ text: z.string() }).optional(),
+      secondaryText: z.object({ text: z.string() }).optional(),
+    })
+    .optional(),
+});
+
+const SuggestionSchema = z.object({
+  placePrediction: PlacePredictionSchema.optional(),
+});
+
 const AutocompleteUpstreamSchema = z.object({
+  suggestions: z.array(SuggestionSchema).optional(),
+  // legacy shape kept for unit tests that mock `places` array
   places: z.array(UpstreamPredictionSchema).optional(),
 });
 
@@ -148,6 +166,20 @@ function normalizePrediction(entry: z.infer<typeof UpstreamPredictionSchema>): P
     : { placeId: entry.id, description };
 }
 
+function normalizePlacePrediction(entry: z.infer<typeof PlacePredictionSchema>): Prediction {
+  const description = entry.text?.text ?? entry.structuredFormat?.mainText?.text ?? '';
+  const structuredFormatting =
+    entry.structuredFormat?.mainText?.text || entry.structuredFormat?.secondaryText?.text
+      ? {
+          mainText: entry.structuredFormat.mainText?.text ?? '',
+          secondaryText: entry.structuredFormat.secondaryText?.text ?? '',
+        }
+      : undefined;
+  return structuredFormatting
+    ? { placeId: entry.placeId, description, structuredFormatting }
+    : { placeId: entry.placeId, description };
+}
+
 /**
  * `POST places.googleapis.com/v1/places:autocomplete` (GP-1). The session
  * token is opaque server-side and forwarded untouched for billing
@@ -193,6 +225,14 @@ export async function autocomplete(
   const parsed = AutocompleteUpstreamSchema.safeParse(await parseUpstreamJson(response));
   if (!parsed.success) throw upstreamFailure(response.status);
 
+  if (parsed.data.suggestions) {
+    const predictions = parsed.data.suggestions
+      .map((s) => s.placePrediction)
+      .filter((p): p is NonNullable<typeof p> => !!p && !!p.placeId)
+      .map(normalizePlacePrediction);
+    return { predictions };
+  }
+
   return {
     predictions: (parsed.data.places ?? []).map(normalizePrediction),
   };
@@ -212,9 +252,10 @@ export async function placeDetails(
   if (typeof placeId !== 'string' || !PLACE_ID_PATTERN.test(placeId.trim())) {
     throw new ProxyRequestError(400, 'invalid_request');
   }
+  const trimmed = placeId.trim();
   const key = readServerKey();
 
-  const url = new URL(`${DETAILS_BASE}/${encodeURIComponent(placeId.trim())}`);
+  const url = new URL(`${DETAILS_BASE}/${encodeURIComponent(trimmed)}`);
   const token = sanitizeSessionToken(sessionToken);
   if (token) url.searchParams.set('sessionToken', token);
 

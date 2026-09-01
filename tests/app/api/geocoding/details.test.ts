@@ -168,7 +168,7 @@ describe('GET /api/geocoding/details — injection guards (task 1.4)', () => {
     ['path traversal', '../../etc/passwd'],
     ['query injection', `${PLACE_ID}?key=stolen`],
     ['control chars', `place\u0000id`],
-    ['over 120 chars', 'a'.repeat(121)],
+    ['over 500 chars', 'a'.repeat(501)],
   ])('returns 400 for a placeId with %s, without calling Google', async (_label, badId) => {
     const res = await GET(buildRequest({ placeId: badId }));
 
