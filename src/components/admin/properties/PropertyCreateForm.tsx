@@ -30,12 +30,20 @@
 
 'use client';
 
-import { type FormEvent, startTransition, useActionState, useRef, useState } from 'react';
+import {
+  type FormEvent,
+  startTransition,
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import { AlertCircle, Check } from 'lucide-react';
 
 import type { CreatePropertyActionState, FieldKey } from '@/types/properties';
 import { createPropertyAction } from '@/lib/properties/actions';
+import { fetchProfiles, type ProfileOption } from '@/lib/properties/profiles';
 import { cn } from '@/lib/utils';
 import { propertyCreateSchema } from '@/lib/validation/property-create.schema';
 import { slugify } from '@/lib/validation/slug';
@@ -231,7 +239,27 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
   const [clientErrors, setClientErrors] = useState<Partial<Record<FieldKey, string>>>({});
   const [featuresEnabled, setFeaturesEnabled] = useState(false);
   const [characteristics, setCharacteristics] = useState<CharacteristicRowValues[]>([]);
+  const [profileOptions, setProfileOptions] = useState<{
+    agent: ProfileOption[];
+    owner: ProfileOption[];
+  }>({ agent: [], owner: [] });
   const errorSummaryRef = useRef<HTMLDivElement>(null);
+
+  // Design D5: the shell owns the profile fetch (sections stay
+  // declarative). `fetchProfiles` is mock-backed today (REQ-101/S6) and
+  // the async contract is the future backend swap point — no call-site
+  // change when it lands. The cancelled flag guards against a late
+  // resolve after unmount.
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([fetchProfiles('agent'), fetchProfiles('owner')]).then(([agent, owner]) => {
+      if (cancelled) return;
+      setProfileOptions({ agent, owner });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (!canCreate) return null;
 
@@ -491,7 +519,13 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
           </div>
         ) : null}
 
-        <BasicInfoSection values={values} errors={fieldErrors} onChange={handleChange} />
+        <BasicInfoSection
+          values={values}
+          errors={fieldErrors}
+          onChange={handleChange}
+          agentOptions={profileOptions.agent}
+          ownerOptions={profileOptions.owner}
+        />
         <AddressSection values={values} errors={fieldErrors} onChange={handleChange} />
         <FeaturesSection
           enabled={featuresEnabled}

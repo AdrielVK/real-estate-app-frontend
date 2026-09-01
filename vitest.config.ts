@@ -9,6 +9,13 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./tests/setup.ts'],
     css: false,
+    // The suite is ~885 jsdom tests run in parallel; on an 8-core machine
+    // under load, the heaviest userEvent flows (multi-field form submits)
+    // exceed the 5s default non-deterministically — different tests fail
+    // each run, all as pure timeouts, while focused runs are green. The
+    // headroom decouples flakiness from machine load without changing
+    // any test semantics.
+    testTimeout: 20000,
     include: ['tests/**/*.{test,spec}.{ts,tsx}', 'src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['node_modules', '.next', 'e2e'],
     coverage: {

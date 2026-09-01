@@ -26,6 +26,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createPropertyAction } from '@/lib/properties/actions';
+import { MOCK_AGENTS } from '@/lib/properties/mock-profiles';
 import { PROPERTY_STATUSES, PROPERTY_TYPES } from '@/lib/validation/property-create.schema';
 
 import { PropertyCreateForm } from '@/components/admin/properties';
@@ -1249,5 +1250,52 @@ describe('UX polish — semantic labels survive the submit payload (S2)', () => 
     const [, payload] = mockCreatePropertyAction.mock.calls[0];
     expect(payload.status).toBe('en_proceso');
     expect(payload.propertyType).toBe('casa');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* UX polish slice 4 — profile comboboxes wired through the form shell        */
+/* -------------------------------------------------------------------------- */
+
+describe('UX polish — profile selection in the form (REQ-101/102, S4, 4.6)', () => {
+  // This describe is a sibling of the main one, so its beforeEach does
+  // not reach here — without its own reset, the S2 submit test above
+  // leaks a call into the 4.6 count assertion.
+  beforeEach(() => {
+    mockCreatePropertyAction.mockReset();
+    mockCreatePropertyAction.mockResolvedValue(INITIAL_ACTION_STATE);
+  });
+
+  it('threads the fetched mock profiles into the agent combobox listbox (D5)', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await user.click(screen.getByLabelText('Asignar propiedad a un agente'));
+    // The options arrive asynchronously from fetchProfiles — waitFor is
+    // the proof the shell did the fetch + threading, not the section.
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: 'María Gómez' })).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('option', { name: 'Marcos Díaz' })).toBeInTheDocument();
+  });
+
+  it('commits the selected agent UUID through the Zod gate on submit (4.6)', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await user.click(screen.getByLabelText('Asignar propiedad a un agente'));
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: 'María Gómez' })).toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole('option', { name: 'María Gómez' }));
+
+    await fillValidRequiredFields(user);
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+
+    expect(mockCreatePropertyAction).toHaveBeenCalledTimes(1);
+    const [, payload] = mockCreatePropertyAction.mock.calls[0];
+    // The flat string survives as the real UUID and z.uuid() accepted it.
+    expect(payload.agentProfileId).toBe(MOCK_AGENTS[0].id);
+    expect(payload.ownerProfileId).toBeUndefined();
   });
 });

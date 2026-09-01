@@ -20,6 +20,12 @@
  * lowercase and verbatim, so the UI never invents a second vocabulary
  * that could drift from the payload.
  *
+ * The agent/owner fields are `ProfileCombobox` controls (REQ-102/S4):
+ * searchable single-selects whose options arrive threaded from the shell
+ * (design D5) — this component stays hook-free. The committed value is
+ * the selected profile's UUID, which the Zod `z.uuid()` gate accepts on
+ * submit (4.6).
+ *
  * `propertyType` gets a "Seleccionar…" placeholder because the schema
  * makes it required and the initial state is `''` — the gate then
  * surfaces the real Zod error instead of a silent default. `status`
@@ -27,7 +33,10 @@
  * initial state already selects it.
  */
 
+import type { ProfileOption } from '@/lib/properties/profiles';
+
 import { CONTROL_CLASSES, Field, OptionSelect, SectionShell } from './form-fields';
+import { ProfileCombobox } from './ProfileCombobox';
 import { buildPropertyTypeOptions, buildStatusOptions } from './property-create.labels';
 
 /** Controlled string values for the five basic-info fields. */
@@ -44,9 +53,22 @@ export interface BasicInfoSectionProps {
   /** Field-keyed error copy; only the keys this section renders matter. */
   errors: Partial<Record<keyof BasicInfoValues, string>>;
   onChange: (key: keyof BasicInfoValues, value: string) => void;
+  /**
+   * Fetched profile options threaded from the shell (design D5) — the
+   * section stays hook-free. Optional so isolated renders (tests, the
+   * provider shell before data lands) fall back to an empty list.
+   */
+  agentOptions?: readonly ProfileOption[];
+  ownerOptions?: readonly ProfileOption[];
 }
 
-export function BasicInfoSection({ values, errors, onChange }: BasicInfoSectionProps) {
+export function BasicInfoSection({
+  values,
+  errors,
+  onChange,
+  agentOptions = [],
+  ownerOptions = [],
+}: BasicInfoSectionProps) {
   const hasError = Boolean(
     errors.internalCode ??
     errors.propertyType ??
@@ -96,10 +118,12 @@ export function BasicInfoSection({ values, errors, onChange }: BasicInfoSectionP
           error={errors.ownerProfileId}
           hint="Opcional"
         >
-          <input
-            className={CONTROL_CLASSES}
+          <ProfileCombobox
             value={values.ownerProfileId}
-            onChange={(event) => onChange('ownerProfileId', event.target.value)}
+            options={ownerOptions}
+            createLabel="Crear propietario"
+            placeholder="Buscar propietario…"
+            onChange={(next) => onChange('ownerProfileId', next)}
           />
         </Field>
         <Field
@@ -108,10 +132,12 @@ export function BasicInfoSection({ values, errors, onChange }: BasicInfoSectionP
           error={errors.agentProfileId}
           hint="Opcional"
         >
-          <input
-            className={CONTROL_CLASSES}
+          <ProfileCombobox
             value={values.agentProfileId}
-            onChange={(event) => onChange('agentProfileId', event.target.value)}
+            options={agentOptions}
+            createLabel="Crear agente"
+            placeholder="Buscar agente…"
+            onChange={(next) => onChange('agentProfileId', next)}
           />
         </Field>
       </div>
