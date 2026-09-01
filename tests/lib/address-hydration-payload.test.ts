@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest';
 import type { PlaceDetailsResponse } from '@/types/geocoding';
 import { propertyCreateSchema } from '@/lib/validation/property-create.schema';
 
-import { mapDetailsToAddressValues } from '@/components/property/AddressField';
+import { type AddressValues, mapDetailsToAddressValues } from '@/components/property/AddressField';
 
 /** Rural-ish result: no neighborhood at any fallback level. */
 const DETAILS: PlaceDetailsResponse = {
@@ -35,7 +35,7 @@ const DETAILS: PlaceDetailsResponse = {
 };
 
 /** Mirror of `buildPayload`'s address block (private in the form). */
-function buildAddressPayload(values: Record<string, string>) {
+function buildAddressPayload(values: AddressValues) {
   return {
     formattedAddress: values.addressFormatted,
     city: values.addressCity,
@@ -87,6 +87,6 @@ describe('autocomplete hydration → wire payload equivalence (AS-7)', () => {
     // coerced from strings to numbers like the legacy path.
     expect(hydrated.addressCity).toBe('Canelones');
     expect(hydrated.addressLatitude).toBe('-34.55');
-    expect(fromAutocomplete.data.address.neighborhood).toBeUndefined();
+    expect(fromAutocomplete.data?.address.neighborhood).toBeUndefined();
   });
 });
