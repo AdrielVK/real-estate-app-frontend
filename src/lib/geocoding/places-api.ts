@@ -31,6 +31,7 @@ import { z } from 'zod';
 
 import type {
   AutocompleteResponse,
+  PlaceDetailsResponse,
   Prediction,
   ProxyError,
   ProxyErrorCode,
@@ -38,6 +39,8 @@ import type {
 
 const AUTOCOMPLETE_URL = 'https://places.googleapis.com/v1/places:autocomplete';
 const AUTOCOMPLETE_FIELD_MASK = 'places.id,places.text';
+const DETAILS_BASE = 'https://places.googleapis.com/v1/places';
+const DETAILS_FIELD_MASK = 'id,formattedAddress,addressComponents,location';
 
 /** Default hint when upstream 429s without `Retry-After` (GP-5). */
 const DEFAULT_RETRY_AFTER = '1';
@@ -55,6 +58,19 @@ const UpstreamPredictionSchema = z.object({
 
 const AutocompleteUpstreamSchema = z.object({
   places: z.array(UpstreamPredictionSchema).optional(),
+});
+
+const UpstreamAddressComponentSchema = z.object({
+  longText: z.string().optional(),
+  shortText: z.string().optional(),
+  types: z.array(z.string()).optional(),
+});
+
+const PlaceDetailsUpstreamSchema = z.object({
+  id: z.string().min(1),
+  formattedAddress: z.string().optional(),
+  addressComponents: z.array(UpstreamAddressComponentSchema).optional(),
+  location: z.object({ latitude: z.number(), longitude: z.number() }).optional(),
 });
 
 /**
@@ -157,6 +173,61 @@ export async function autocomplete(
 
   return {
     predictions: (parsed.data.places ?? []).map(normalizePrediction),
+  };
+}
+
+/**
+ * `GET places.googleapis.com/v1/places/{placeId}` (GP-2). `placeId` is
+ * interpolated into the upstream path, so it is `encodeURIComponent`-safe
+ * by construction; the charset guard (task 1.4) rejects traversal-shaped
+ * ids before this line is ever reached. Google `location.{latitude,
+ * longitude}` normalizes to `{lat, lng}`, `null` when absent (AS-4).
+ */
+export async function placeDetails(
+  placeId: string | null,
+  sessionToken: string | null,
+): Promise<PlaceDetailsResponse> {
+  if (typeof placeId !== 'string' || placeId.trim() === '') {
+    throw new ProxyRequestError(400, 'invalid_request');
+  }
+  const key = readServerKey();
+
+  const url = new URL(`${DETAILS_BASE}/${encodeURIComponent(placeId.trim())}`);
+  if (sessionToken) url.searchParams.set('sessionToken', sessionToken);
+
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'X-Goog-Api-Key': key,
+        'X-Goog-FieldMask': DETAILS_FIELD_MASK,
+      },
+    });
+  } catch {
+    throw upstreamFailure(undefined);
+  }
+
+  if (response.status === 404) {
+    throw new ProxyRequestError(404, 'place_not_found');
+  }
+  if (!response.ok) {
+    throw upstreamFailure(response.status, response.headers.get('Retry-After'));
+  }
+
+  const parsed = PlaceDetailsUpstreamSchema.safeParse(await parseUpstreamJson(response));
+  if (!parsed.success) throw upstreamFailure(response.status);
+
+  const { id, formattedAddress, addressComponents, location } = parsed.data;
+  return {
+    placeId: id,
+    formattedAddress: formattedAddress ?? '',
+    addressComponents: (addressComponents ?? []).map((component) => ({
+      longText: component.longText ?? '',
+      shortText: component.shortText ?? '',
+      types: component.types ?? [],
+    })),
+    location: location ? { lat: location.latitude, lng: location.longitude } : null,
   };
 }
 
