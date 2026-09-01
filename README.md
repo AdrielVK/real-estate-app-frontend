@@ -12,6 +12,13 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+### Environment Variables
+
+Copy `.env.example` to `.env.local` and fill in the values:
+
+- `GOOGLE_PLACES_API_KEY` — server-only key for the Places API (New) geocoding proxy (`/api/geocoding/*`). It is read only on the server in `src/lib/geocoding/places-api.ts`; never expose it with a `NEXT_PUBLIC_` prefix. The proxy returns 503 until it is set.
+- `API_BASE_URL` — backend base URL used by the server-side data-fetching helpers.
+
 ## Quality Checks
 
 Run the full local quality gate with pnpm:

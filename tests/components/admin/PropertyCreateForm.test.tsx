@@ -716,10 +716,13 @@ describe('PropertyCreateForm', () => {
         ...document.querySelectorAll('[role="combobox"]'),
       ]),
     );
-    // 5 basic-info + 11 address + 1 features toggle. With the toggle
-    // off the feature inputs are not rendered, and the characteristics
-    // section has zero rows — no orphan controls either way.
-    expect(controls).toHaveLength(17);
+    // 5 basic-info + 11 address + 1 features toggle + 1 address-search
+    // combobox (property-address-autocomplete: the search input is a
+    // labeled control like the ProfileCombobox inputs before it). With
+    // the toggle off the feature inputs are not rendered, and the
+    // characteristics section has zero rows — no orphan controls either
+    // way.
+    expect(controls).toHaveLength(18);
     for (const control of controls) {
       const labeled = control as HTMLInputElement;
       expect(labeled.id).not.toBe('');

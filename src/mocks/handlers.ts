@@ -2,6 +2,12 @@ import type { HttpHandler } from 'msw';
 import { http, HttpResponse } from 'msw';
 
 import type { BackendLoginEnvelope } from '@/types/auth';
+import type {
+  AutocompleteResponse,
+  PlaceDetailsResponse,
+  Prediction,
+  ProxyError,
+} from '@/types/geocoding';
 
 /**
  * MSW request handlers.
@@ -70,4 +76,72 @@ const logoutHandler = http.post('*/auth/logout', () => {
   return HttpResponse.json({ success: true });
 });
 
-export const handlers: HttpHandler[] = [loginHandler, refreshHandler, logoutHandler];
+/**
+ * `GET /api/geocoding/autocomplete` — mirrors the normalized proxy
+ * contract (GP-1/GP-6): `{ predictions: [{ placeId, description,
+ * structuredFormatting? }] }`, never the raw Google envelope.
+ *
+ * Predictions are derived deterministically from `input` so the dev-mode
+ * combobox shows the typed text back (visible proof the round-trip
+ * happened) and hook tests can assert "last query wins" by content.
+ * Missing/blank `input` returns 400 `invalid_request` exactly like the
+ * real route, so client-side bugs cannot hide behind a permissive mock.
+ */
+const geocodingAutocompleteHandler = http.get('*/api/geocoding/autocomplete', ({ request }) => {
+  const url = new URL(request.url);
+  const input = url.searchParams.get('input');
+  if (!input || input.trim().length === 0) {
+    return HttpResponse.json({ error: 'invalid_request' } satisfies ProxyError, { status: 400 });
+  }
+  const query = input.trim();
+  const predictions: Prediction[] = [1, 2, 3].map((n) => ({
+    placeId: `mock-place-${n}`,
+    description: `${query} Mock Street ${n}, Mock City`,
+    structuredFormatting: {
+      mainText: `${query} Mock Street ${n}`,
+      secondaryText: 'Mock City',
+    },
+  }));
+  return HttpResponse.json({ predictions } satisfies AutocompleteResponse);
+});
+
+/**
+ * `GET /api/geocoding/details` — mirrors the normalized proxy contract
+ * (GP-2/GP-6): `{ placeId, formattedAddress, addressComponents, location }`.
+ *
+ * The component set covers every type the Phase-4 hydration mapping reads
+ * (`route`, `street_number`, `neighborhood`, `administrative_area_level_1`,
+ * `locality`, `postal_code`, `country`) so selecting a mocked prediction in
+ * dev mode fills the whole address grid. `placeId` is echoed from the
+ * request; missing `placeId` returns 400 `invalid_request` like the route.
+ */
+const geocodingDetailsHandler = http.get('*/api/geocoding/details', ({ request }) => {
+  const url = new URL(request.url);
+  const placeId = url.searchParams.get('placeId');
+  if (!placeId) {
+    return HttpResponse.json({ error: 'invalid_request' } satisfies ProxyError, { status: 400 });
+  }
+  const body: PlaceDetailsResponse = {
+    placeId,
+    formattedAddress: 'Mock Street 1, Mock City, MS 12345, Mockland',
+    addressComponents: [
+      { longText: 'Mock Street', shortText: 'Mock St', types: ['route'] },
+      { longText: '1', shortText: '1', types: ['street_number'] },
+      { longText: 'Mock Neighborhood', shortText: 'Mock Nbhd', types: ['neighborhood'] },
+      { longText: 'Mock State', shortText: 'MS', types: ['administrative_area_level_1'] },
+      { longText: 'Mock City', shortText: 'Mock City', types: ['locality'] },
+      { longText: '12345', shortText: '12345', types: ['postal_code'] },
+      { longText: 'Mockland', shortText: 'ML', types: ['country'] },
+    ],
+    location: { lat: -34.6037, lng: -58.3816 },
+  };
+  return HttpResponse.json(body);
+});
+
+export const handlers: HttpHandler[] = [
+  loginHandler,
+  refreshHandler,
+  logoutHandler,
+  geocodingAutocompleteHandler,
+  geocodingDetailsHandler,
+];
