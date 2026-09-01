@@ -27,6 +27,23 @@ import { AddressField, type AddressValues } from '@/components/property/AddressF
 
 import { server } from '@/mocks/server';
 
+// Phase 5 (AS-4): `AddressField` mounts the map through `next/dynamic`.
+// The real AddressMap pulls Leaflet, which needs canvas/layout jsdom
+// does not provide — the stub keeps the mount GATE under test (does the
+// orchestrator render the map, and with which coordinates?) without
+// importing the chunk's contents.
+vi.mock('@/components/property/AddressMap', async () => {
+  const { createElement } = await import('react');
+  return {
+    default: ({ latitude, longitude }: { latitude: string; longitude: string }) =>
+      createElement('div', {
+        'data-testid': 'address-map',
+        'data-latitude': latitude,
+        'data-longitude': longitude,
+      }),
+  };
+});
+
 const EMPTY_VALUES: AddressValues = {
   addressFormatted: '',
   addressCity: '',
@@ -379,5 +396,62 @@ describe('AddressField', () => {
     await flush();
 
     expect(onChange).toHaveBeenCalledTimes(11);
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* AS-4 — dynamic map mount gate                                        */
+  /* ------------------------------------------------------------------ */
+
+  describe('address map (AS-4)', () => {
+    it('does not mount the map while the coordinates are blank', async () => {
+      renderField();
+      await flush();
+
+      expect(screen.queryByTestId('address-map')).toBeNull();
+    });
+
+    it('mounts the map when the controlled values carry valid coordinates', async () => {
+      renderField({ ...EMPTY_VALUES, addressLatitude: '-34.6083', addressLongitude: '-58.3928' });
+      await flush();
+
+      const map = screen.getByTestId('address-map');
+      expect(map).toHaveAttribute('data-latitude', '-34.6083');
+      expect(map).toHaveAttribute('data-longitude', '-58.3928');
+    });
+
+    it('mounts the map once the parent applies the hydrated values end to end', async () => {
+      serveDetails(fullDetails());
+      const onChange = vi.fn();
+      const { rerender } = render(
+        <AddressField values={EMPTY_VALUES} errors={{}} onChange={onChange} />,
+      );
+
+      await selectFirstSuggestion();
+
+      // Replay what the real parent does: fold the 11 onChange calls
+      // back into the controlled values and rerender.
+      const hydrated: AddressValues = { ...EMPTY_VALUES };
+      for (const [key, value] of onChange.mock.calls as [keyof AddressValues, string][]) {
+        hydrated[key] = value;
+      }
+      rerender(<AddressField values={hydrated} errors={{}} onChange={onChange} />);
+      await flush(); // let the dynamic chunk resolve and render
+
+      expect(screen.getByTestId('address-map')).toHaveAttribute('data-latitude', '-34.6083');
+    });
+
+    it('does not mount the map for out-of-range coordinates', async () => {
+      renderField({ ...EMPTY_VALUES, addressLatitude: '91', addressLongitude: '0' });
+      await flush();
+
+      expect(screen.queryByTestId('address-map')).toBeNull();
+    });
+
+    it('does not mount the map for non-numeric coordinates', async () => {
+      renderField({ ...EMPTY_VALUES, addressLatitude: 'abc', addressLongitude: '-58.3928' });
+      await flush();
+
+      expect(screen.queryByTestId('address-map')).toBeNull();
+    });
   });
 });

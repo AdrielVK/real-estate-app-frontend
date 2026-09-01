@@ -33,9 +33,12 @@
  */
 import { useCallback, useId, useState } from 'react';
 
+import dynamic from 'next/dynamic';
+
 import { ChevronDown } from 'lucide-react';
 
 import type { AddressComponent, PlaceDetailsResponse, Prediction } from '@/types/geocoding';
+import { parseCoordinates } from '@/lib/geocoding/coordinates';
 import { cn } from '@/lib/utils';
 
 import {
@@ -48,6 +51,15 @@ import { AddressDetails } from './AddressDetails';
 import { AddressSearchInput } from './AddressSearchInput';
 
 import { useAddressSearch } from '@/hooks/useAddressSearch';
+
+/**
+ * AS-4 mount boundary: Leaflet is client-only and heavy, so the map
+ * module loads through `next/dynamic` with `ssr:false` — and only when
+ * the controlled lat/lng pass `parseCoordinates` (the render below is
+ * gated, so the chunk is never even requested without real
+ * coordinates).
+ */
+const AddressMap = dynamic(() => import('./AddressMap'), { ssr: false });
 
 /** Controlled string values for the eleven address fields. */
 export interface AddressValues {
@@ -188,6 +200,10 @@ export function AddressField({ values, errors, onChange }: AddressFieldProps) {
   const showRequiredHint =
     missingRequired &&
     (values.addressFormatted === '' || values.addressCity === '' || values.addressCountry === '');
+
+  // AS-4 mount gate — the dynamic chunk loads only for finite in-range
+  // coordinates; blank/manual-empty lat/lng never touch Leaflet.
+  const coordinates = parseCoordinates(values.addressLatitude, values.addressLongitude);
 
   return (
     <SectionShell
@@ -331,6 +347,10 @@ export function AddressField({ values, errors, onChange }: AddressFieldProps) {
           </Field>
         </div>
       </div>
+
+      {coordinates ? (
+        <AddressMap latitude={values.addressLatitude} longitude={values.addressLongitude} />
+      ) : null}
     </SectionShell>
   );
 }
