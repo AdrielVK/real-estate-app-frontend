@@ -459,6 +459,62 @@ describe('useAddressSearch', () => {
     });
   });
 
+  describe('select(index) — pointer commit (Phase 4 addendum)', () => {
+    /** Open the list with 3 suggestions and return the hook result. */
+    async function openSuggestions(onSelect = vi.fn()) {
+      const utils = renderHook(() => useAddressSearch({ onSelect }));
+      setQuery(utils.result, 'abc');
+      await fireDebounce();
+      await settle();
+      return { ...utils, onSelect };
+    }
+
+    it('commits suggestions[index] with the pre-rotation token and closes', async () => {
+      const captured = trackRequests();
+      const { result, onSelect } = await openSuggestions();
+
+      act(() => {
+        result.current.select(1);
+      });
+
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      const [selected, tokenAtSelection] = onSelect.mock.calls[0] as [Prediction, string];
+      expect(selected.placeId).toBe('place-abc-1');
+      expect(tokenAtSelection).toBe(captured[0].url.searchParams.get('sessionToken'));
+      expect(result.current.isOpen).toBe(false);
+      expect(result.current.activeIndex).toBe(-1);
+    });
+
+    it('rotates the session token after a pointer commit (AS-8)', async () => {
+      const captured = trackRequests();
+      const { result } = await openSuggestions();
+
+      act(() => {
+        result.current.select(0);
+      });
+
+      setQuery(result, 'abcd');
+      await fireDebounce();
+      await settle();
+
+      const t2 = captured[1].url.searchParams.get('sessionToken');
+      expect(t2).toMatch(UUID_V4_RE);
+      expect(t2).not.toBe(captured[0].url.searchParams.get('sessionToken'));
+    });
+
+    it('ignores out-of-range indexes without calling onSelect', async () => {
+      const { result, onSelect } = await openSuggestions();
+
+      act(() => {
+        result.current.select(3);
+        result.current.select(-1);
+      });
+
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(result.current.isOpen).toBe(true);
+    });
+  });
+
   describe('AS-9 error surfacing', () => {
     async function driveToError(status: number, body: ProxyError) {
       server.use(

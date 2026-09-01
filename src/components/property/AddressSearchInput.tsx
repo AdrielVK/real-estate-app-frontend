@@ -30,9 +30,11 @@
  * keeps `aria-describedby` pointed at it, and manual typing is never
  * blocked — selection is only an enhancement over manual entry.
  *
- * Known boundary: suggestions are committed via keyboard Enter (the
- * hook exposes no click-select API); mouse selection is intentionally
- * out of Phase 3 scope — see the apply-progress note for Phase 4.
+ * Pointer policy (Phase 4 addendum): options commit on `onMouseDown`,
+ * not `onClick` — the input's blur-triggered `close()` collapses the
+ * listbox before a click could land, so mousedown is the only event
+ * that reliably reaches a still-mounted option. `select(index)` shares
+ * the hook's Enter commit path (token rotation included, AS-8).
  */
 import { type KeyboardEvent } from 'react';
 
@@ -78,6 +80,7 @@ export function AddressSearchInput({ id, label, placeholder, search }: AddressSe
     error,
     onKeyDown,
     close,
+    select,
   } = search;
 
   const listboxId = `${id}-listbox`;
@@ -133,6 +136,7 @@ export function AddressSearchInput({ id, label, placeholder, search }: AddressSe
                 id={optionId(index)}
                 role="option"
                 aria-selected={index === activeIndex}
+                onMouseDown={() => select(index)}
                 className={cn(
                   'flex flex-col gap-0.5 rounded-md px-3 py-2 text-left text-sm',
                   index === activeIndex

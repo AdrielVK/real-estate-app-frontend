@@ -297,6 +297,24 @@ describe('AddressSearchInput', () => {
     });
   });
 
+  describe('pointer commit (Phase 4 addendum: mouse selection)', () => {
+    it('mouseDown on an option commits that prediction and closes the listbox', async () => {
+      // mousedown (not click): the input's blur-triggered close() would
+      // otherwise collapse the listbox before a click could land.
+      servePredictions(plainPredictions(3));
+      const onSelect = renderHarness();
+      await openSuggestions();
+
+      const options = within(screen.getByRole('listbox')).getAllByRole('option');
+      fireEvent.mouseDown(options[2]);
+
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      const [prediction] = onSelect.mock.calls[0] as [Prediction, string];
+      expect(prediction.placeId).toBe('place-2');
+      expect(screen.queryByRole('listbox')).toBeNull();
+    });
+  });
+
   describe('AS-9 aria-live status', () => {
     it('exposes an aria-live="polite" status region described by the combobox', () => {
       renderHarness();

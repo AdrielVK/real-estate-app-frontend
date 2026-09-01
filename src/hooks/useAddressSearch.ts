@@ -47,11 +47,12 @@ export interface SearchKeyboardEvent {
 
 export interface UseAddressSearchOptions {
   /**
-   * Fired when the user commits a suggestion (Enter). Receives the
-   * session token that was active for the search that produced the
-   * prediction — pass it to `/api/geocoding/details` so the selection
-   * bills inside the same session (GP-3). The hook rotates its own
-   * token immediately after (AS-8).
+   * Fired when the user commits a suggestion (Enter or `select(index)`
+   * — the pointer path). Receives the session token that was active
+   * for the search that produced the prediction — pass it to
+   * `/api/geocoding/details` so the selection bills inside the same
+   * session (GP-3). The hook rotates its own token immediately after
+   * the callback (AS-8).
    */
   onSelect(prediction: Prediction, sessionToken: string): void;
 }
@@ -67,6 +68,15 @@ export interface UseAddressSearchResult {
   error: string | null;
   onKeyDown(event: SearchKeyboardEvent): void;
   close(): void;
+  /**
+   * Commit `suggestions[index]` — the pointer counterpart of Enter
+   * (Phase 4 addendum: the combobox wires option `onMouseDown` to
+   * this because the input's blur-triggered `close()` would collapse
+   * the listbox before a click could land). Same contract as Enter:
+   * `onSelect(prediction, pre-rotation token)` then token rotation and
+   * close (AS-8). Out-of-range indexes are a silent no-op.
+   */
+  select(index: number): void;
 }
 
 /** Calm, non-technical copy per GP-5/GP-6 error code (AS-9). */
@@ -204,6 +214,33 @@ export function useAddressSearch(options: UseAddressSearchOptions): UseAddressSe
     setActiveIndex(-1);
   }, []);
 
+  // Shared commit path for Enter and pointer selection: hand onSelect
+  // the PRE-rotation token (GP-3 billing grouping), then rotate (AS-8)
+  // and close. Refs (onSelectRef, tokenRef) keep this stable so the
+  // Enter branch and `select` can never drift apart.
+  const commit = useCallback(
+    (prediction: Prediction) => {
+      const sessionToken = tokenRef.current ?? newSessionToken();
+      onSelectRef.current(prediction, sessionToken);
+      // AS-8: rotate AFTER handing the old token to onSelect so the
+      // details call can still group under the finished session.
+      tokenRef.current = newSessionToken();
+      close();
+    },
+    [close],
+  );
+
+  const select = useCallback(
+    (index: number) => {
+      const prediction = suggestions[index];
+      if (!prediction) {
+        return; // out-of-range pointer — no-op, list stays open
+      }
+      commit(prediction);
+    },
+    [commit, suggestions],
+  );
+
   const onKeyDown = useCallback(
     (event: SearchKeyboardEvent) => {
       switch (event.key) {
@@ -231,12 +268,7 @@ export function useAddressSearch(options: UseAddressSearchOptions): UseAddressSe
             return;
           }
           event.preventDefault();
-          const sessionToken = tokenRef.current ?? newSessionToken();
-          onSelectRef.current(prediction, sessionToken);
-          // AS-8: rotate AFTER handing the old token to onSelect so the
-          // details call can still group under the finished session.
-          tokenRef.current = newSessionToken();
-          close();
+          commit(prediction);
           break;
         }
         case 'Escape':
@@ -247,7 +279,7 @@ export function useAddressSearch(options: UseAddressSearchOptions): UseAddressSe
           break;
       }
     },
-    [activeIndex, close, isOpen, suggestions],
+    [activeIndex, close, commit, isOpen, suggestions],
   );
 
   // Unmount: cancel the debounce window and abort any in-flight fetch
@@ -271,5 +303,6 @@ export function useAddressSearch(options: UseAddressSearchOptions): UseAddressSe
     error,
     onKeyDown,
     close,
+    select,
   };
 }
