@@ -81,6 +81,18 @@ function getCombobox(): HTMLInputElement {
   return screen.getByRole('combobox') as HTMLInputElement;
 }
 
+/**
+ * The polite live region. Queried by id, not `role=status`: the region
+ * is a bare `aria-live="polite"` div on purpose — the create form's
+ * error-summary contract asserts a UNIQUE `role=status` per form, and
+ * this combobox is one of its sections (Phase 4 collision fix).
+ */
+function getLiveRegion(): HTMLElement {
+  const el = document.getElementById(`${ID}-status`);
+  if (!el) throw new Error('live region not rendered');
+  return el;
+}
+
 /** Type a query (single change event — the hook debounces it). */
 function typeQuery(value: string) {
   fireEvent.change(getCombobox(), { target: { value } });
@@ -319,7 +331,7 @@ describe('AddressSearchInput', () => {
     it('exposes an aria-live="polite" status region described by the combobox', () => {
       renderHarness();
 
-      const status = screen.getByRole('status');
+      const status = getLiveRegion();
       expect(status).toHaveAttribute('aria-live', 'polite');
       expect(getCombobox()).toHaveAttribute('aria-describedby', status.id);
       expect(status).toHaveTextContent('');
@@ -340,7 +352,7 @@ describe('AddressSearchInput', () => {
       typeQuery('abc');
       await settleSearch(); // crosses the debounce; response stays pending
 
-      expect(screen.getByRole('status')).toHaveTextContent(/searching/i);
+      expect(getLiveRegion()).toHaveTextContent(/searching/i);
     });
 
     it('surfaces proxy errors inline and keeps manual entry available', async () => {
@@ -353,8 +365,8 @@ describe('AddressSearchInput', () => {
 
       await openSuggestions();
 
-      expect(screen.getByRole('status')).toHaveTextContent(/not configured/i);
-      expect(screen.getByRole('status')).toHaveTextContent(/manual/i);
+      expect(getLiveRegion()).toHaveTextContent(/not configured/i);
+      expect(getLiveRegion()).toHaveTextContent(/manual/i);
       expect(getCombobox().value).toBe('abc');
       expect(screen.queryByRole('listbox')).toBeNull();
     });

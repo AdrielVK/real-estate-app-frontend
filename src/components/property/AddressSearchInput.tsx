@@ -25,10 +25,14 @@
  * - an IME composition guard (OptionSelect precedent): Enter while
  *   composing confirms the composing text, it must not select.
  *
- * AS-9 surface: a polite live region (`role=status`) announces the
- * loading state and the hook's calm error message inline; the input
+ * AS-9 surface: a polite live region (`aria-live="polite"`) announces
+ * the loading state and the hook's calm error message inline; the input
  * keeps `aria-describedby` pointed at it, and manual typing is never
- * blocked — selection is only an enhancement over manual entry.
+ * blocked — selection is only an enhancement over manual entry. The
+ * region deliberately has NO `role="status"`: the create form's
+ * error-summary contract (PropertyCreateForm.test.tsx) asserts a
+ * UNIQUE `role=status` per form, and a bare aria-live div is announced
+ * identically — AS-9 pins "aria-live polite", not the role.
  *
  * Pointer policy (Phase 4 addendum): options commit on `onMouseDown`,
  * not `onClick` — the input's blur-triggered `close()` collapses the
@@ -162,11 +166,12 @@ export function AddressSearchInput({ id, label, placeholder, search }: AddressSe
       {/*
        * Polite live region (AS-9): `min-h-4` reserves the line so
        * appearing/disappearing status copy never shifts the layout —
-       * the LoginForm precedent.
+       * the LoginForm precedent. No `role="status"` on purpose: the
+       * create form's error-summary contract asserts a unique
+       * `role=status` per form (see the docblock above).
        */}
       <div
         id={statusId}
-        role="status"
         aria-live="polite"
         className={cn(
           'min-h-4 text-xs leading-relaxed',
