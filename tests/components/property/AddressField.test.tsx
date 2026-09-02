@@ -38,8 +38,9 @@ import { server } from '@/mocks/server';
 
 // The map now mounts through `AddressConfirmedSection`'s `next/dynamic`
 // (ui-refine moved the const; the mock targets the MODULE ID so it keeps
-// working unchanged). The real AddressMap pulls Leaflet, which needs
-// canvas/layout jsdom does not provide — the stub keeps the mount GATE
+// working unchanged). The real AddressMap pulls a WebGL map library,
+// which needs canvas/layout jsdom does not provide — the stub keeps the
+// mount GATE
 // under test (does the confirmed section render the map, and with which
 // coordinates?) without importing the chunk's contents.
 vi.mock('@/components/property/AddressMap', async () => {

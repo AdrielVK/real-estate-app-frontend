@@ -11,8 +11,9 @@
  *   confirmed) is the orchestrator's contract — proved in
  *   `AddressField.test.tsx`.
  * - The map stub follows the `AddressField.test.tsx` precedent: the real
- *   AddressMap pulls Leaflet (canvas/layout jsdom lacks); the stub keeps
- *   the mount GATE under test without importing the chunk.
+ *   AddressMap pulls a WebGL map library (canvas/layout jsdom lacks);
+ *   the stub keeps the mount GATE under test without importing the
+ *   chunk — the section itself stays provider-agnostic (ACS-3).
  *
  * ACS-4 query policy: hidden inputs match no `getByLabelText`/`getByRole`
  * because the section renders no labels for them — the spec says to

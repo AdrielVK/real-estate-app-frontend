@@ -60,3 +60,21 @@ describe('geocoding key leak scan (GP-7)', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/**
+ * AS-16 allowlist: `NEXT_PUBLIC_MAPBOX_TOKEN` is the INTENTIONAL
+ * client-readable exception to the "no keys in the bundle" rule — unlike
+ * the server-only Places key it is a public, URL-restricted token whose
+ * exposure is the documented Mapbox browser pattern. The scan MUST keep
+ * allowing it while still forbidding `GOOGLE_PLACES_API_KEY`.
+ */
+describe('public token allowlist (AS-16)', () => {
+  it('NEXT_PUBLIC_MAPBOX_TOKEN is not part of the forbidden set', () => {
+    expect(FORBIDDEN).not.toContain('NEXT_PUBLIC_MAPBOX_TOKEN');
+  });
+
+  it('the map module actually consumes the public token (the allowlist is real, not vacuous)', () => {
+    const source = readFileSync('src/components/property/AddressMap.tsx', 'utf-8');
+    expect(source).toContain('NEXT_PUBLIC_MAPBOX_TOKEN');
+  });
+});
