@@ -1,12 +1,16 @@
 'use client';
 
 /**
- * `AddressDetails` — read-only summary of the confirmed place (AS-5).
+ * `AddressDetails` — read-only summary of the confirmed place (AS-5),
+ * now the presentational `<dl>` child of `AddressConfirmedSection`
+ * (property-address-ui-refine, design D1).
  *
  * Shown only AFTER an autocomplete selection (hidden pre-selection):
- * it reflects what hydration mapped from the details response, plus a
- * manual-override note so ops users know every field below stays
- * editable — the search is an accelerator, never a lock-in.
+ * it reflects the LIVE controlled values it receives, so manual edits
+ * in the disclosure grid update the summary immediately (ACS-2). The
+ * footer states the editable scope honestly: the 3 required + 5
+ * optional fields are manual-editable; placeId/lat/lng belong to the
+ * selection (AS-12/ACS-4).
  *
  * Why a `<dl>` of text instead of disabled inputs:
  * - the form's a11y contract counts every labeled control; read-only
@@ -54,7 +58,8 @@ export function AddressDetails({ description, values }: AddressDetailsProps) {
         ))}
       </dl>
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Podés editar cualquier campo manualmente; la búsqueda solo completa los datos.
+        Podés editar los campos obligatorios y los 5 opcionales; la ubicación y el Place ID los fija
+        la selección.
       </p>
     </div>
   );

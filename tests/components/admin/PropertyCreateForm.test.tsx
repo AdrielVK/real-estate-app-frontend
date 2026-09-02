@@ -23,6 +23,7 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createPropertyAction } from '@/lib/properties/actions';
@@ -48,6 +49,8 @@ import {
   buildStatusOptions,
   PROPERTY_STATUS_LABEL,
 } from '@/components/admin/properties/create/property-create.labels';
+
+import { server } from '@/mocks/server';
 
 vi.mock('@/lib/properties/actions', () => ({
   createPropertyAction: vi.fn(),
@@ -298,33 +301,29 @@ describe('AddressSection', () => {
     }
   });
 
-  it('renders the eight optional address fields without required', () => {
+  it('renders the five editable optional address fields without required (AS-12)', () => {
     render(<AddressSection values={ADDRESS_VALUES} errors={{}} onChange={noop} />);
 
-    const optionalLabels = [
-      'Place ID',
-      'Calle',
-      'Número',
-      'Barrio',
-      'Provincia',
-      'Código postal',
-      'Latitud',
-      'Longitud',
-    ];
-    expect(optionalLabels).toHaveLength(8);
+    const optionalLabels = ['Calle', 'Número', 'Barrio', 'Provincia', 'Código postal'];
+    expect(optionalLabels).toHaveLength(5);
     for (const label of optionalLabels) {
       const control = screen.getByLabelText(label);
       expect(control).toBeInTheDocument();
       expect(control).not.toBeRequired();
     }
+    // The system trio has no editable control — hidden inputs carry it
+    // only after a confirmed selection (ACS-4), never labels.
+    expect(screen.queryByLabelText('Place ID')).toBeNull();
+    expect(screen.queryByLabelText('Latitud')).toBeNull();
+    expect(screen.queryByLabelText('Longitud')).toBeNull();
   });
 
-  it('reports latitude edits through onChange with the field key', () => {
+  it('reports street edits through onChange with the field key', () => {
     const onChange = vi.fn();
     render(<AddressSection values={ADDRESS_VALUES} errors={{}} onChange={onChange} />);
 
-    fireEvent.change(screen.getByLabelText('Latitud'), { target: { value: '-34.6' } });
-    expect(onChange).toHaveBeenCalledWith('addressLatitude', '-34.6');
+    fireEvent.change(screen.getByLabelText('Calle'), { target: { value: 'Calle Falsa' } });
+    expect(onChange).toHaveBeenCalledWith('addressStreet', 'Calle Falsa');
   });
 
   it('wires the mapped error onto addressFormatted (aria-invalid + message)', () => {
@@ -678,6 +677,21 @@ async function fillValidRequiredFields(user: ReturnType<typeof setupUser>) {
   await user.type(screen.getByLabelText('País'), 'Uruguay');
 }
 
+/**
+ * Drive the address autocomplete to a confirmed selection against the
+ * default MSW geocoding handlers (ui-refine: the system trio ships via
+ * the confirmed section's hidden inputs, so payload tests select a
+ * place instead of typing lat/lng). Real timers + `waitFor` absorb the
+ * 300ms debounce; `fireEvent.mouseDown` commits per the combobox's
+ * blur-before-click pointer policy.
+ */
+async function selectFirstAddressSuggestion(user: ReturnType<typeof setupUser>) {
+  await user.type(screen.getByLabelText('Buscar dirección'), 'abc');
+  await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(3));
+  fireEvent.mouseDown(screen.getAllByRole('option')[0]);
+  await waitFor(() => expect(screen.getByText(/dirección confirmada/i)).toBeInTheDocument());
+}
+
 /** Row containers in DOM order (the section's structural anchor). */
 function characteristicRows(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>('[data-testid="characteristic-row"]'));
@@ -716,13 +730,17 @@ describe('PropertyCreateForm', () => {
         ...document.querySelectorAll('[role="combobox"]'),
       ]),
     );
-    // 5 basic-info + 11 address + 1 features toggle + 1 address-search
+    // 5 basic-info + 8 labeled address inputs (3 required + 5 editable
+    // optionals — AS-12) + 1 features toggle + 1 address-search
     // combobox (property-address-autocomplete: the search input is a
-    // labeled control like the ProfileCombobox inputs before it). With
-    // the toggle off the feature inputs are not rendered, and the
+    // labeled control like the ProfileCombobox inputs before it). The
+    // system trio renders ONLY as hidden inputs inside the confirmed
+    // section after a selection (ACS-4) — none exist on this initial
+    // render, so every enumerated control must carry exactly one label.
+    // With the toggle off the feature inputs are not rendered, and the
     // characteristics section has zero rows — no orphan controls either
     // way.
-    expect(controls).toHaveLength(18);
+    expect(controls).toHaveLength(15);
     for (const control of controls) {
       const labeled = control as HTMLInputElement;
       expect(labeled.id).not.toBe('');
@@ -761,12 +779,12 @@ describe('PropertyCreateForm', () => {
     expect(status).toHaveTextContent('Revisá los campos marcados.');
   });
 
-  it('passes the coerced, schema-parsed payload to the action when valid', async () => {
+  it('passes the coerced, schema-parsed payload with system values from the confirmed selection', async () => {
     const user = setupUser();
     render(<PropertyCreateForm canCreate />);
 
     await fillValidRequiredFields(user);
-    await user.type(screen.getByLabelText('Latitud'), '-34.6');
+    await selectFirstAddressSuggestion(user);
     await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
 
     expect(mockCreatePropertyAction).toHaveBeenCalledTimes(1);
@@ -777,25 +795,53 @@ describe('PropertyCreateForm', () => {
     expect(payload.status).toBe('disponible');
     // Empty optionals collapse to undefined (preprocess), never "".
     expect(payload.internalCode).toBeUndefined();
-    // Coercion: the string "-34.6" becomes a real number (design D2).
-    expect(payload.address.latitude).toBeCloseTo(-34.6, 10);
-    expect(payload.address.formattedAddress).toBe('Calle 1 1234');
+    // Coercion: the hydrated string "-34.6037" becomes a real number —
+    // carried by the confirmed section's hidden inputs, never typed
+    // (AS-3 system keys non-editable, ACS-4 payload parity).
+    expect(payload.address.latitude).toBeCloseTo(-34.6037, 10);
+    expect(payload.address.longitude).toBeCloseTo(-58.3816, 10);
+    expect(payload.address.placeId).toBe('mock-place-1');
+    // Hydration overwrote the manually typed required values end to end.
+    expect(payload.address.formattedAddress).toBe('Mock Street 1, Mock City, MS 12345, Mockland');
     // Features toggle defaults to off and no rows were added: both
     // keys are absent from the payload (design D7 — omit entirely).
     expect(payload.features).toBeUndefined();
     expect(payload.characteristics).toBeUndefined();
   });
 
-  it('rejects an out-of-range latitude through the schema gate without calling the action', async () => {
+  it('rejects an out-of-range hydrated latitude through the schema gate, anchored on the hidden input', async () => {
+    // ui-refine migration (AS-12): manual lat typing is gone, so the
+    // gate is fed by a details fixture with location.lat 200. The error
+    // must still light the summary link `#addressLatitude` and its
+    // anchor target — the confirmed section's hidden input (design D3,
+    // 8-key error heuristic D6).
+    server.use(
+      http.get('*/api/geocoding/details', ({ request }) =>
+        HttpResponse.json({
+          placeId: new URL(request.url).searchParams.get('placeId') ?? 'p',
+          formattedAddress: 'Calle Falsa 123, Springfield, US',
+          addressComponents: [
+            { longText: 'Springfield', shortText: 'Springfield', types: ['locality'] },
+            { longText: 'United States', shortText: 'US', types: ['country'] },
+          ],
+          location: { lat: 200, lng: 0 },
+        }),
+      ),
+    );
     const user = setupUser();
     render(<PropertyCreateForm canCreate />);
 
     await fillValidRequiredFields(user);
-    await user.type(screen.getByLabelText('Latitud'), '200');
+    await selectFirstAddressSuggestion(user);
     await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
 
     expect(mockCreatePropertyAction).not.toHaveBeenCalled();
-    expect(screen.getByLabelText('Latitud')).toHaveAttribute('aria-invalid', 'true');
+    const link = document.querySelector('a[href="#addressLatitude"]');
+    expect(link).not.toBeNull();
+    const target = document.getElementById('addressLatitude');
+    expect(target).not.toBeNull();
+    expect((target as HTMLInputElement).type).toBe('hidden');
+    expect((target as HTMLInputElement).value).toBe('200');
   });
 
   it('renders server-returned field errors on the matching control', async () => {

@@ -30,6 +30,10 @@
  * - Enter selection reaching onSelect with the PRE-rotation session
  *   token (two-arg contract, GP-3),
  * - aria-live="polite" status region for loading/error (AS-9).
+ *
+ * property-address-ui-refine extends this file with the AS-10/AS-11
+ * class contract (solid popover surface, cursor-pointer options,
+ * hover/idle/active state distinction).
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -113,6 +117,15 @@ async function openSuggestions() {
 
 function pressKey(key: string) {
   return fireEvent.keyDown(getCombobox(), { key });
+}
+
+/**
+ * Token-exact class check. `className.split` equality is deliberate:
+ * a substring `toContain` would let `border-border/70` fake-pass as
+ * `border-border`, defeating the AS-10 opacity contract assertion.
+ */
+function hasClassToken(el: HTMLElement, token: string): boolean {
+  return el.className.split(/\s+/).includes(token);
 }
 
 describe('AddressSearchInput', () => {
@@ -324,6 +337,69 @@ describe('AddressSearchInput', () => {
       const [prediction] = onSelect.mock.calls[0] as [Prediction, string];
       expect(prediction.placeId).toBe('place-2');
       expect(screen.queryByRole('listbox')).toBeNull();
+    });
+  });
+
+  // property-address-ui-refine — AS-10/AS-11 class contract. The spec
+  // pins the tokens themselves (opaque surface cannot be proven via
+  // computed styles in jsdom), so these assert the design-token class
+  // list as the acceptance contract, per the design Testing Strategy.
+  describe('AS-10 opaque suggestion surface', () => {
+    it('renders the listbox on a solid popover surface, never glass-panel or backdrop blur', async () => {
+      servePredictions(plainPredictions(3));
+      renderHarness();
+      await openSuggestions();
+
+      const listbox = screen.getByRole('listbox');
+      expect(hasClassToken(listbox, 'bg-popover')).toBe(true);
+      expect(hasClassToken(listbox, 'text-popover-foreground')).toBe(true);
+      expect(hasClassToken(listbox, 'border-border')).toBe(true);
+      expect(hasClassToken(listbox, 'shadow-lg')).toBe(true);
+      expect(hasClassToken(listbox, 'glass-panel')).toBe(false);
+      expect(hasClassToken(listbox, 'backdrop-blur')).toBe(false);
+      expect(hasClassToken(listbox, 'backdrop-blur-sm')).toBe(false);
+    });
+  });
+
+  describe('AS-11 option pointer affordance and state contrast', () => {
+    it('exposes cursor-pointer on every option', async () => {
+      servePredictions(plainPredictions(3));
+      renderHarness();
+      await openSuggestions();
+
+      const options = within(screen.getByRole('listbox')).getAllByRole('option');
+      expect(options).toHaveLength(3);
+      expect(options.every((option) => hasClassToken(option, 'cursor-pointer'))).toBe(true);
+    });
+
+    it('keeps hover affordance on all options and distinguishes idle vs keyboard-active states', async () => {
+      servePredictions(plainPredictions(3));
+      renderHarness();
+      await openSuggestions();
+
+      pressKey('ArrowDown'); // activeIndex -> option 0
+
+      const options = within(screen.getByRole('listbox')).getAllByRole('option');
+      // Hover affordance exists on every option (distinct from the
+      // solid active fill: hover:bg-secondary/50 vs bg-secondary).
+      expect(options.every((option) => hasClassToken(option, 'hover:bg-secondary/50'))).toBe(true);
+
+      // Active option: solid selection fill.
+      expect(hasClassToken(options[0], 'bg-secondary')).toBe(true);
+      expect(hasClassToken(options[0], 'text-secondary-foreground')).toBe(true);
+
+      // Idle options: muted text, no selection fill.
+      for (const idle of options.slice(1)) {
+        expect(hasClassToken(idle, 'bg-secondary')).toBe(false);
+        expect(hasClassToken(idle, 'text-muted-foreground')).toBe(true);
+      }
+
+      // aria-selected stays ONLY on the keyboard-active option.
+      expect(options.map((option) => option.getAttribute('aria-selected'))).toEqual([
+        'true',
+        'false',
+        'false',
+      ]);
     });
   });
 

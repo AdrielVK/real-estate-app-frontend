@@ -39,6 +39,12 @@
  * listbox before a click could land, so mousedown is the only event
  * that reliably reaches a still-mounted option. `select(index)` shares
  * the hook's Enter commit path (token rotation included, AS-8).
+ *
+ * Surface policy (property-address-ui-refine, AS-10/AS-11): the listbox
+ * is an opaque `bg-popover` + `border-border` + `shadow-lg` card — no
+ * glass-panel/backdrop blur, so suggestions stay legible in both themes.
+ * Options expose `cursor-pointer` and a hover fill distinct from the
+ * solid keyboard-active fill (`hover:bg-secondary/50` vs `bg-secondary`).
  */
 import { type KeyboardEvent } from 'react';
 
@@ -132,7 +138,7 @@ export function AddressSearchInput({ id, label, placeholder, search }: AddressSe
             id={listboxId}
             role="listbox"
             aria-labelledby={id}
-            className="glass-panel absolute top-full z-50 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-border/70 p-1.5"
+            className="absolute top-full z-50 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-lg"
           >
             {suggestions.map((prediction, index) => (
               <li
@@ -142,7 +148,7 @@ export function AddressSearchInput({ id, label, placeholder, search }: AddressSe
                 aria-selected={index === activeIndex}
                 onMouseDown={() => select(index)}
                 className={cn(
-                  'flex flex-col gap-0.5 rounded-md px-3 py-2 text-left text-sm',
+                  'flex cursor-pointer flex-col gap-0.5 rounded-md px-3 py-2 text-left text-sm hover:bg-secondary/50',
                   index === activeIndex
                     ? 'bg-secondary text-secondary-foreground'
                     : 'text-muted-foreground',

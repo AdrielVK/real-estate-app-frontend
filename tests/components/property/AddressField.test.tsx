@@ -27,11 +27,12 @@ import { AddressField, type AddressValues } from '@/components/property/AddressF
 
 import { server } from '@/mocks/server';
 
-// Phase 5 (AS-4): `AddressField` mounts the map through `next/dynamic`.
-// The real AddressMap pulls Leaflet, which needs canvas/layout jsdom
-// does not provide — the stub keeps the mount GATE under test (does the
-// orchestrator render the map, and with which coordinates?) without
-// importing the chunk's contents.
+// The map now mounts through `AddressConfirmedSection`'s `next/dynamic`
+// (ui-refine moved the const; the mock targets the MODULE ID so it keeps
+// working unchanged). The real AddressMap pulls Leaflet, which needs
+// canvas/layout jsdom does not provide — the stub keeps the mount GATE
+// under test (does the confirmed section render the map, and with which
+// coordinates?) without importing the chunk's contents.
 vi.mock('@/components/property/AddressMap', async () => {
   const { createElement } = await import('react');
   return {
@@ -292,8 +293,8 @@ describe('AddressField', () => {
     });
   });
 
-  describe('confirmed summary (AddressDetails)', () => {
-    it('is hidden before a selection and shows the confirmed place after', async () => {
+  describe('confirmed summary (delegated to AddressConfirmedSection)', () => {
+    it('is hidden before a selection and shows exactly one confirmed view after', async () => {
       serveDetails(fullDetails());
       renderField();
 
@@ -301,8 +302,10 @@ describe('AddressField', () => {
 
       await selectFirstSuggestion();
 
-      expect(screen.getByText(/dirección confirmada/i)).toBeInTheDocument();
-      expect(screen.getByText('Av. Rivadavia 742, CABA, Argentina')).toBeInTheDocument();
+      // AS-5/ACS-1: one owner, rendered once, carrying the frozen
+      // prediction description (the default MSW suggestion text).
+      expect(screen.getAllByText(/dirección confirmada/i)).toHaveLength(1);
+      expect(screen.getByText('abc Mock Street 1, Mock City')).toBeInTheDocument();
     });
   });
 
@@ -342,22 +345,29 @@ describe('AddressField', () => {
       }
     });
 
-    it('renders the eight optional fields behind the identical disclosure button copy', () => {
+    it('exposes exactly the five editable optional fields behind the 5-campo disclosure (AS-12)', () => {
       renderField();
       const button = screen.getByRole('button', {
-        name: /Mostrar detalles opcionales \(8 campos\)/,
+        name: /Mostrar detalles opcionales \(5 campos\)/,
       });
       expect(button).toHaveAttribute('aria-expanded', 'false');
 
       fireEvent.click(button);
       expect(button).toHaveAttribute('aria-expanded', 'true');
-      expect(screen.getByLabelText('Latitud')).toBeInTheDocument();
+      for (const label of ['Calle', 'Número', 'Barrio', 'Provincia', 'Código postal']) {
+        expect(screen.getByLabelText(label)).toBeInTheDocument();
+      }
+      // AS-12/ACS-4: no user-editable control for the system trio —
+      // proven by the absence of label queries, never by typing.
+      expect(screen.queryByLabelText('Place ID')).toBeNull();
+      expect(screen.queryByLabelText('Latitud')).toBeNull();
+      expect(screen.queryByLabelText('Longitud')).toBeNull();
     });
 
     it('wires manual edits through onChange with the field key', () => {
       const onChange = renderField();
-      fireEvent.change(screen.getByLabelText('Latitud'), { target: { value: '-34.6' } });
-      expect(onChange).toHaveBeenCalledWith('addressLatitude', '-34.6');
+      fireEvent.change(screen.getByLabelText('Calle'), { target: { value: 'Calle Falsa' } });
+      expect(onChange).toHaveBeenCalledWith('addressStreet', 'Calle Falsa');
     });
 
     it('wires the mapped error onto addressFormatted (aria-invalid + message)', () => {
@@ -373,6 +383,31 @@ describe('AddressField', () => {
 
     it('starts the disclosure open when an optional already has a value', () => {
       renderField({ ...EMPTY_VALUES, addressStreet: 'Calle Falsa 123' });
+      expect(screen.getByRole('button', { name: /Ocultar detalles opcionales/ })).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+    });
+
+    // D6 heuristics split: the VALUE heuristic tracks only the 5 editable
+    // keys (lat/lng always hydrate on selection — counting them would
+    // force the disclosure open on every search), while the ERROR
+    // heuristic keeps all 8 keys so no server-mapped error loses the
+    // SectionShell "Revisar" signal or the auto-open.
+    it('keeps the disclosure closed when only system values are hydrated (D6)', () => {
+      renderField({
+        ...EMPTY_VALUES,
+        addressPlaceId: 'ChIJ-hydrated',
+        addressLatitude: '-34.6083',
+        addressLongitude: '-58.3928',
+      });
+      expect(
+        screen.getByRole('button', { name: /Mostrar detalles opcionales \(5 campos\)/ }),
+      ).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('starts the disclosure open when a system key carries a server error (D6)', () => {
+      renderField(EMPTY_VALUES, { addressLatitude: 'Latitud fuera de rango' });
       expect(screen.getByRole('button', { name: /Ocultar detalles opcionales/ })).toHaveAttribute(
         'aria-expanded',
         'true',
@@ -402,7 +437,7 @@ describe('AddressField', () => {
   /* AS-4 — dynamic map mount gate                                        */
   /* ------------------------------------------------------------------ */
 
-  describe('address map (AS-4)', () => {
+  describe('address map (AS-4/ACS-1/ACS-3)', () => {
     it('does not mount the map while the coordinates are blank', async () => {
       renderField();
       await flush();
@@ -410,13 +445,13 @@ describe('AddressField', () => {
       expect(screen.queryByTestId('address-map')).toBeNull();
     });
 
-    it('mounts the map when the controlled values carry valid coordinates', async () => {
+    it('does not mount the map without a confirmed selection, even with valid coordinates', async () => {
+      // ACS-1: the map lives inside the confirmed section — valid
+      // coordinates alone never mount it before a selection.
       renderField({ ...EMPTY_VALUES, addressLatitude: '-34.6083', addressLongitude: '-58.3928' });
       await flush();
 
-      const map = screen.getByTestId('address-map');
-      expect(map).toHaveAttribute('data-latitude', '-34.6083');
-      expect(map).toHaveAttribute('data-longitude', '-58.3928');
+      expect(screen.queryByTestId('address-map')).toBeNull();
     });
 
     it('mounts the map once the parent applies the hydrated values end to end', async () => {
@@ -440,15 +475,23 @@ describe('AddressField', () => {
       expect(screen.getByTestId('address-map')).toHaveAttribute('data-latitude', '-34.6083');
     });
 
-    it('does not mount the map for out-of-range coordinates', async () => {
-      renderField({ ...EMPTY_VALUES, addressLatitude: '91', addressLongitude: '0' });
-      await flush();
+    it('does not mount the map when hydrated coordinates are out of range', async () => {
+      // The blank/non-numeric gates moved to the section tests (ACS-3);
+      // this integration case proves the orchestrator still feeds the
+      // section LIVE values through the gate.
+      serveDetails({ ...fullDetails(), location: { lat: 91, lng: -58.3928 } });
+      const onChange = vi.fn();
+      const { rerender } = render(
+        <AddressField values={EMPTY_VALUES} errors={{}} onChange={onChange} />,
+      );
 
-      expect(screen.queryByTestId('address-map')).toBeNull();
-    });
+      await selectFirstSuggestion();
 
-    it('does not mount the map for non-numeric coordinates', async () => {
-      renderField({ ...EMPTY_VALUES, addressLatitude: 'abc', addressLongitude: '-58.3928' });
+      const hydrated: AddressValues = { ...EMPTY_VALUES };
+      for (const [key, value] of onChange.mock.calls as [keyof AddressValues, string][]) {
+        hydrated[key] = value;
+      }
+      rerender(<AddressField values={hydrated} errors={{}} onChange={onChange} />);
       await flush();
 
       expect(screen.queryByTestId('address-map')).toBeNull();
