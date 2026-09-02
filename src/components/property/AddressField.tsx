@@ -374,6 +374,20 @@ export function AddressField({ values, errors, onChange, onDirtyCoreChange }: Ad
     errors.addressFormatted ?? errors.addressCity ?? errors.addressCountry,
   );
 
+  // DCS-6: stale AND the compose is under MIN_CHARS — the auto-trigger
+  // is silent by design, so the confirmed section shows the explicit
+  // retry CTA instead.
+  const showRetryCta =
+    dirtyCore.length > 0 &&
+    confirmedSnapshot !== null &&
+    composeAddressQuery(values, confirmedSnapshot).trim().length < AUTO_TRIGGER_MIN_QUERY_CHARS;
+
+  // DCS-6: the CTA hands control back to the search box — the `addressSearch`
+  // id is pinned by the AS-6 grid contract, so focus goes straight there.
+  const handleRetry = useCallback(() => {
+    document.getElementById('addressSearch')?.focus();
+  }, []);
+
   // The hint tracks the hydration outcome while the required values are
   // still blank — typing them manually retires the hint (controlled
   // values are the single source of truth for "filled").
@@ -397,7 +411,13 @@ export function AddressField({ values, errors, onChange, onDirtyCoreChange }: Ad
           onClear={handleClear}
         />
         {confirmedDescription ? (
-          <AddressConfirmedSection description={confirmedDescription} values={values} />
+          <AddressConfirmedSection
+            description={confirmedDescription}
+            values={values}
+            isStale={dirtyCore.length > 0}
+            showRetryCta={showRetryCta}
+            onRetry={handleRetry}
+          />
         ) : null}
         {detailsError ? (
           <p className="text-sm leading-snug text-destructive">{detailsError}</p>

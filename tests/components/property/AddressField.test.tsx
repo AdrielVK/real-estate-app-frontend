@@ -354,7 +354,10 @@ describe('AddressField', () => {
   describe('confirmed summary (delegated to AddressConfirmedSection)', () => {
     it('is hidden before a selection and shows exactly one confirmed view after', async () => {
       serveDetails(fullDetails());
-      renderField();
+      // Controlled: the confirmed view is NOT stale when the parent
+      // applies the hydrated values (confirm-sync-v2 would otherwise
+      // swap the label to the stale copy).
+      renderControlled();
 
       expect(screen.queryByText(/dirección confirmada/i)).toBeNull();
 
@@ -963,10 +966,12 @@ describe('AddressField', () => {
 
       await flush(5000);
       // The auto-trigger never set the input to '', so AS-13 stayed
-      // unarmed: no 11-key clear, the confirmed view survives.
+      // unarmed: no 11-key clear, the confirmed view survives — in its
+      // STALE dress (DCS-5: country diverges from the snapshot).
       expect(inputs).toEqual([]);
       expect(onChange).toHaveBeenCalledTimes(1); // only the country edit itself
-      expect(screen.getByText(/dirección confirmada/i)).toBeInTheDocument();
+      expect(screen.getByText('Vista previa anterior')).toBeInTheDocument();
+      expect(document.getElementById('addressPlaceId')).not.toBeNull();
     });
 
     it('does not re-fire for non-core edits while the same query is already composed', async () => {
@@ -1041,6 +1046,40 @@ describe('AddressField', () => {
         `d:${tokens[1]}`,
       ]);
       expect(randomUUID).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('core sync — stale wiring (DCS-5, DCS-6)', () => {
+    it('marks the confirmed view stale on a core edit and swaps to the CTA when the compose drops under 3 chars', async () => {
+      serveDetails(fullDetails());
+      renderControlled();
+
+      await selectFirstSuggestion();
+      expect(screen.queryByText('Vista previa anterior')).toBeNull();
+
+      fireEvent.change(screen.getByLabelText('Calle'), { target: { value: 'Calle Falsa' } });
+      // Stale visuals land with the same render as the dirty state —
+      // no timer involved. Autocomplete path is active (long compose),
+      // so the CTA stays hidden.
+      expect(screen.getAllByText('Vista previa anterior').length).toBeGreaterThan(0);
+      expect(screen.queryByRole('button', { name: 'Buscar nuevamente' })).toBeNull();
+
+      // Blank every core piece: compose empties below MIN_CHARS — the
+      // silent path hands over to the explicit retry CTA.
+      for (const label of [
+        'Dirección formateada',
+        'Ciudad',
+        'Provincia',
+        'País',
+        'Número o altura de calle',
+        'Calle',
+      ]) {
+        fireEvent.change(screen.getByLabelText(label), { target: { value: '' } });
+      }
+      const cta = screen.getByRole('button', { name: 'Buscar nuevamente' });
+      fireEvent.click(cta);
+      // The CTA focuses the pinned search input (AS-6 grid contract id).
+      expect(document.activeElement).toBe(screen.getByRole('combobox'));
     });
   });
 });

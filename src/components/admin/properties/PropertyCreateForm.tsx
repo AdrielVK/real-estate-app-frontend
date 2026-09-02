@@ -113,6 +113,15 @@ const INITIAL_STATE: CreatePropertyActionState = { fieldErrors: {}, formError: n
 const SUMMARY_ERROR = 'Revisá los campos marcados.';
 
 /**
+ * DCS-4 (property-address-confirm-sync-v2): exact copy pinned by the
+ * spec while the core fields diverge from the last confirmed suggestion.
+ * Keyed to `addressFormatted` so the visible required Field and the
+ * section error dot light up; the gate lives in `handleSubmit` (not in
+ * the payload) because the stale state is UI knowledge, not DTO shape.
+ */
+const DIRTY_CORE_ERROR = 'La dirección fue modificada. Seleccioná una sugerencia para confirmar.';
+
+/**
  * Zod issue paths (dot notation) → the form's flat `FieldKey`. Mirrors
  * the action's `FIELD_PATH_MAP` (see duplication note above). Unknown
  * paths are dropped — the form cannot render an error for a field it
@@ -239,6 +248,9 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
   const [clientErrors, setClientErrors] = useState<Partial<Record<FieldKey, string>>>({});
   const [featuresEnabled, setFeaturesEnabled] = useState(false);
   const [characteristics, setCharacteristics] = useState<CharacteristicRowValues[]>([]);
+  // DCS-1/DCS-4 lift: the address section reports core-vs-snapshot drift;
+  // the submit gate below never lets stale lat/lng reach the action.
+  const [addressDirty, setAddressDirty] = useState(false);
   const [profileOptions, setProfileOptions] = useState<{
     agent: ProfileOption[];
     owner: ProfileOption[];
@@ -312,6 +324,17 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // DCS-4 pre-parse gate: while the core fields diverge from the last
+    // confirmed suggestion, the hidden lat/lng/placeId are stale — no
+    // DTO is sent and no parse runs. Re-selecting a suggestion (the
+    // auto-trigger's fresh pick) clears the flag.
+    if (addressDirty) {
+      setClientErrors({ addressFormatted: DIRTY_CORE_ERROR });
+      requestAnimationFrame(() => {
+        errorSummaryRef.current?.focus();
+      });
+      return;
+    }
     const parsed = propertyCreateSchema.safeParse(
       buildPayload(values, featuresEnabled, characteristics),
     );
@@ -526,7 +549,12 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
           agentOptions={profileOptions.agent}
           ownerOptions={profileOptions.owner}
         />
-        <AddressSection values={values} errors={fieldErrors} onChange={handleChange} />
+        <AddressSection
+          values={values}
+          errors={fieldErrors}
+          onChange={handleChange}
+          onDirtyCoreChange={setAddressDirty}
+        />
         <FeaturesSection
           enabled={featuresEnabled}
           values={values}

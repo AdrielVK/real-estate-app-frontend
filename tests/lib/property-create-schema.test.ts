@@ -377,6 +377,66 @@ describe('propertyCreateSchema — address longitude range', () => {
   });
 });
 
+describe('propertyCreateSchema — confirmed place requires coordinates (confirm-sync-v2)', () => {
+  it('rejects a placeId with blank latitude/longitude, issuing on both coord fields', () => {
+    const result = propertyCreateSchema.safeParse({
+      ...baseValidPayload(),
+      address: {
+        ...(baseValidPayload().address as Record<string, unknown>),
+        placeId: 'ChIJ-confirmed',
+        latitude: '',
+        longitude: '',
+      },
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const paths = result.error.issues.map((i) => i.path.join('.'));
+      expect(paths).toContain('address.latitude');
+      expect(paths).toContain('address.longitude');
+    }
+  });
+
+  it('issues only on the missing coordinate when the other one is present', () => {
+    const result = propertyCreateSchema.safeParse({
+      ...baseValidPayload(),
+      address: {
+        ...(baseValidPayload().address as Record<string, unknown>),
+        placeId: 'ChIJ-confirmed',
+        latitude: '-34.6',
+        longitude: '',
+      },
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const paths = result.error.issues.map((i) => i.path.join('.'));
+      expect(paths).toContain('address.longitude');
+      expect(paths).not.toContain('address.latitude');
+    }
+  });
+
+  it('accepts a placeId carrying both coordinates (hydration parity path)', () => {
+    const result = propertyCreateSchema.safeParse({
+      ...baseValidPayload(),
+      address: {
+        ...(baseValidPayload().address as Record<string, unknown>),
+        placeId: 'ChIJ-confirmed',
+        latitude: '-34.6',
+        longitude: '-58.4',
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('still passes manual entry — no placeId, no coordinates (baseValidPayload invariant)', () => {
+    const result = propertyCreateSchema.safeParse(baseValidPayload());
+
+    expect(result.success).toBe(true);
+  });
+});
+
 describe('propertyCreateSchema — features', () => {
   it('is optional: when omitted, the schema still passes', () => {
     const payload = baseValidPayload();

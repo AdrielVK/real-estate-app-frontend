@@ -109,19 +109,48 @@ const areaSchema = z.coerce.number().min(0.01);
 /* Address                                                                    */
 /* -------------------------------------------------------------------------- */
 
-const addressSchema = z.object({
-  formattedAddress: z.string().min(1, 'La dirección formateada es obligatoria'),
-  city: z.string().min(1, 'La ciudad es obligatoria'),
-  country: z.string().min(1, 'El país es obligatorio'),
-  placeId: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-  street: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-  streetNumber: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-  neighborhood: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-  state: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-  postalCode: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-  latitude: z.preprocess(emptyToUndefined, z.coerce.number().min(-90).max(90).optional()),
-  longitude: z.preprocess(emptyToUndefined, z.coerce.number().min(-180).max(180).optional()),
-});
+/**
+ * Address block. The `superRefine` is the confirm-sync-v2 coordinate
+ * gate (DCS-4): a `placeId` only ever arrives from an autocomplete
+ * selection, and selections hydrate `location` — a confirmed place with
+ * blank coordinates means the DTO would ship coords that no longer
+ * match the visible text (the backend rejects empty lat/lng). Manual
+ * entry never sets `placeId`, so the conditionally-required rule keeps
+ * the hand-typed `baseValidPayload` path green. Coords present but
+ * STALE is not the schema's problem — that is the form's dirtyCore
+ * submit gate in `PropertyCreateForm.handleSubmit`.
+ */
+const addressSchema = z
+  .object({
+    formattedAddress: z.string().min(1, 'La dirección formateada es obligatoria'),
+    city: z.string().min(1, 'La ciudad es obligatoria'),
+    country: z.string().min(1, 'El país es obligatorio'),
+    placeId: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+    street: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+    streetNumber: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+    neighborhood: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+    state: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+    postalCode: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+    latitude: z.preprocess(emptyToUndefined, z.coerce.number().min(-90).max(90).optional()),
+    longitude: z.preprocess(emptyToUndefined, z.coerce.number().min(-180).max(180).optional()),
+  })
+  .superRefine((address, ctx) => {
+    if (!address.placeId) return;
+    if (address.latitude === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['latitude'],
+        message: 'La latitud es obligatoria con una dirección confirmada',
+      });
+    }
+    if (address.longitude === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['longitude'],
+        message: 'La longitud es obligatoria con una dirección confirmada',
+      });
+    }
+  });
 
 /* -------------------------------------------------------------------------- */
 /* Features                                                                   */

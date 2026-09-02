@@ -913,6 +913,81 @@ describe('PropertyCreateForm', () => {
     ).not.toBeInTheDocument();
   });
 
+  // ---- property-address-confirm-sync-v2 — dirty-core submit gate (DCS-4) ----
+
+  const DIRTY_CORE_ERROR = 'La dirección fue modificada. Seleccioná una sugerencia para confirmar.';
+
+  it('blocks submit while the confirmed address is dirty — exact error, no action, summary focused', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await fillValidRequiredFields(user);
+    await selectFirstAddressSuggestion(user);
+
+    await user.type(screen.getByLabelText('Calle'), ' 123');
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+
+    // The fetch boundary is the action — a stale lat/lng never rides.
+    expect(mockCreatePropertyAction).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Dirección formateada')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText(DIRTY_CORE_ERROR, { selector: 'p' })).toBeInTheDocument();
+    // Focus management: the error summary takes focus (rAF after render).
+    await waitFor(() =>
+      expect(document.activeElement).toBe(document.querySelector('[role="alert"]')),
+    );
+  });
+
+  it('submits fresh coordinates after re-selecting a suggestion from the auto-trigger', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await fillValidRequiredFields(user);
+    await selectFirstAddressSuggestion(user);
+    await user.type(screen.getByLabelText('Calle'), ' 123');
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+    expect(mockCreatePropertyAction).not.toHaveBeenCalled();
+
+    // The core edit auto-triggered a fresh search — picking a suggestion
+    // hydrates new lat/lng/placeId, clears the dirty gate, submit rides.
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(3), { timeout: 2000 });
+    fireEvent.mouseDown(screen.getAllByRole('option')[0]);
+    // The hydration-complete signal: the eleven onChange calls fold in,
+    // `handleChange` drops the dirty error and the lift clears the gate.
+    // (Waiting on the formatted text would pass against the FIRST
+    // selection — the mock details echo the same string every time.)
+    await waitFor(() => expect(screen.queryByText(DIRTY_CORE_ERROR, { selector: 'p' })).toBeNull());
+    // Flush the effect-driven `addressDirty` commit: the lift runs in a
+    // passive effect of the hydration render, so the parent's state
+    // update lands one tick after the DOM already shows the fresh
+    // values. A human click can never interleave; the test must not
+    // either.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+
+    expect(mockCreatePropertyAction).toHaveBeenCalledTimes(1);
+    const [, payload] = mockCreatePropertyAction.mock.calls[0];
+    expect(payload.address.placeId).toBe('mock-place-1');
+    expect(payload.address.latitude).toBeCloseTo(-34.6037, 10);
+    expect(screen.queryByText(DIRTY_CORE_ERROR)).toBeNull();
+  });
+
+  it('lets a non-core (barrio) edit through the gate — submit is not blocked (DCS-7)', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await fillValidRequiredFields(user);
+    await selectFirstAddressSuggestion(user);
+
+    await user.type(screen.getByLabelText('Barrio'), ' changed');
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+
+    expect(mockCreatePropertyAction).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(DIRTY_CORE_ERROR)).toBeNull();
+  });
+
   // ---- PR 3 integration: features toggle + characteristics rows ----
 
   it('sends coerced features in the payload when the toggle is on', async () => {

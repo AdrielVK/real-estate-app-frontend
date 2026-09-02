@@ -32,6 +32,8 @@ import dynamic from 'next/dynamic';
 
 import { parseCoordinates } from '@/lib/geocoding/coordinates';
 
+import { Button } from '@/components/ui/Button';
+
 import { AddressDetails } from './AddressDetails';
 import type { AddressValues } from './AddressField';
 
@@ -52,14 +54,34 @@ export interface AddressConfirmedSectionProps {
   description: string;
   /** LIVE controlled values — display + hidden-input source (ACS-2/4). */
   values: AddressValues;
+  /**
+   * DCS-5/ACS-6 (property-address-confirm-sync-v2): live core fields
+   * diverge from the confirmed snapshot — the text here no longer
+   * matches the hidden coords. Amber details card + map overlay chip.
+   */
+  isStale?: boolean;
+  /**
+   * DCS-6: stale AND the composed retry query is under MIN_CHARS — the
+   * auto-trigger is silent, so an explicit "Buscar nuevamente" CTA
+   * takes over.
+   */
+  showRetryCta?: boolean;
+  /** CTA handler — the orchestrator focuses the search input (AS-6 id). */
+  onRetry?: () => void;
 }
 
-export function AddressConfirmedSection({ description, values }: AddressConfirmedSectionProps) {
+export function AddressConfirmedSection({
+  description,
+  values,
+  isStale,
+  showRetryCta,
+  onRetry,
+}: AddressConfirmedSectionProps) {
   const coordinates = parseCoordinates(values.addressLatitude, values.addressLongitude);
 
   return (
     <div className="grid gap-2">
-      <AddressDetails description={description} values={values} />
+      <AddressDetails description={description} values={values} isStale={isStale} />
       {/*
        * ACS-4/D3: hidden carriers for the system trio. `readOnly`
        * silences React's controlled-value warning; no `<label>` is ever
@@ -70,7 +92,25 @@ export function AddressConfirmedSection({ description, values }: AddressConfirme
         <input key={key} type="hidden" id={key} name={key} readOnly value={values[key]} />
       ))}
       {coordinates ? (
-        <AddressMap latitude={values.addressLatitude} longitude={values.addressLongitude} />
+        <div className="relative">
+          <AddressMap latitude={values.addressLatitude} longitude={values.addressLongitude} />
+          {isStale ? (
+            // ACS-6: the pin below still belongs to the OLD selection —
+            // say it over the map itself, where the lie is visible.
+            <span className="absolute left-2 top-2 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+              Vista previa anterior
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {showRetryCta ? (
+        // DCS-6: the auto-trigger needs ≥3 chars to speak — when the
+        // compose is silent, the section offers the explicit retry.
+        <div className="justify-self-start">
+          <Button type="button" size="sm" onClick={onRetry}>
+            Buscar nuevamente
+          </Button>
+        </div>
       ) : null}
     </div>
   );
