@@ -645,19 +645,29 @@ describe('FeaturesSection', () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* 3.2 — CharacteristicsSection (Etiquetas)                                   */
+/* 3.2 — CharacteristicsSection (Características adicionales)                 */
 /* -------------------------------------------------------------------------- */
 
 describe('CharacteristicsSection', () => {
-  it('renders the "Etiquetas" fieldset with the add control and no rows initially', () => {
+  it('renders the "Características adicionales" fieldset with the header CTA and empty state', () => {
     render(<CharacteristicsSection rows={[]} onAdd={noop} onRemove={noop} onChange={noop} />);
 
-    expect(screen.getByRole('group', { name: 'Etiquetas' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Agregar etiqueta' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Características adicionales' })).toBeInTheDocument();
+    expect(screen.getByText('04 · Adicionales')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Atributos no edilicios: servicios, amenidades, materiales y condiciones puntuales.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Agregar característica' })).toBeInTheDocument();
+    expect(screen.getByText('Sin características aún')).toBeInTheDocument();
+    expect(
+      screen.getByText('Agregá servicios, amenidades, materiales o condiciones destacadas.'),
+    ).toBeInTheDocument();
     expect(document.querySelectorAll('[data-testid="characteristic-row"]')).toHaveLength(0);
   });
 
-  it('renders name, category and slug preview per row', () => {
+  it('renders name and category per row and hides the slug preview', () => {
     render(
       <CharacteristicsSection
         rows={[{ name: 'Pileta Grande', slug: 'pileta-grande', category: 'amenidad' }]}
@@ -672,12 +682,17 @@ describe('CharacteristicsSection', () => {
     const row = within(rows[0] as HTMLElement);
     expect(row.getByLabelText('Nombre')).toHaveValue('Pileta Grande');
     expect(row.getByLabelText('Categoría')).toHaveValue('amenidad');
-    // Live preview: the section renders whatever slug the parent state
-    // carries — derivation itself is pinned at the form level (3.3).
-    expect(row.getByText('Slug: pileta-grande')).toBeInTheDocument();
+    // Slug stays derived in the parent state — the payload test in 3.3
+    // proves derivation; the section no longer renders it (display-only).
+    expect(row.queryByText(/Slug:/)).toBeNull();
+    expect(screen.getByText('1 característica')).toBeInTheDocument();
+    // Compact single-line row: name flexes, category 160px, delete 44px.
+    expect(rows[0]!.className).toContain('grid-cols-[1fr_160px_44px]');
+    expect(rows[0]!.className).toContain('items-end');
+    expect(rows[0]!.className).toContain('p-3');
   });
 
-  it('previews a dash while the slug is still empty', () => {
+  it('renders no slug text while the slug is still empty', () => {
     render(
       <CharacteristicsSection
         rows={[{ name: '', slug: '', category: '' }]}
@@ -687,7 +702,7 @@ describe('CharacteristicsSection', () => {
       />,
     );
 
-    expect(screen.getByText('Slug: —')).toBeInTheDocument();
+    expect(screen.queryByText(/Slug:/)).toBeNull();
   });
 
   it('offers the 4 backend categories plus a placeholder option', () => {
@@ -745,7 +760,7 @@ describe('CharacteristicsSection', () => {
     const onAdd = vi.fn();
     render(<CharacteristicsSection rows={[]} onAdd={onAdd} onRemove={noop} onChange={noop} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Agregar etiqueta' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar característica' }));
     expect(onAdd).toHaveBeenCalledTimes(1);
   });
 
@@ -765,9 +780,12 @@ describe('CharacteristicsSection', () => {
 
     const rows = Array.from(document.querySelectorAll('[data-testid="characteristic-row"]'));
     expect(rows).toHaveLength(2);
-    fireEvent.click(
-      within(rows[1] as HTMLElement).getByRole('button', { name: 'Eliminar etiqueta' }),
-    );
+    expect(screen.getByText('2 características')).toBeInTheDocument();
+    const del = within(rows[1] as HTMLElement).getByRole('button', { name: 'Eliminar etiqueta' });
+    // Icon-only 44px target — accessible name kept per proposal criterion.
+    expect(del).toHaveTextContent('');
+    expect(del.className).toContain('size-11');
+    fireEvent.click(del);
     expect(onRemove).toHaveBeenCalledWith(1);
   });
 
@@ -840,7 +858,7 @@ describe('PropertyCreateForm', () => {
     mockCreatePropertyAction.mockResolvedValue(INITIAL_ACTION_STATE);
   });
 
-  it('renders the four fieldsets in spec order: Datos básicos, Dirección, Características físicas, Etiquetas', () => {
+  it('renders the four fieldsets in spec order: Datos básicos, Dirección, Características físicas, Características adicionales', () => {
     render(<PropertyCreateForm canCreate />);
 
     const fieldsets = Array.from(document.querySelectorAll('fieldset'));
@@ -849,8 +867,15 @@ describe('PropertyCreateForm', () => {
       'Datos básicos',
       'Dirección',
       'Características físicas',
-      'Etiquetas',
+      'Características adicionales',
     ]);
+  });
+
+  it('shows the Adicionales label in the stepper', () => {
+    render(<PropertyCreateForm canCreate />);
+
+    // Desktop span is the full label; the mobile span truncates to "Adic.".
+    expect(screen.getByText('Adicionales', { exact: true })).toBeInTheDocument();
   });
 
   it('wires every label to its control via htmlFor/id', () => {
@@ -1180,16 +1205,18 @@ describe('PropertyCreateForm', () => {
     expect(screen.getByRole('status')).toHaveTextContent('');
   });
 
-  it('derives the slug live when a characteristic name is typed', async () => {
+  it('keeps the derived slug out of the UI when a characteristic name is typed', async () => {
     const user = setupUser();
     render(<PropertyCreateForm canCreate />);
 
-    await user.click(screen.getByRole('button', { name: 'Agregar etiqueta' }));
+    await user.click(screen.getByRole('button', { name: 'Agregar característica' }));
     const [row] = characteristicRows();
     expect(row).toBeDefined();
     await user.type(within(row).getByLabelText('Nombre'), 'Pileta Grande');
 
-    expect(within(row).getByText('Slug: pileta-grande')).toBeInTheDocument();
+    // Display-only removal: the slug is still derived in state (the
+    // payload test below proves it reaches the DTO) but never rendered.
+    expect(within(row).queryByText(/Slug:/)).toBeNull();
   });
 
   it('sends the characteristic rows in the payload and drops removed rows', async () => {
@@ -1197,7 +1224,7 @@ describe('PropertyCreateForm', () => {
     render(<PropertyCreateForm canCreate />);
 
     await fillValidRequiredFields(user);
-    const add = screen.getByRole('button', { name: 'Agregar etiqueta' });
+    const add = screen.getByRole('button', { name: 'Agregar característica' });
     await user.click(add);
     await user.click(add);
 
@@ -1225,7 +1252,7 @@ describe('PropertyCreateForm', () => {
     render(<PropertyCreateForm canCreate />);
 
     await fillValidRequiredFields(user);
-    const add = screen.getByRole('button', { name: 'Agregar etiqueta' });
+    const add = screen.getByRole('button', { name: 'Agregar característica' });
     await user.click(add);
     await user.click(add);
 

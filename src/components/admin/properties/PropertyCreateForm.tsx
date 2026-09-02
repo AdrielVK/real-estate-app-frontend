@@ -491,7 +491,7 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
       ),
     },
     {
-      label: 'Etiquetas',
+      label: 'Adicionales',
       done: tagsDone,
       hasError: Boolean(fieldErrors.characteristics),
     },
