@@ -91,6 +91,8 @@ export default function AddressMap({
     dot.className = PIN_DOT_CLASS;
     const marker = new mapboxgl.Marker({ element: dot }).setLngLat(center).addTo(map);
 
+    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+
     mapRef.current = map;
     markerRef.current = marker;
     lastCenterRef.current = center;

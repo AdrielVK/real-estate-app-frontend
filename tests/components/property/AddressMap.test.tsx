@@ -51,10 +51,18 @@ const mocks = vi.hoisted(() => {
   class MapMock {
     flyTo = vi.fn();
     remove = vi.fn();
+    addControl = vi.fn();
     options: Record<string, unknown>;
     constructor(options: Record<string, unknown>) {
       this.options = options;
       mapInstances.push(this);
+    }
+  }
+
+  class NavigationControlMock {
+    options: Record<string, unknown>;
+    constructor(options: Record<string, unknown>) {
+      this.options = options;
     }
   }
 
@@ -73,6 +81,7 @@ const mocks = vi.hoisted(() => {
   return {
     MapMock,
     MarkerMock,
+    NavigationControlMock,
     mapInstances,
     markerInstances,
     supported: vi.fn(() => true),
@@ -83,6 +92,7 @@ vi.mock('mapbox-gl', () => ({
   default: {
     Map: mocks.MapMock,
     Marker: mocks.MarkerMock,
+    NavigationControl: mocks.NavigationControlMock,
     supported: mocks.supported,
     accessToken: '',
   },
