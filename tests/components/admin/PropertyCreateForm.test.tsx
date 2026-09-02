@@ -511,15 +511,25 @@ describe('FeaturesSection', () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* 3.2 — CharacteristicsSection (Etiquetas)                                   */
+/* 3.2 — CharacteristicsSection (Características adicionales)                 */
 /* -------------------------------------------------------------------------- */
 
 describe('CharacteristicsSection', () => {
-  it('renders the "Etiquetas" fieldset with the add control and no rows initially', () => {
+  it('renders the "Características adicionales" fieldset with the header CTA and empty state', () => {
     render(<CharacteristicsSection rows={[]} onAdd={noop} onRemove={noop} onChange={noop} />);
 
-    expect(screen.getByRole('group', { name: 'Etiquetas' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Agregar etiqueta' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Características adicionales' })).toBeInTheDocument();
+    expect(screen.getByText('04 · Adicionales')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Atributos no edilicios: servicios, amenidades, materiales y condiciones puntuales.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Agregar característica' })).toBeInTheDocument();
+    expect(screen.getByText('Sin características aún')).toBeInTheDocument();
+    expect(
+      screen.getByText('Agregá servicios, amenidades, materiales o condiciones destacadas.'),
+    ).toBeInTheDocument();
     expect(document.querySelectorAll('[data-testid="characteristic-row"]')).toHaveLength(0);
   });
 
@@ -611,7 +621,7 @@ describe('CharacteristicsSection', () => {
     const onAdd = vi.fn();
     render(<CharacteristicsSection rows={[]} onAdd={onAdd} onRemove={noop} onChange={noop} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Agregar etiqueta' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar característica' }));
     expect(onAdd).toHaveBeenCalledTimes(1);
   });
 
@@ -631,6 +641,7 @@ describe('CharacteristicsSection', () => {
 
     const rows = Array.from(document.querySelectorAll('[data-testid="characteristic-row"]'));
     expect(rows).toHaveLength(2);
+    expect(screen.getByText('2 características')).toBeInTheDocument();
     fireEvent.click(
       within(rows[1] as HTMLElement).getByRole('button', { name: 'Eliminar etiqueta' }),
     );
@@ -691,7 +702,7 @@ describe('PropertyCreateForm', () => {
     mockCreatePropertyAction.mockResolvedValue(INITIAL_ACTION_STATE);
   });
 
-  it('renders the four fieldsets in spec order: Datos básicos, Dirección, Características físicas, Etiquetas', () => {
+  it('renders the four fieldsets in spec order: Datos básicos, Dirección, Características físicas, Características adicionales', () => {
     render(<PropertyCreateForm canCreate />);
 
     const fieldsets = Array.from(document.querySelectorAll('fieldset'));
@@ -700,8 +711,15 @@ describe('PropertyCreateForm', () => {
       'Datos básicos',
       'Dirección',
       'Características físicas',
-      'Etiquetas',
+      'Características adicionales',
     ]);
+  });
+
+  it('shows the Adicionales label in the stepper', () => {
+    render(<PropertyCreateForm canCreate />);
+
+    // Desktop span is the full label; the mobile span truncates to "Adic.".
+    expect(screen.getByText('Adicionales', { exact: true })).toBeInTheDocument();
   });
 
   it('wires every label to its control via htmlFor/id', () => {
@@ -922,7 +940,7 @@ describe('PropertyCreateForm', () => {
     const user = setupUser();
     render(<PropertyCreateForm canCreate />);
 
-    await user.click(screen.getByRole('button', { name: 'Agregar etiqueta' }));
+    await user.click(screen.getByRole('button', { name: 'Agregar característica' }));
     const [row] = characteristicRows();
     expect(row).toBeDefined();
     await user.type(within(row).getByLabelText('Nombre'), 'Pileta Grande');
@@ -935,7 +953,7 @@ describe('PropertyCreateForm', () => {
     render(<PropertyCreateForm canCreate />);
 
     await fillValidRequiredFields(user);
-    const add = screen.getByRole('button', { name: 'Agregar etiqueta' });
+    const add = screen.getByRole('button', { name: 'Agregar característica' });
     await user.click(add);
     await user.click(add);
 
@@ -963,7 +981,7 @@ describe('PropertyCreateForm', () => {
     render(<PropertyCreateForm canCreate />);
 
     await fillValidRequiredFields(user);
-    const add = screen.getByRole('button', { name: 'Agregar etiqueta' });
+    const add = screen.getByRole('button', { name: 'Agregar característica' });
     await user.click(add);
     await user.click(add);
 

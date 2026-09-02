@@ -1,5 +1,6 @@
 /**
- * `CharacteristicsSection` — section 4 (Etiquetas) of the create form.
+ * `CharacteristicsSection` — section 4 (Características adicionales) of
+ * the create form.
  *
  * Presentational only (design component tree): the rows array and the
  * add/remove/edit callbacks arrive as props; state, slug derivation
@@ -62,10 +63,27 @@ export function CharacteristicsSection({
 }: CharacteristicsSectionProps) {
   return (
     <SectionShell
-      eyebrow="04 · Etiquetas"
-      title="Etiquetas"
-      description="Atributos libres que enriquecen la ficha (amenidades, servicios)."
+      eyebrow="04 · Adicionales"
+      title="Características adicionales"
+      description="Atributos no edilicios: servicios, amenidades, materiales y condiciones puntuales."
       hasError={Boolean(error)}
+      headerAction={
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onAdd}
+            className="inline-flex min-h-[44px] cursor-pointer items-center gap-2 rounded-full border border-copper/30 bg-background/40 px-4 text-sm font-medium transition hover:bg-copper/10 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            <Plus aria-hidden="true" className="size-4" />
+            Agregar característica
+          </button>
+          {rows.length > 0 ? (
+            <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
+              {rows.length} {rows.length === 1 ? 'característica' : 'características'}
+            </span>
+          ) : null}
+        </div>
+      }
     >
       {rows.length === 0 ? (
         <div className="grid place-items-center gap-3 rounded-xl border border-dashed border-border bg-muted/20 px-6 py-8 text-center">
@@ -73,10 +91,9 @@ export function CharacteristicsSection({
             <Tag aria-hidden="true" className="size-5" />
           </span>
           <div className="space-y-1">
-            <p className="text-sm font-medium">Sin etiquetas aún</p>
+            <p className="text-sm font-medium">Sin características aún</p>
             <p className="mx-auto max-w-[36ch] text-xs leading-relaxed text-muted-foreground">
-              Agregá amenidades, servicios o condiciones destacadas. Cada etiqueta genera un slug
-              automático.
+              Agregá servicios, amenidades, materiales o condiciones destacadas.
             </p>
           </div>
         </div>
@@ -132,22 +149,6 @@ export function CharacteristicsSection({
       ) : null}
 
       <FieldError message={error} />
-
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={onAdd}
-          className="inline-flex min-h-[44px] cursor-pointer items-center gap-2 rounded-full border border-input bg-background/40 px-5 text-sm font-medium transition hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-        >
-          <Plus aria-hidden="true" className="size-4" />
-          Agregar etiqueta
-        </button>
-        {rows.length > 0 ? (
-          <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-            {rows.length} {rows.length === 1 ? 'etiqueta' : 'etiquetas'}
-          </span>
-        ) : null}
-      </div>
     </SectionShell>
   );
 }
