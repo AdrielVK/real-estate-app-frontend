@@ -90,6 +90,14 @@ export interface SectionShellProps {
   hasError?: boolean;
   /** When true, marks the section as completed in the stepper context. */
   completed?: boolean;
+  /**
+   * Optional right-cluster action sharing the header row with the title
+   * (physical-features-ux D3) — e.g. the features enable toggle. It
+   * renders OUTSIDE the `aria-hidden` text block on purpose: the header
+   * text is decoration (the `<legend>` already names the group) but an
+   * interactive control must stay visible to assistive tech.
+   */
+  headerAction?: ReactNode;
   children: ReactNode;
   className?: string;
 }
@@ -110,6 +118,7 @@ export function SectionShell({
   title,
   description,
   hasError,
+  headerAction,
   children,
   className,
 }: SectionShellProps) {
@@ -125,8 +134,11 @@ export function SectionShell({
       )}
     >
       <legend className="sr-only">{title}</legend>
-      <div aria-hidden="true" className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
+      {/* D3 (physical-features-ux): `aria-hidden` moved from the whole
+          header row to the title text block only — the row may carry a
+          `headerAction` control that AT must be able to reach. */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div aria-hidden="true" className="space-y-1">
           <p
             className={cn(
               'font-sans text-xs font-medium tracking-tight',
@@ -142,10 +154,15 @@ export function SectionShell({
             </p>
           ) : null}
         </div>
-        {hasError ? (
-          <span className="inline-flex items-center rounded-full bg-destructive px-2.5 py-1 text-[11px] font-medium leading-none text-white">
-            Revisar
-          </span>
+        {headerAction || hasError ? (
+          <div className="flex flex-col items-end gap-2">
+            {headerAction}
+            {hasError ? (
+              <span className="inline-flex items-center rounded-full bg-destructive px-2.5 py-1 text-[11px] font-medium leading-none text-white">
+                Revisar
+              </span>
+            ) : null}
+          </div>
         ) : null}
       </div>
       {children}

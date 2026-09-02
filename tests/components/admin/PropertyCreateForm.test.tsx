@@ -28,7 +28,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createPropertyAction } from '@/lib/properties/actions';
 import { MOCK_AGENTS } from '@/lib/properties/mock-profiles';
-import { PROPERTY_STATUSES, PROPERTY_TYPES } from '@/lib/validation/property-create.schema';
+import {
+  AREA_NON_NEGATIVE,
+  PROPERTY_STATUSES,
+  PROPERTY_TYPES,
+} from '@/lib/validation/property-create.schema';
 
 import { PropertyCreateForm } from '@/components/admin/properties';
 import { AddressSection } from '@/components/admin/properties/create/AddressSection';
@@ -367,17 +371,26 @@ const FEATURES_VALUES: FeaturesValues = {
   featuresAgeYears: '',
 };
 
-/** All nine feature controls, in DOM order. */
+/** All nine feature controls, in DOM order (spec: three-row grid —
+ *  Row1 areas + conservation, Row2 bedrooms/bathrooms/rooms,
+ *  Row3 ageYears/floor/garages). */
 const FEATURE_FIELD_LABELS = [
   'Superficie total (m²)',
   'Superficie cubierta (m²)',
   'Estado de conservación',
-  'Ambientes',
   'Dormitorios',
   'Baños',
-  'Cocheras',
-  'Piso',
+  'Ambientes',
   'Antigüedad (años)',
+  'Piso',
+  'Cocheras',
+];
+
+/** Control ids grouped by row — the grid-order contract of the section. */
+const FEATURE_ROW_IDS = [
+  ['featuresTotalAreaM2', 'featuresCoveredAreaM2', 'featuresConservationState'],
+  ['featuresBedrooms', 'featuresBathrooms', 'featuresRooms'],
+  ['featuresAgeYears', 'featuresFloor', 'featuresGarages'],
 ];
 
 describe('FeaturesSection', () => {
@@ -402,6 +415,43 @@ describe('FeaturesSection', () => {
     }
   });
 
+  it('renders the toggle in the section header with a 44px target and helper text', () => {
+    render(
+      <FeaturesSection
+        enabled={false}
+        values={FEATURES_VALUES}
+        errors={{}}
+        onChange={noop}
+        onToggle={noop}
+      />,
+    );
+
+    const fieldset = screen.getByRole('group', { name: 'Características físicas' });
+    const header = fieldset.querySelector(':scope > div');
+    const checkbox = screen.getByLabelText('Agregar características físicas');
+
+    // Header placement (spec: "Inline Features Toggle in Section Header").
+    expect(header).not.toBeNull();
+    expect(header?.contains(checkbox)).toBe(true);
+    // D3: the header ROW is no longer aria-hidden — only the title text
+    // block is — otherwise the toggle would be invisible to AT.
+    expect(header?.getAttribute('aria-hidden')).toBeNull();
+    const textBlock = header?.querySelector('[aria-hidden="true"]');
+    expect(textBlock?.textContent).toContain('Características físicas');
+
+    // 44px hit target + enlarged checkbox treatment.
+    const label = fieldset.querySelector('label[for="featuresEnabled"]');
+    expect(label?.className).toContain('min-h-[44px]');
+    expect(checkbox.className).toContain('size-5');
+    expect(checkbox.className).toContain('accent-primary');
+
+    // Helper text joined via aria-describedby.
+    expect(checkbox).toHaveAttribute('aria-describedby', 'featuresEnabled-help');
+    expect(document.getElementById('featuresEnabled-help')).toHaveTextContent(
+      'Opcional. Si lo dejás desactivado, la propiedad se crea sin datos físicos.',
+    );
+  });
+
   it('reveals all nine feature fields when the toggle is on', () => {
     render(
       <FeaturesSection
@@ -419,7 +469,7 @@ describe('FeaturesSection', () => {
     }
   });
 
-  it('marks areas and conservation required and offers the 6 conservation states', () => {
+  it('renders three md:grid-cols-3 rows with the spec field order', () => {
     render(
       <FeaturesSection
         enabled
@@ -430,24 +480,18 @@ describe('FeaturesSection', () => {
       />,
     );
 
-    expect(screen.getByLabelText('Superficie total (m²)')).toBeRequired();
-    expect(screen.getByLabelText('Superficie cubierta (m²)')).toBeRequired();
-
-    const select = screen.getByLabelText('Estado de conservación') as HTMLSelectElement;
-    expect(select).toBeRequired();
-    const optionValues = Array.from(select.options).map((option) => option.value);
-    expect(optionValues).toEqual([
-      '',
-      'a_estrenar',
-      'excelente',
-      'muy_bueno',
-      'bueno',
-      'regular',
-      'a_refaccionar',
-    ]);
+    const rows = Array.from(document.querySelectorAll('[class*="md:grid-cols-3"]'));
+    expect(rows).toHaveLength(3);
+    for (const [index, row] of rows.entries()) {
+      expect(row.className).toContain('grid-cols-1');
+      expect(row.className).toContain('gap-4');
+      expect(row.className).toContain('items-start');
+      const ids = Array.from(row.querySelectorAll('input[id], button[id]')).map((el) => el.id);
+      expect(ids, `row ${index + 1}`).toEqual(FEATURE_ROW_IDS[index]);
+    }
   });
 
-  it('uses the decimal keyboard hint on the eight numeric inputs', () => {
+  it('shows the Opcional hint on the six optional fields but not the three required ones', () => {
     render(
       <FeaturesSection
         enabled
@@ -458,13 +502,93 @@ describe('FeaturesSection', () => {
       />,
     );
 
-    // The conservation select is the only non-numeric control.
-    const numericLabels = FEATURE_FIELD_LABELS.filter(
-      (label) => label !== 'Estado de conservación',
+    expect(screen.getAllByText('Opcional')).toHaveLength(6);
+    // Required affordance: areas + conservation carry `required`.
+    for (const label of [
+      'Superficie total (m²)',
+      'Superficie cubierta (m²)',
+      'Estado de conservación',
+    ]) {
+      expect(screen.getByLabelText(label)).toBeRequired();
+    }
+    for (const label of [
+      'Dormitorios',
+      'Baños',
+      'Ambientes',
+      'Antigüedad (años)',
+      'Piso',
+      'Cocheras',
+    ]) {
+      expect(screen.getByLabelText(label)).not.toBeRequired();
+    }
+  });
+
+  it('uses OptionSelect for conservation with semantic labels, committing the slug', async () => {
+    const user = userEvent.setup({ delay: null });
+    const onChange = vi.fn();
+    render(
+      <FeaturesSection
+        enabled
+        values={FEATURES_VALUES}
+        errors={{}}
+        onChange={onChange}
+        onToggle={noop}
+      />,
     );
-    expect(numericLabels).toHaveLength(8);
-    for (const label of numericLabels) {
-      expect(screen.getByLabelText(label)).toHaveAttribute('inputmode', 'decimal');
+
+    const trigger = screen.getByLabelText('Estado de conservación');
+    // Native <select> is gone for conservation (spec: Conservation OptionSelect).
+    expect(trigger.tagName).toBe('BUTTON');
+    expect(document.querySelector('select')).toBeNull();
+    expect(trigger).toHaveTextContent('Seleccionar…');
+
+    await user.click(trigger);
+    const options = within(screen.getByRole('listbox')).getAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual([
+      'A estrenar',
+      'Excelente',
+      'Muy bueno',
+      'Bueno',
+      'Regular',
+      'A refaccionar',
+    ]);
+
+    await user.click(screen.getByRole('option', { name: 'Muy bueno' }));
+    expect(onChange).toHaveBeenCalledWith('featuresConservationState', 'muy_bueno');
+  });
+
+  it('sets decimal bounds on areas and numeric bounds on the count fields', () => {
+    render(
+      <FeaturesSection
+        enabled
+        values={FEATURES_VALUES}
+        errors={{}}
+        onChange={noop}
+        onToggle={noop}
+      />,
+    );
+
+    for (const label of ['Superficie total (m²)', 'Superficie cubierta (m²)']) {
+      const input = screen.getByLabelText(label);
+      expect(input).toHaveAttribute('type', 'number');
+      expect(input).toHaveAttribute('inputmode', 'decimal');
+      expect(input).toHaveAttribute('min', '0');
+      expect(input).toHaveAttribute('step', '0.01');
+    }
+    for (const label of ['Dormitorios', 'Baños', 'Ambientes']) {
+      const input = screen.getByLabelText(label);
+      expect(input).toHaveAttribute('type', 'number');
+      expect(input).toHaveAttribute('inputmode', 'numeric');
+      expect(input).toHaveAttribute('min', '1');
+      expect(input).toHaveAttribute('max', '999');
+      expect(input).toHaveAttribute('step', '1');
+    }
+    for (const label of ['Antigüedad (años)', 'Piso', 'Cocheras']) {
+      const input = screen.getByLabelText(label);
+      expect(input).toHaveAttribute('type', 'number');
+      expect(input).toHaveAttribute('inputmode', 'numeric');
+      expect(input).toHaveAttribute('min', '0');
+      expect(input).toHaveAttribute('step', '1');
     }
   });
 
@@ -998,7 +1122,10 @@ describe('PropertyCreateForm', () => {
     await user.click(screen.getByLabelText('Agregar características físicas'));
     await user.type(screen.getByLabelText('Superficie total (m²)'), '80');
     await user.type(screen.getByLabelText('Superficie cubierta (m²)'), '75');
-    await user.selectOptions(screen.getByLabelText('Estado de conservación'), 'bueno');
+    // Conservation is an OptionSelect now (physical-features-ux): the
+    // semantic label is clicked, the slug is committed (REQ-005 pattern).
+    await user.click(screen.getByLabelText('Estado de conservación'));
+    await user.click(screen.getByRole('option', { name: 'Bueno' }));
     await user.type(screen.getByLabelText('Ambientes'), '4');
     await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
 
@@ -1429,5 +1556,75 @@ describe('UX polish — profile selection in the form (REQ-101/102, S4, 4.6)', (
     // The flat string survives as the real UUID and z.uuid() accepted it.
     expect(payload.agentProfileId).toBe(MOCK_AGENTS[0].id);
     expect(payload.ownerProfileId).toBeUndefined();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* admin-property-physical-features-ux — debounced real-time field errors     */
+/* -------------------------------------------------------------------------- */
+
+describe('PropertyCreateForm — debounced feature validation', () => {
+  // Fake timers make the ~350ms window deterministic; `fireEvent` drives
+  // the inputs because userEvent fights fake timers (AddressSearchInput
+  // precedent). The submit gate stays untouched — this only pins the
+  // per-field `clientErrors` writing.
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function advance(ms: number) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  function enableFeatures() {
+    fireEvent.click(screen.getByLabelText('Agregar características físicas'));
+  }
+
+  it('surfaces the area error only after the ~350ms window and clears it when fixed', async () => {
+    render(<PropertyCreateForm canCreate />);
+    enableFeatures();
+
+    fireEvent.change(screen.getByLabelText('Superficie total (m²)'), { target: { value: '0' } });
+    await advance(200);
+    expect(screen.getByLabelText('Superficie total (m²)')).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByText(AREA_NON_NEGATIVE)).toBeNull();
+
+    await advance(150);
+    expect(screen.getByLabelText('Superficie total (m²)')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText(AREA_NON_NEGATIVE, { selector: 'p' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Superficie total (m²)'), { target: { value: '80' } });
+    await advance(350);
+    expect(screen.getByLabelText('Superficie total (m²)')).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByText(AREA_NON_NEGATIVE, { selector: 'p' })).toBeNull();
+  });
+
+  it('toggle off clears stale errors and drops pending windows — no late fire', async () => {
+    render(<PropertyCreateForm canCreate />);
+    const toggle = screen.getByLabelText('Agregar características físicas');
+    fireEvent.click(toggle);
+
+    fireEvent.change(screen.getByLabelText('Superficie total (m²)'), { target: { value: '0' } });
+    await advance(350);
+    expect(screen.getByText(AREA_NON_NEGATIVE, { selector: 'p' })).toBeInTheDocument();
+
+    // Errors present → toggle off: stale errors gone, summary dark.
+    fireEvent.click(toggle);
+    expect(screen.getByRole('status')).toHaveTextContent('');
+
+    // Pending window → toggle off before it fires: nothing resurrects.
+    fireEvent.click(toggle);
+    fireEvent.change(screen.getByLabelText('Superficie total (m²)'), { target: { value: '0' } });
+    await advance(100);
+    fireEvent.click(toggle);
+    await advance(500);
+    expect(screen.queryByText(AREA_NON_NEGATIVE)).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('');
   });
 });
