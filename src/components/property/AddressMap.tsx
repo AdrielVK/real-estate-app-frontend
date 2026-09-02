@@ -67,6 +67,7 @@ export default function AddressMap({
 
   return (
     <MapContainer
+      key={`${coordinates[0]},${coordinates[1]}`}
       center={coordinates}
       zoom={PIN_ZOOM}
       scrollWheelZoom={false}
