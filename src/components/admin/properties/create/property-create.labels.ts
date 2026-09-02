@@ -14,7 +14,11 @@
  */
 
 import { PROPERTY_TYPE_LABEL } from '@/lib/search/url';
-import { PROPERTY_STATUSES, PROPERTY_TYPES } from '@/lib/validation/property-create.schema';
+import {
+  CONSERVATION_STATES,
+  PROPERTY_STATUSES,
+  PROPERTY_TYPES,
+} from '@/lib/validation/property-create.schema';
 
 /** One selectable choice for `OptionSelect`: value = slug, label = display copy. */
 export interface SelectOption {
@@ -49,5 +53,27 @@ export function buildPropertyTypeOptions(): SelectOption[] {
   return PROPERTY_TYPES.map((type) => ({
     value: type,
     label: PROPERTY_TYPE_LABEL[type as keyof typeof PROPERTY_TYPE_LABEL] ?? type,
+  }));
+}
+
+/**
+ * UI label for each `ConservationState` slug (REQ-005 pattern,
+ * admin-property-physical-features-ux): the dropdown shows semantic
+ * Spanish while the submitted value stays the backend slug.
+ */
+export const CONSERVATION_STATE_LABEL: Record<(typeof CONSERVATION_STATES)[number], string> = {
+  a_estrenar: 'A estrenar',
+  excelente: 'Excelente',
+  muy_bueno: 'Muy bueno',
+  bueno: 'Bueno',
+  regular: 'Regular',
+  a_refaccionar: 'A refaccionar',
+};
+
+/** Conservation choices in schema order — slug values, semantic labels. */
+export function buildConservationOptions(): SelectOption[] {
+  return CONSERVATION_STATES.map((state) => ({
+    value: state,
+    label: CONSERVATION_STATE_LABEL[state],
   }));
 }

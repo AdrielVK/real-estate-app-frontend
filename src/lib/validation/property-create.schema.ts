@@ -91,19 +91,51 @@ function emptyToUndefined(value: unknown): unknown {
   return value === '' ? undefined : value;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Feature validation messages — cross-layer contract                         */
+/* -------------------------------------------------------------------------- */
+
 /**
- * Optional numeric: empty → undefined; anything else → number ≥ 0.
- * Used for counts (rooms, bedrooms, etc.) that the backend accepts
- * as missing or non-negative.
+ * Pinned verbatim by the debounced field-error wiring and the section
+ * tests (same precedent as `DUPLICATE_CHARACTERISTIC_ERROR` below):
+ * the string is the contract between schema, form, and UI copy.
+ * Spec message keys: `area.non_negative`, `count.range`,
+ * `count.non_negative`, `conservation.required`.
  */
-const optCount = z.preprocess(emptyToUndefined, z.coerce.number().int().min(0).optional());
+export const AREA_NON_NEGATIVE = 'El área debe ser un número mayor que 0.';
+export const COUNT_RANGE = 'Debe ser un número entero entre 1 y 999.';
+export const COUNT_NON_NEGATIVE = 'Debe ser un número entero mayor o igual que 0.';
+export const CONSERVATION_REQUIRED = 'El estado de conservación es obligatorio.';
+
+/**
+ * Optional integer counts constrained to 1..999 — the rooms trio
+ * (`rooms`, `bedrooms`, `bathrooms`). A property always has at least
+ * one room when the field is filled, and the backend caps at three
+ * digits; the UI sanitizer (D6) mirrors this range.
+ */
+const countRange = z.preprocess(
+  emptyToUndefined,
+  z.coerce.number().int(COUNT_RANGE).min(1, COUNT_RANGE).max(999, COUNT_RANGE).optional(),
+);
+
+/**
+ * Optional integers ≥ 0 — `ageYears`, `floor`, `garages`. Zero is
+ * meaningful here (brand-new build, ground floor, no garage), so only
+ * negatives are rejected.
+ */
+const countNonNegative = z.preprocess(
+  emptyToUndefined,
+  z.coerce.number().int(COUNT_NON_NEGATIVE).min(0, COUNT_NON_NEGATIVE).optional(),
+);
 
 /**
  * Required area in m²: must be > 0.01 once coerced. The backend
  * rejects `0` and negatives; 0.01 is the inclusive lower bound the
- * DTO comment pins as the minimum.
+ * DTO comment pins as the minimum. Design D2 keeps this bound until
+ * the backend confirms `0`; flipping it means changing min + message
+ * in this one place.
  */
-const areaSchema = z.coerce.number().min(0.01);
+const areaSchema = z.coerce.number().min(0.01, AREA_NON_NEGATIVE);
 
 /* -------------------------------------------------------------------------- */
 /* Address                                                                    */
@@ -156,16 +188,22 @@ const addressSchema = z
 /* Features                                                                   */
 /* -------------------------------------------------------------------------- */
 
-const featuresSchema = z.object({
+/**
+ * Physical features block. Exported (admin-property-physical-features-ux)
+ * so the form can `.pick()` a single key for debounced per-field
+ * re-validation without re-parsing the whole payload; submit-time
+ * `propertyCreateSchema.safeParse` remains the source of truth.
+ */
+export const featuresSchema = z.object({
   totalAreaM2: areaSchema,
   coveredAreaM2: areaSchema,
-  conservationState: z.enum(CONSERVATION_STATES),
-  rooms: optCount,
-  bedrooms: optCount,
-  bathrooms: optCount,
-  garages: optCount,
-  floor: optCount,
-  ageYears: optCount,
+  conservationState: z.enum(CONSERVATION_STATES, { error: CONSERVATION_REQUIRED }),
+  rooms: countRange,
+  bedrooms: countRange,
+  bathrooms: countRange,
+  garages: countNonNegative,
+  floor: countNonNegative,
+  ageYears: countNonNegative,
 });
 
 /* -------------------------------------------------------------------------- */

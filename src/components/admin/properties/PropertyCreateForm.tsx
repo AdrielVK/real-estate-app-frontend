@@ -45,7 +45,7 @@ import type { CreatePropertyActionState, FieldKey } from '@/types/properties';
 import { createPropertyAction } from '@/lib/properties/actions';
 import { fetchProfiles, type ProfileOption } from '@/lib/properties/profiles';
 import { cn } from '@/lib/utils';
-import { propertyCreateSchema } from '@/lib/validation/property-create.schema';
+import { featuresSchema, propertyCreateSchema } from '@/lib/validation/property-create.schema';
 import { slugify } from '@/lib/validation/slug';
 
 import { Button } from '@/components/ui/Button';
@@ -58,6 +58,8 @@ import {
 } from './create/CharacteristicsSection';
 import { FeaturesSection, type FeaturesValues } from './create/FeaturesSection';
 import { PropertyCreateProvider } from './create/form-context';
+
+import { useDebouncedFieldError } from '@/hooks/useDebouncedFieldError';
 
 /** Full form state — the features fields ride the flat string record. */
 type FormValues = BasicInfoValues & AddressValues & FeaturesValues;
@@ -106,6 +108,41 @@ const FEATURE_FIELD_KEYS: FieldKey[] = [
   'featuresFloor',
   'featuresAgeYears',
 ];
+
+/**
+ * Feature `FieldKey` → `featuresSchema` key — the inverse of the
+ * `features.*` rows in `ISSUE_PATH_TO_FIELD`. The form state is flat,
+ * the schema is nested; this map is what `.pick()` needs for the
+ * debounced per-field re-parse (physical-features-ux, design D1).
+ */
+const FEATURE_SCHEMA_KEY = {
+  featuresTotalAreaM2: 'totalAreaM2',
+  featuresCoveredAreaM2: 'coveredAreaM2',
+  featuresConservationState: 'conservationState',
+  featuresRooms: 'rooms',
+  featuresBedrooms: 'bedrooms',
+  featuresBathrooms: 'bathrooms',
+  featuresGarages: 'garages',
+  featuresFloor: 'floor',
+  featuresAgeYears: 'ageYears',
+} as const satisfies Record<keyof FeaturesValues, keyof typeof featuresSchema.shape>;
+
+/**
+ * Re-parse one feature field through `featuresSchema.pick()`. Blank
+ * optional counts collapse to `undefined` (valid); a blank required
+ * area or a missing conservation state fails with its pinned message —
+ * the same verdict the submit gate would reach for that key, so the
+ * debounced error and the submit error never disagree.
+ */
+function validateFeatureField(key: string, value: string): string | undefined {
+  const schemaKey = FEATURE_SCHEMA_KEY[key as keyof FeaturesValues];
+  if (!schemaKey) return undefined;
+  const picked = featuresSchema.pick({
+    [schemaKey]: true,
+  } as { [k in keyof typeof featuresSchema.shape]?: true });
+  const parsed = picked.safeParse({ [schemaKey]: value });
+  return parsed.success ? undefined : parsed.error.issues[0]?.message;
+}
 
 const INITIAL_STATE: CreatePropertyActionState = { fieldErrors: {}, formError: null };
 
@@ -273,6 +310,27 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
     };
   }, []);
 
+  // Debounced per-field re-validation (physical-features-ux D1): only
+  // the changed feature key is re-parsed ~350ms after the last
+  // keystroke, and only its own `clientErrors` slot is written — the
+  // submit gate and the aria-live summary stay untouched by this path.
+  // Before the `canCreate` early return: hooks must run unconditionally.
+  const featureValidation = useDebouncedFieldError({
+    validate: validateFeatureField,
+    onError: (key, message) => {
+      const fieldKey = key as FieldKey;
+      setClientErrors((prev) => {
+        if (message === undefined) {
+          if (!(fieldKey in prev)) return prev;
+          const { [fieldKey]: _removed, ...rest } = prev;
+          void _removed;
+          return rest;
+        }
+        return { ...prev, [fieldKey]: message };
+      });
+    },
+  });
+
   if (!canCreate) return null;
 
   const clearClientErrors = (keys: readonly FieldKey[]) => {
@@ -294,11 +352,23 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
       void _removed;
       return rest;
     });
+    // Feature keys open a debounced re-parse window; every other key
+    // keeps the submit-time-only contract untouched.
+    if (key in FEATURE_SCHEMA_KEY) {
+      featureValidation.schedule(key, value);
+    }
   };
 
   const handleFeaturesToggle = (enabled: boolean) => {
     setFeaturesEnabled(enabled);
-    if (!enabled) clearClientErrors(FEATURE_FIELD_KEYS);
+    if (!enabled) {
+      // Toggle-off is the stale-error sweep (spec): drop the pending
+      // windows first so no late `onError` resurrects a hidden field,
+      // then clear the feature slots (hidden fields must not keep the
+      // aria-live summary lit).
+      featureValidation.cancelAll();
+      clearClientErrors(FEATURE_FIELD_KEYS);
+    }
   };
 
   const handleRowChange = (index: number, key: 'name' | 'category', value: string) => {

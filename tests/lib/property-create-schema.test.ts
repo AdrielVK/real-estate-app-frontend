@@ -8,9 +8,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  AREA_NON_NEGATIVE,
   CHARACTERISTIC_CATEGORIES,
+  CONSERVATION_REQUIRED,
   CONSERVATION_STATES,
+  COUNT_NON_NEGATIVE,
+  COUNT_RANGE,
   type CreatePropertyInput,
+  featuresSchema,
   PROPERTY_STATUSES,
   PROPERTY_TYPES,
   propertyCreateSchema,
@@ -572,6 +577,129 @@ describe('propertyCreateSchema — features', () => {
       expect(result.data.features?.rooms).toBeUndefined();
       expect(result.data.features?.bedrooms).toBeUndefined();
     }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Features bounds — admin-property-physical-features-ux (spec: Three-Row     */
+/* Bounded Grid + Validation Rules table). Message constants are the          */
+/* cross-layer contract pinned by the form wiring and the UI copy.            */
+/* -------------------------------------------------------------------------- */
+
+describe('propertyCreateSchema — features bounds (physical-features-ux)', () => {
+  /** Features block with the three required keys filled; spread overrides per test. */
+  function parseFeatures(features: Record<string, unknown>) {
+    return propertyCreateSchema.safeParse({
+      ...baseValidPayload(),
+      features: {
+        totalAreaM2: 80,
+        coveredAreaM2: 75,
+        conservationState: 'bueno',
+        ...features,
+      },
+    });
+  }
+
+  /** Messages issued against a given feature field path (e.g. `rooms`). */
+  function featureMessages(result: ReturnType<typeof parseFeatures>, field: string): string[] {
+    if (result.success) return [];
+    return result.error.issues
+      .filter((i) => i.path.join('.') === `features.${field}`)
+      .map((i) => i.message);
+  }
+
+  it('exposes the four feature message constants as non-empty strings', () => {
+    for (const message of [
+      AREA_NON_NEGATIVE,
+      COUNT_RANGE,
+      COUNT_NON_NEGATIVE,
+      CONSERVATION_REQUIRED,
+    ]) {
+      expect(typeof message).toBe('string');
+      expect(message.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('rejects totalAreaM2 = 0 with AREA_NON_NEGATIVE (D2: 0.01 lower bound kept)', () => {
+    const result = parseFeatures({ totalAreaM2: 0 });
+    expect(result.success).toBe(false);
+    expect(featureMessages(result, 'totalAreaM2')).toContain(AREA_NON_NEGATIVE);
+  });
+
+  it('accepts totalAreaM2 at the 0.01 boundary', () => {
+    expect(parseFeatures({ totalAreaM2: 0.01 }).success).toBe(true);
+  });
+
+  it('rejects coveredAreaM2 = 0 with AREA_NON_NEGATIVE', () => {
+    const result = parseFeatures({ coveredAreaM2: 0 });
+    expect(result.success).toBe(false);
+    expect(featureMessages(result, 'coveredAreaM2')).toContain(AREA_NON_NEGATIVE);
+  });
+
+  it.each(['rooms', 'bedrooms', 'bathrooms'])(
+    'rejects %s = 0, 1000 and 3.5 with COUNT_RANGE (integers 1..999 only)',
+    (field) => {
+      for (const bad of [0, 1000, 3.5]) {
+        const result = parseFeatures({ [field]: bad });
+        expect(result.success, `${field}=${bad} must be rejected`).toBe(false);
+        expect(featureMessages(result, field)).toContain(COUNT_RANGE);
+      }
+    },
+  );
+
+  it.each(['rooms', 'bedrooms', 'bathrooms'])('accepts %s at the 1 and 999 bounds', (field) => {
+    expect(parseFeatures({ [field]: 1 }).success).toBe(true);
+    expect(parseFeatures({ [field]: 999 }).success).toBe(true);
+  });
+
+  it.each(['floor', 'ageYears', 'garages'])(
+    'rejects negative %s with COUNT_NON_NEGATIVE',
+    (field) => {
+      const result = parseFeatures({ [field]: -1 });
+      expect(result.success).toBe(false);
+      expect(featureMessages(result, field)).toContain(COUNT_NON_NEGATIVE);
+    },
+  );
+
+  it.each(['floor', 'ageYears', 'garages'])('accepts %s = 0 (ground floor / none)', (field) => {
+    expect(parseFeatures({ [field]: 0 }).success).toBe(true);
+  });
+
+  it('coerces string numerics through the bounded groups ("2" rooms → 2)', () => {
+    const result = parseFeatures({ rooms: '2', floor: '0', totalAreaM2: '80.5' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.features?.rooms).toBe(2);
+      expect(result.data.features?.floor).toBe(0);
+      expect(result.data.features?.totalAreaM2).toBeCloseTo(80.5, 10);
+    }
+  });
+
+  it('rejects a missing conservationState with CONSERVATION_REQUIRED', () => {
+    const result = propertyCreateSchema.safeParse({
+      ...baseValidPayload(),
+      features: { totalAreaM2: 80, coveredAreaM2: 75 },
+    });
+    expect(result.success).toBe(false);
+    expect(featureMessages(result, 'conservationState')).toContain(CONSERVATION_REQUIRED);
+  });
+
+  it('exports featuresSchema and .pick() re-parses a single field in isolation', () => {
+    expect(featuresSchema).toBeDefined();
+
+    const totalAreaOnly = featuresSchema.pick({ totalAreaM2: true });
+    expect(totalAreaOnly.safeParse({ totalAreaM2: '80' }).success).toBe(true);
+    const invalid = totalAreaOnly.safeParse({ totalAreaM2: '0' });
+    expect(invalid.success).toBe(false);
+    if (!invalid.success) {
+      expect(invalid.error.issues[0]?.message).toBe(AREA_NON_NEGATIVE);
+    }
+
+    // Picking one key must not make the other required keys mandatory.
+    const roomsOnly = featuresSchema.pick({ rooms: true });
+    expect(roomsOnly.safeParse({ rooms: '2' }).success).toBe(true);
+    // Blank optional collapses to omitted (emptyToUndefined parity).
+    expect(roomsOnly.safeParse({ rooms: '' }).success).toBe(true);
   });
 });
 
