@@ -14,12 +14,19 @@
  *   contract ONLY — eleven calls, no bypass of the schema/buildPayload/
  *   buildDto pipeline (AS-7 hard constraint). The parent's functional
  *   setState makes the eleven calls compose into one render.
- * - Renders the legacy 11-field grid verbatim (ids, Spanish labels,
- *   disclosure copy, required marks) so every
- *   `PropertyCreateForm.test.tsx` query survives (AS-6).
+ * - Renders the required trio (formatted/city/country) plus the five
+ *   EDITABLE optional fields behind the disclosure (street, number,
+ *   neighborhood, state, postal code — AS-12, ids and Spanish labels
+ *   kept) so every `PropertyCreateForm.test.tsx` query survives (AS-6).
+ *   The system trio (`addressPlaceId`/`addressLatitude`/
+ *   `addressLongitude`) has NO editable control here: it rides as
+ *   hidden inputs inside `AddressConfirmedSection` (ACS-4, AS-3).
  *
  * UX states:
- * - `AddressDetails` (AS-5): read-only confirmed summary, hidden until a
+ * - `AddressConfirmedSection` (AS-5/AS-6, ui-refine): the confirmed
+ *   view is DELEGATED — this orchestrator keeps only the frozen
+ *   prediction description and passes the LIVE controlled values down,
+ *   so the summary follows manual edits (ACS-2). Hidden until a
  *   selection hydrates values.
  * - Required-field hint (AS-5): if city/country/formatted are still
  *   blank after the fallback chain, an inline hint appears — it hides
@@ -33,12 +40,9 @@
  */
 import { useCallback, useId, useState } from 'react';
 
-import dynamic from 'next/dynamic';
-
 import { ChevronDown } from 'lucide-react';
 
 import type { AddressComponent, PlaceDetailsResponse, Prediction } from '@/types/geocoding';
-import { parseCoordinates } from '@/lib/geocoding/coordinates';
 import { cn } from '@/lib/utils';
 
 import {
@@ -47,19 +51,10 @@ import {
   SectionShell,
 } from '@/components/admin/properties/create/form-fields';
 
-import { AddressDetails } from './AddressDetails';
+import { AddressConfirmedSection } from './AddressConfirmedSection';
 import { AddressSearchInput } from './AddressSearchInput';
 
 import { useAddressSearch } from '@/hooks/useAddressSearch';
-
-/**
- * AS-4 mount boundary: Leaflet is client-only and heavy, so the map
- * module loads through `next/dynamic` with `ssr:false` — and only when
- * the controlled lat/lng pass `parseCoordinates` (the render below is
- * gated, so the chunk is never even requested without real
- * coordinates).
- */
-const AddressMap = dynamic(() => import('./AddressMap'), { ssr: false });
 
 /** Controlled string values for the eleven address fields. */
 export interface AddressValues {
@@ -123,10 +118,11 @@ const MISSING_REQUIRED_MESSAGE =
   'No pudimos completar todos los campos obligatorios desde la búsqueda. Escribí los que faltan a mano.';
 
 export function AddressField({ values, errors, onChange }: AddressFieldProps) {
-  // Confirmed selection snapshot for the read-only summary (AS-5).
-  const [confirmed, setConfirmed] = useState<{ description: string; values: AddressValues } | null>(
-    null,
-  );
+  // Frozen prediction description for the confirmed section (AS-5/D2):
+  // only the description is snapshotted — the section reads the LIVE
+  // controlled values so manual edits update the display (ACS-2), and
+  // prediction text is not editable anywhere.
+  const [confirmedDescription, setConfirmedDescription] = useState<string | null>(null);
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [missingRequired, setMissingRequired] = useState(false);
 
@@ -137,7 +133,7 @@ export function AddressField({ values, errors, onChange }: AddressFieldProps) {
         const url = `/api/geocoding/details?placeId=${encodeURIComponent(prediction.placeId)}&sessionToken=${encodeURIComponent(sessionToken)}`;
         const response = await fetch(url);
         if (!response.ok) {
-          setConfirmed(null);
+          setConfirmedDescription(null);
           setDetailsError(DETAILS_ERROR_MESSAGE);
           return;
         }
@@ -148,12 +144,12 @@ export function AddressField({ values, errors, onChange }: AddressFieldProps) {
         for (const [key, value] of Object.entries(hydrated) as [keyof AddressValues, string][]) {
           onChange(key, value);
         }
-        setConfirmed({ description: prediction.description, values: hydrated });
+        setConfirmedDescription(prediction.description);
         setMissingRequired(
           !hydrated.addressFormatted || !hydrated.addressCity || !hydrated.addressCountry,
         );
       } catch {
-        setConfirmed(null);
+        setConfirmedDescription(null);
         setDetailsError(DETAILS_ERROR_MESSAGE);
       }
     },
@@ -169,6 +165,14 @@ export function AddressField({ values, errors, onChange }: AddressFieldProps) {
   const hasRequiredError = Boolean(
     errors.addressFormatted ?? errors.addressCity ?? errors.addressCountry,
   );
+  // Progressive disclosure (D6 heuristics split):
+  // - VALUE heuristic → the 5 EDITABLE optional keys only. lat/lng
+  //   always hydrate on selection, so counting them (or placeId) would
+  //   force the disclosure open on every search — noise.
+  // - ERROR heuristic → all 8 optional keys, so a server-mapped error on
+  //   a system field never loses the SectionShell "Revisar" signal or
+  //   the auto-open (the hidden inputs keep the `#addressLatitude`-style
+  //   anchors alive for the error summary — design D3).
   const hasOptionalError = Boolean(
     errors.addressPlaceId ??
     errors.addressStreet ??
@@ -179,16 +183,12 @@ export function AddressField({ values, errors, onChange }: AddressFieldProps) {
     errors.addressLatitude ??
     errors.addressLongitude,
   );
-  // Progressive disclosure: if any optional is filled or errored, start open so the user sees it.
   const hasOptionalValue = Boolean(
-    values.addressPlaceId ||
     values.addressStreet ||
     values.addressStreetNumber ||
     values.addressNeighborhood ||
     values.addressState ||
-    values.addressPostalCode ||
-    values.addressLatitude ||
-    values.addressLongitude,
+    values.addressPostalCode,
   );
   const shouldStartOpen = hasOptionalError || hasOptionalValue;
   const [open, setOpen] = useState(shouldStartOpen);
@@ -200,10 +200,6 @@ export function AddressField({ values, errors, onChange }: AddressFieldProps) {
   const showRequiredHint =
     missingRequired &&
     (values.addressFormatted === '' || values.addressCity === '' || values.addressCountry === '');
-
-  // AS-4 mount gate — the dynamic chunk loads only for finite in-range
-  // coordinates; blank/manual-empty lat/lng never touch Leaflet.
-  const coordinates = parseCoordinates(values.addressLatitude, values.addressLongitude);
 
   return (
     <SectionShell
@@ -219,8 +215,8 @@ export function AddressField({ values, errors, onChange }: AddressFieldProps) {
           placeholder="Calle, ciudad o lugar — desde 3 caracteres"
           search={search}
         />
-        {confirmed ? (
-          <AddressDetails description={confirmed.description} values={confirmed.values} />
+        {confirmedDescription ? (
+          <AddressConfirmedSection description={confirmedDescription} values={values} />
         ) : null}
         {detailsError ? (
           <p className="text-sm leading-snug text-destructive">{detailsError}</p>
@@ -273,7 +269,7 @@ export function AddressField({ values, errors, onChange }: AddressFieldProps) {
             aria-hidden="true"
             className={cn('size-4 transition-transform duration-200', open && 'rotate-180')}
           />
-          {open ? 'Ocultar detalles opcionales' : 'Mostrar detalles opcionales (8 campos)'}
+          {open ? 'Ocultar detalles opcionales' : 'Mostrar detalles opcionales (5 campos)'}
           {hasOptionalError ? (
             <span className="inline-flex size-2 rounded-full bg-destructive" aria-hidden="true" />
           ) : null}
@@ -287,13 +283,6 @@ export function AddressField({ values, errors, onChange }: AddressFieldProps) {
             open && 'motion-safe:animate-[fade-up_0.28s_var(--ease-out-strong)_both]',
           )}
         >
-          <Field id="addressPlaceId" label="Place ID" error={errors.addressPlaceId}>
-            <input
-              className={CONTROL_CLASSES}
-              value={values.addressPlaceId}
-              onChange={(event) => onChange('addressPlaceId', event.target.value)}
-            />
-          </Field>
           <Field id="addressStreet" label="Calle" error={errors.addressStreet}>
             <input
               className={CONTROL_CLASSES}
@@ -329,28 +318,8 @@ export function AddressField({ values, errors, onChange }: AddressFieldProps) {
               onChange={(event) => onChange('addressPostalCode', event.target.value)}
             />
           </Field>
-          <Field id="addressLatitude" label="Latitud" error={errors.addressLatitude}>
-            <input
-              className={CONTROL_CLASSES}
-              inputMode="decimal"
-              value={values.addressLatitude}
-              onChange={(event) => onChange('addressLatitude', event.target.value)}
-            />
-          </Field>
-          <Field id="addressLongitude" label="Longitud" error={errors.addressLongitude}>
-            <input
-              className={CONTROL_CLASSES}
-              inputMode="decimal"
-              value={values.addressLongitude}
-              onChange={(event) => onChange('addressLongitude', event.target.value)}
-            />
-          </Field>
         </div>
       </div>
-
-      {coordinates ? (
-        <AddressMap latitude={values.addressLatitude} longitude={values.addressLongitude} />
-      ) : null}
     </SectionShell>
   );
 }
