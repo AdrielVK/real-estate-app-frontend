@@ -19,7 +19,7 @@
  * prove "no editable control" via the hidden `type` and the absence of
  * label queries, never by typing into them.
  */
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { AddressConfirmedSection } from '@/components/property/AddressConfirmedSection';
@@ -231,6 +231,99 @@ describe('AddressConfirmedSection', () => {
       expect(document.getElementById('addressLatitude')).toBeNull();
       expect(document.getElementById('addressLongitude')).toBeNull();
       expect(screen.queryByTestId('address-map')).toBeNull();
+    });
+  });
+
+  /* -------------------------------------------------------------------------- */
+  /* property-address-confirm-sync-v2 — stale visuals (DCS-5/6, ACS-6)          */
+  /* -------------------------------------------------------------------------- */
+
+  describe('stale visuals (DCS-5, DCS-6, ACS-6)', () => {
+    /**
+     * Class-token check (AS-15 precedent): the design pins the amber
+     * tokens themselves and jsdom cannot resolve styles — the stale
+     * contract is asserted as the class list, per the design Testing
+     * Strategy.
+     */
+    function hasClassToken(el: HTMLElement, token: string): boolean {
+      return el.className.split(/\s+/).includes(token);
+    }
+
+    const NO_COORDS: AddressValues = { ...VALUES, addressLatitude: '', addressLongitude: '' };
+
+    it('swaps the label to "Vista previa anterior" and lights the amber border while stale', () => {
+      render(<AddressConfirmedSection description={DESCRIPTION} values={NO_COORDS} isStale />);
+
+      // No coordinates → no map → no overlay chip: the label is the
+      // single instance of the string.
+      const label = screen.getByText('Vista previa anterior');
+      expect(screen.queryByText(/dirección confirmada/i)).toBeNull();
+      // The label's container is the details card — the amber border
+      // replaces the neutral one.
+      expect(hasClassToken(label.parentElement as HTMLElement, 'border-amber-500/60')).toBe(true);
+    });
+
+    it('keeps the neutral label and border when not stale', () => {
+      render(<AddressConfirmedSection description={DESCRIPTION} values={NO_COORDS} />);
+
+      expect(screen.getByText(/dirección confirmada/i)).toBeInTheDocument();
+      expect(screen.queryByText('Vista previa anterior')).toBeNull();
+    });
+
+    it('renders the "Vista previa anterior" overlay chip over the map while stale', async () => {
+      render(<AddressConfirmedSection description={DESCRIPTION} values={VALUES} isStale />);
+
+      await screen.findByTestId('address-map');
+      // Label + chip — the chip is the absolutely positioned one.
+      const chip = screen
+        .getAllByText('Vista previa anterior')
+        .find((el) => hasClassToken(el, 'absolute'));
+      expect(chip).toBeDefined();
+      expect(hasClassToken(chip as HTMLElement, 'bg-amber-500/10')).toBe(true);
+    });
+
+    it('shows the retry CTA when showRetryCta and fires onRetry on click', () => {
+      const onRetry = vi.fn();
+      render(
+        <AddressConfirmedSection
+          description={DESCRIPTION}
+          values={NO_COORDS}
+          isStale
+          showRetryCta
+          onRetry={onRetry}
+        />,
+      );
+
+      const cta = screen.getByRole('button', { name: 'Buscar nuevamente' });
+      fireEvent.click(cta);
+      expect(onRetry).toHaveBeenCalledTimes(1);
+    });
+
+    it('hides the retry CTA while the autocomplete path is active (stale, ≥3 chars)', () => {
+      render(<AddressConfirmedSection description={DESCRIPTION} values={NO_COORDS} isStale />);
+
+      expect(screen.queryByRole('button', { name: 'Buscar nuevamente' })).toBeNull();
+    });
+
+    it('removes every stale treatment once isStale clears (ACS-6)', async () => {
+      const { rerender } = render(
+        <AddressConfirmedSection
+          description={DESCRIPTION}
+          values={VALUES}
+          isStale
+          showRetryCta
+          onRetry={vi.fn()}
+        />,
+      );
+      await screen.findByTestId('address-map');
+      expect(screen.getAllByText('Vista previa anterior').length).toBeGreaterThan(0);
+      expect(screen.getByRole('button', { name: 'Buscar nuevamente' })).toBeInTheDocument();
+
+      rerender(<AddressConfirmedSection description={DESCRIPTION} values={VALUES} />);
+
+      expect(screen.queryByText('Vista previa anterior')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Buscar nuevamente' })).toBeNull();
+      expect(screen.getByText(/dirección confirmada/i)).toBeInTheDocument();
     });
   });
 });

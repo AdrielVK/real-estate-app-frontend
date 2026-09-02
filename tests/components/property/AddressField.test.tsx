@@ -25,7 +25,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AddressComponent, PlaceDetailsResponse, ProxyError } from '@/types/geocoding';
 
-import { AddressField, type AddressValues } from '@/components/property/AddressField';
+import {
+  AddressField,
+  type AddressValues,
+  composeAddressQuery,
+  CORE_ADDRESS_KEYS,
+  diffCoreFields,
+  mapDetailsToAddressValues,
+} from '@/components/property/AddressField';
 
 import { server } from '@/mocks/server';
 
@@ -146,6 +153,37 @@ function renderField(
   const onChange = vi.fn();
   render(<AddressField values={values} errors={errors} onChange={onChange} />);
   return onChange;
+}
+
+/**
+ * Controlled-parent harness (confirm-sync-v2): folds every
+ * `onChange(key, value)` back into the `values` prop and rerenders —
+ * exactly what `PropertyCreateForm.handleChange` does — so snapshot
+ * diffs, the dirty lift and the auto-trigger all run against live
+ * controlled state instead of a frozen prop.
+ */
+function renderControlled(onDirtyCoreChange = vi.fn()) {
+  let values: AddressValues = { ...EMPTY_VALUES };
+  const onChange = vi.fn((key: keyof AddressValues, value: string) => {
+    values = { ...values, [key]: value };
+    rerender(
+      <AddressField
+        values={values}
+        errors={{}}
+        onChange={onChange}
+        onDirtyCoreChange={onDirtyCoreChange}
+      />,
+    );
+  });
+  const { rerender } = render(
+    <AddressField
+      values={values}
+      errors={{}}
+      onChange={onChange}
+      onDirtyCoreChange={onDirtyCoreChange}
+    />,
+  );
+  return { onChange, onDirtyCoreChange, getValues: () => values };
 }
 
 describe('AddressField', () => {
@@ -316,7 +354,10 @@ describe('AddressField', () => {
   describe('confirmed summary (delegated to AddressConfirmedSection)', () => {
     it('is hidden before a selection and shows exactly one confirmed view after', async () => {
       serveDetails(fullDetails());
-      renderField();
+      // Controlled: the confirmed view is NOT stale when the parent
+      // applies the hydrated values (confirm-sync-v2 would otherwise
+      // swap the label to the stale copy).
+      renderControlled();
 
       expect(screen.queryByText(/dirección confirmada/i)).toBeNull();
 
@@ -714,6 +755,331 @@ describe('AddressField', () => {
       fireEvent.change(screen.getByRole('combobox'), { target: { value: 'xyz' } });
       await flush(300);
       expect(seen).toEqual([`a:${tokens[0]}`, `d:${tokens[0]}`, `a:${tokens[1]}`]);
+    });
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* property-address-confirm-sync-v2 — core sync (DCS-1/2/7)            */
+  /* ------------------------------------------------------------------ */
+
+  describe('core sync helpers — dirty detection (DCS-1, DCS-7)', () => {
+    // The REAL mapping produces the snapshot fixture — the helpers and
+    // hydration can never drift from each other in these tests.
+    const snapshot = mapDetailsToAddressValues(fullDetails());
+
+    it('CORE_ADDRESS_KEYS pins exactly the six core keys', () => {
+      expect([...CORE_ADDRESS_KEYS].sort()).toEqual(
+        [
+          'addressCity',
+          'addressCountry',
+          'addressFormatted',
+          'addressState',
+          'addressStreet',
+          'addressStreetNumber',
+        ].sort(),
+      );
+    });
+
+    it('diffCoreFields reports {field,prev,curr} for an edited core key', () => {
+      const dirty = diffCoreFields({ ...snapshot, addressStreet: 'Calle Falsa' }, snapshot);
+
+      expect(dirty).toEqual([
+        { field: 'addressStreet', prev: 'Av. Rivadavia', curr: 'Calle Falsa' },
+      ]);
+    });
+
+    it('diffCoreFields ignores non-core keys — barrio and postalCode edits stay clean (DCS-7)', () => {
+      const dirty = diffCoreFields(
+        { ...snapshot, addressNeighborhood: 'San Cristóbal', addressPostalCode: '9999' },
+        snapshot,
+      );
+
+      // Emptiness comes from the filter over the six-key set — the
+      // companion test above proves the same call reports non-empty
+      // when a CORE key diverges.
+      expect(dirty).toEqual([]);
+    });
+
+    it('diffCoreFields compares trimmed values — whitespace-only edits stay clean', () => {
+      expect(
+        diffCoreFields(
+          { ...snapshot, addressCity: '  Ciudad Autónoma de Buenos Aires  ' },
+          snapshot,
+        ),
+      ).toEqual([]);
+      // Triangulation: a real divergence on the same key still reports.
+      expect(
+        diffCoreFields({ ...snapshot, addressCity: 'Ciudad Autónoma de Buenos ' }, snapshot),
+      ).toHaveLength(1);
+    });
+
+    it('diffCoreFields reports every diverging core key', () => {
+      const dirty = diffCoreFields(
+        { ...snapshot, addressStreet: 'A', addressCity: 'B', addressNeighborhood: 'C' },
+        snapshot,
+      );
+
+      expect(dirty.map((entry) => entry.field).sort()).toEqual(['addressCity', 'addressStreet']);
+    });
+  });
+
+  describe('core sync helpers — query compose (DCS-2)', () => {
+    const snapshot = mapDetailsToAddressValues(fullDetails());
+
+    it('prefers a diverging non-empty formatted value', () => {
+      expect(
+        composeAddressQuery({ ...snapshot, addressFormatted: 'Calle Falsa 123' }, snapshot),
+      ).toBe('Calle Falsa 123');
+    });
+
+    it('falls back to the composed core string when formatted was cleared (DCS-2 edge)', () => {
+      expect(
+        composeAddressQuery(
+          { ...snapshot, addressFormatted: '', addressStreet: 'Calle Falsa' },
+          snapshot,
+        ),
+      ).toBe('Calle Falsa, 742, Ciudad Autónoma de Buenos Aires, CABA, Argentina');
+    });
+
+    it('composes from core values when formatted is untouched', () => {
+      expect(composeAddressQuery({ ...snapshot, addressCity: 'La Plata' }, snapshot)).toBe(
+        'Av. Rivadavia, 742, La Plata, CABA, Argentina',
+      );
+    });
+
+    it('omits blank pieces and excludes non-core keys from the query', () => {
+      expect(
+        composeAddressQuery(
+          {
+            ...snapshot,
+            addressStreet: '',
+            addressStreetNumber: '',
+            addressNeighborhood: 'San Cristóbal',
+            addressPostalCode: '9999',
+          },
+          snapshot,
+        ),
+      ).toBe('Ciudad Autónoma de Buenos Aires, CABA, Argentina');
+    });
+  });
+
+  describe('core sync — dirty lift (DCS-1)', () => {
+    it('lifts dirty=true on a core edit and false once the value matches the snapshot again', async () => {
+      serveDetails(fullDetails());
+      const { onDirtyCoreChange } = renderControlled();
+
+      await selectFirstSuggestion();
+      onDirtyCoreChange.mockClear();
+
+      fireEvent.change(screen.getByLabelText('Calle'), { target: { value: 'Calle Falsa' } });
+      expect(onDirtyCoreChange).toHaveBeenCalledWith(true);
+
+      onDirtyCoreChange.mockClear();
+      // Trim-equality back to the snapshot value clears the dirty state.
+      fireEvent.change(screen.getByLabelText('Calle'), { target: { value: 'Av. Rivadavia' } });
+      expect(onDirtyCoreChange).toHaveBeenCalledWith(false);
+    });
+
+    it('never lifts dirty=true for a non-core edit (DCS-7)', async () => {
+      serveDetails(fullDetails());
+      const { onDirtyCoreChange } = renderControlled();
+
+      await selectFirstSuggestion();
+      onDirtyCoreChange.mockClear();
+
+      fireEvent.change(screen.getByLabelText('Barrio'), { target: { value: 'San Cristóbal' } });
+      expect(onDirtyCoreChange).not.toHaveBeenCalledWith(true);
+    });
+  });
+
+  describe('core sync — auto-trigger (DCS-3, AS-16)', () => {
+    /** Replace the autocomplete route with a capture of `input` params. */
+    function captureAutocomplete() {
+      const inputs: string[] = [];
+      server.use(
+        http.get('*/api/geocoding/autocomplete', ({ request }) => {
+          inputs.push(new URL(request.url).searchParams.get('input') ?? '');
+          return HttpResponse.json({
+            predictions: [{ placeId: 'ChIJ-auto-0', description: 'Auto 0 Mock Street' }],
+          });
+        }),
+      );
+      return inputs;
+    }
+
+    it('fires setInputValue 400ms after a core edit with the composed query', async () => {
+      serveDetails(fullDetails());
+      const inputs = captureAutocomplete();
+      renderControlled();
+
+      await selectFirstSuggestion();
+      inputs.length = 0;
+
+      fireEvent.change(screen.getByLabelText('Calle'), { target: { value: 'Calle Falsa' } });
+      await flush(399);
+      expect(inputs).toEqual([]); // the 400ms coalescing window is still open
+
+      await flush(301); // fire + the hook's own 300ms debounce
+      const query = 'Calle Falsa, 742, Ciudad Autónoma de Buenos Aires, CABA, Argentina';
+      expect(inputs).toEqual([query]);
+      // DCS-3 "THEN": the combobox carries the query and suggestions appear.
+      expect(screen.getByRole('combobox')).toHaveValue(query);
+      expect(screen.getAllByRole('option')).toHaveLength(1);
+    });
+
+    it('coalesces two core edits within 400ms into the final query only', async () => {
+      serveDetails(fullDetails());
+      const inputs = captureAutocomplete();
+      renderControlled();
+
+      await selectFirstSuggestion();
+      inputs.length = 0;
+
+      fireEvent.change(screen.getByLabelText('Calle'), { target: { value: 'Calle Falsa' } });
+      await flush(200);
+      fireEvent.change(screen.getByLabelText('Ciudad'), { target: { value: 'La Plata' } });
+      await flush(800);
+
+      // The first compose was cancelled inside the window — only the
+      // final query ever reaches the network (earlier one dropped).
+      expect(inputs).toEqual(['Calle Falsa, 742, La Plata, CABA, Argentina']);
+    });
+
+    it('does not fire or arm the AS-13 clear when the composed query is under 3 chars', async () => {
+      // Minimal hydration: country only — clearing it empties the compose.
+      serveDetails({
+        ...fullDetails(),
+        formattedAddress: '',
+        addressComponents: [component('country', 'Uruguay', 'UY')],
+        location: null,
+      });
+      const inputs = captureAutocomplete();
+      const { onChange } = renderControlled();
+
+      await selectFirstSuggestion();
+      inputs.length = 0;
+      onChange.mockClear();
+
+      fireEvent.change(screen.getByLabelText('País'), { target: { value: '' } });
+      await flush(400 + 300);
+      expect(inputs).toEqual([]); // MIN_CHARS floor respected — no request
+
+      await flush(5000);
+      // The auto-trigger never set the input to '', so AS-13 stayed
+      // unarmed: no 11-key clear, the confirmed view survives — in its
+      // STALE dress (DCS-5: country diverges from the snapshot).
+      expect(inputs).toEqual([]);
+      expect(onChange).toHaveBeenCalledTimes(1); // only the country edit itself
+      expect(screen.getByText('Vista previa anterior')).toBeInTheDocument();
+      expect(document.getElementById('addressPlaceId')).not.toBeNull();
+    });
+
+    it('does not re-fire for non-core edits while the same query is already composed', async () => {
+      serveDetails(fullDetails());
+      const inputs = captureAutocomplete();
+      renderControlled();
+
+      await selectFirstSuggestion();
+      inputs.length = 0;
+
+      fireEvent.change(screen.getByLabelText('Calle'), { target: { value: 'Calle Falsa' } });
+      await flush(700);
+      expect(inputs).toHaveLength(1);
+
+      // A non-core edit re-runs the effect with the SAME compose — the
+      // lastAutoQuery guard keeps the network quiet.
+      fireEvent.change(screen.getByLabelText('Barrio'), { target: { value: 'San Cristóbal' } });
+      await flush(700);
+      expect(inputs).toHaveLength(1);
+    });
+  });
+
+  describe('core sync — session token (DCS-8, AS-8)', () => {
+    it('reuses the session token across the auto-trigger and rotates only on selection', async () => {
+      const tokens = [
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+        '33333333-3333-4333-8333-333333333333',
+      ];
+      let issued = 0;
+      const randomUUID = vi
+        .spyOn(globalThis.crypto, 'randomUUID')
+        .mockImplementation(
+          () => tokens[issued++] as `${string}-${string}-${string}-${string}-${string}`,
+        );
+      const seen: string[] = [];
+      server.use(
+        http.get('*/api/geocoding/autocomplete', ({ request }) => {
+          seen.push(`a:${new URL(request.url).searchParams.get('sessionToken')}`);
+          return HttpResponse.json({
+            predictions: [{ placeId: 'ChIJ-auto', description: 'Auto One' }],
+          });
+        }),
+        http.get('*/api/geocoding/details', ({ request }) => {
+          seen.push(`d:${new URL(request.url).searchParams.get('sessionToken')}`);
+          return HttpResponse.json(fullDetails());
+        }),
+      );
+      renderControlled();
+
+      await selectFirstSuggestion();
+      expect(seen).toEqual([`a:${tokens[0]}`, `d:${tokens[0]}`]);
+      expect(randomUUID).toHaveBeenCalledTimes(2); // mount + selection rotation
+
+      fireEvent.change(screen.getByLabelText('Calle'), { target: { value: 'Calle Falsa' } });
+      await flush(700);
+      // The auto-trigger searched under the post-selection token — no mint.
+      expect(seen[2]).toBe(`a:${tokens[1]}`);
+      expect(randomUUID).toHaveBeenCalledTimes(2);
+
+      // Picking from the auto-trigger results rotates exactly once more,
+      // and the details call still rides the PRE-rotation token (GP-3).
+      const combobox = screen.getByRole('combobox');
+      fireEvent.keyDown(combobox, { key: 'ArrowDown' });
+      fireEvent.keyDown(combobox, { key: 'Enter' });
+      await flush();
+
+      expect(seen).toEqual([
+        `a:${tokens[0]}`,
+        `d:${tokens[0]}`,
+        `a:${tokens[1]}`,
+        `d:${tokens[1]}`,
+      ]);
+      expect(randomUUID).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('core sync — stale wiring (DCS-5, DCS-6)', () => {
+    it('marks the confirmed view stale on a core edit and swaps to the CTA when the compose drops under 3 chars', async () => {
+      serveDetails(fullDetails());
+      renderControlled();
+
+      await selectFirstSuggestion();
+      expect(screen.queryByText('Vista previa anterior')).toBeNull();
+
+      fireEvent.change(screen.getByLabelText('Calle'), { target: { value: 'Calle Falsa' } });
+      // Stale visuals land with the same render as the dirty state —
+      // no timer involved. Autocomplete path is active (long compose),
+      // so the CTA stays hidden.
+      expect(screen.getAllByText('Vista previa anterior').length).toBeGreaterThan(0);
+      expect(screen.queryByRole('button', { name: 'Buscar nuevamente' })).toBeNull();
+
+      // Blank every core piece: compose empties below MIN_CHARS — the
+      // silent path hands over to the explicit retry CTA.
+      for (const label of [
+        'Dirección formateada',
+        'Ciudad',
+        'Provincia',
+        'País',
+        'Número o altura de calle',
+        'Calle',
+      ]) {
+        fireEvent.change(screen.getByLabelText(label), { target: { value: '' } });
+      }
+      const cta = screen.getByRole('button', { name: 'Buscar nuevamente' });
+      fireEvent.click(cta);
+      // The CTA focuses the pinned search input (AS-6 grid contract id).
+      expect(document.activeElement).toBe(screen.getByRole('combobox'));
     });
   });
 });

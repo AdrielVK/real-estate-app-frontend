@@ -19,6 +19,8 @@
  *   `PropertyCreateForm.test.tsx`'s control enumeration is unaffected.
  * - no `<fieldset>` either: the form test pins exactly four fieldsets.
  */
+import { cn } from '@/lib/utils';
+
 import type { AddressValues } from './AddressField';
 
 export interface AddressDetailsProps {
@@ -26,6 +28,14 @@ export interface AddressDetailsProps {
   description: string;
   /** The hydrated values the summary mirrors (read-only snapshot). */
   values: AddressValues;
+  /**
+   * DCS-5 (property-address-confirm-sync-v2): the core fields diverge
+   * from the last confirmed selection — the text shown here no longer
+   * matches the hidden lat/lng/placeId. Amber border + stale label
+   * replace the neutral treatment; everything reverts when the flag
+   * clears (re-selection or clear).
+   */
+  isStale?: boolean;
 }
 
 /** Label → value lines, in scan order; blank values are omitted. */
@@ -43,11 +53,16 @@ function summaryLines(values: AddressValues): { label: string; value: string }[]
   return lines.filter((line) => line.value !== '');
 }
 
-export function AddressDetails({ description, values }: AddressDetailsProps) {
+export function AddressDetails({ description, values, isStale }: AddressDetailsProps) {
   return (
-    <div className="glass-panel grid gap-2 rounded-lg border border-border/70 p-3">
+    <div
+      className={cn(
+        'glass-panel grid gap-2 rounded-lg border p-3',
+        isStale ? 'border-amber-500/60' : 'border-border/70',
+      )}
+    >
       <p className="text-xs font-medium uppercase tracking-tight text-muted-foreground">
-        Dirección confirmada
+        {isStale ? 'Vista previa anterior' : 'Dirección confirmada'}
       </p>
       <p className="text-sm font-medium leading-snug">{description}</p>
       <dl className="grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
