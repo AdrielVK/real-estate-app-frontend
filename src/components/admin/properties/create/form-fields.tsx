@@ -71,10 +71,6 @@ const ERROR_CLASSES = 'text-sm leading-snug text-destructive';
 /** Optional hint copy — muted token. */
 const HINT_CLASSES = 'text-xs leading-relaxed text-muted-foreground';
 
-/** Slug/mono preview — utility face for derived system values. */
-export const SLUG_PREVIEW_CLASSES =
-  'inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2.5 py-1 font-mono text-xs text-muted-foreground';
-
 /* -------------------------------------------------------------------------- */
 /* Section chrome — the signature left-rule card                                */
 /* -------------------------------------------------------------------------- */

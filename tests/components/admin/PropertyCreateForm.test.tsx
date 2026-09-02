@@ -533,7 +533,7 @@ describe('CharacteristicsSection', () => {
     expect(document.querySelectorAll('[data-testid="characteristic-row"]')).toHaveLength(0);
   });
 
-  it('renders name, category and slug preview per row', () => {
+  it('renders name and category per row and hides the slug preview', () => {
     render(
       <CharacteristicsSection
         rows={[{ name: 'Pileta Grande', slug: 'pileta-grande', category: 'amenidad' }]}
@@ -548,12 +548,17 @@ describe('CharacteristicsSection', () => {
     const row = within(rows[0] as HTMLElement);
     expect(row.getByLabelText('Nombre')).toHaveValue('Pileta Grande');
     expect(row.getByLabelText('Categoría')).toHaveValue('amenidad');
-    // Live preview: the section renders whatever slug the parent state
-    // carries — derivation itself is pinned at the form level (3.3).
-    expect(row.getByText('Slug: pileta-grande')).toBeInTheDocument();
+    // Slug stays derived in the parent state — the payload test in 3.3
+    // proves derivation; the section no longer renders it (display-only).
+    expect(row.queryByText(/Slug:/)).toBeNull();
+    expect(screen.getByText('1 característica')).toBeInTheDocument();
+    // Compact single-line row: name flexes, category 160px, delete 44px.
+    expect(rows[0]!.className).toContain('grid-cols-[1fr_160px_44px]');
+    expect(rows[0]!.className).toContain('items-end');
+    expect(rows[0]!.className).toContain('p-3');
   });
 
-  it('previews a dash while the slug is still empty', () => {
+  it('renders no slug text while the slug is still empty', () => {
     render(
       <CharacteristicsSection
         rows={[{ name: '', slug: '', category: '' }]}
@@ -563,7 +568,7 @@ describe('CharacteristicsSection', () => {
       />,
     );
 
-    expect(screen.getByText('Slug: —')).toBeInTheDocument();
+    expect(screen.queryByText(/Slug:/)).toBeNull();
   });
 
   it('offers the 4 backend categories plus a placeholder option', () => {
@@ -642,9 +647,11 @@ describe('CharacteristicsSection', () => {
     const rows = Array.from(document.querySelectorAll('[data-testid="characteristic-row"]'));
     expect(rows).toHaveLength(2);
     expect(screen.getByText('2 características')).toBeInTheDocument();
-    fireEvent.click(
-      within(rows[1] as HTMLElement).getByRole('button', { name: 'Eliminar etiqueta' }),
-    );
+    const del = within(rows[1] as HTMLElement).getByRole('button', { name: 'Eliminar etiqueta' });
+    // Icon-only 44px target — accessible name kept per proposal criterion.
+    expect(del).toHaveTextContent('');
+    expect(del.className).toContain('size-11');
+    fireEvent.click(del);
     expect(onRemove).toHaveBeenCalledWith(1);
   });
 
@@ -936,7 +943,7 @@ describe('PropertyCreateForm', () => {
     expect(screen.getByRole('status')).toHaveTextContent('');
   });
 
-  it('derives the slug live when a characteristic name is typed', async () => {
+  it('keeps the derived slug out of the UI when a characteristic name is typed', async () => {
     const user = setupUser();
     render(<PropertyCreateForm canCreate />);
 
@@ -945,7 +952,9 @@ describe('PropertyCreateForm', () => {
     expect(row).toBeDefined();
     await user.type(within(row).getByLabelText('Nombre'), 'Pileta Grande');
 
-    expect(within(row).getByText('Slug: pileta-grande')).toBeInTheDocument();
+    // Display-only removal: the slug is still derived in state (the
+    // payload test below proves it reaches the DTO) but never rendered.
+    expect(within(row).queryByText(/Slug:/)).toBeNull();
   });
 
   it('sends the characteristic rows in the payload and drops removed rows', async () => {

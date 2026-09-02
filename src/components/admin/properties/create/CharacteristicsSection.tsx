@@ -6,13 +6,12 @@
  * add/remove/edit callbacks arrive as props; state, slug derivation
  * and validation live in `PropertyCreateForm`.
  *
- * Why the slug is a preview and not an editable control (design D6)?
+ * Why the slug is derived but never rendered (admin-property-tags-ux)?
  * - The slug is derived from the name via the pure `slugify()` mirror
- *   of the backend VO. An editable slug input would let the user
- *   diverge from the name for no benefit — the backend normalizes on
- *   its side anyway — and would add a third control per row to wire.
- *   The preview keeps the derived value visible ("live slug
- *   preview") while removing the drift path entirely.
+ *   of the backend VO. It stays required by the schema and present in
+ *   the submitted DTO; only the per-row preview was removed — it added
+ *   noise to a compact row and the value was never editable anyway
+ *   (no drift path to show).
  *
  * Why one group-level `error` prop instead of per-row errors?
  * - The client gate rejects duplicate `slug + category` pairs (spec
@@ -29,13 +28,7 @@ import { Plus, Tag, Trash2 } from 'lucide-react';
 
 import { CHARACTERISTIC_CATEGORIES } from '@/lib/validation/property-create.schema';
 
-import {
-  CONTROL_CLASSES,
-  Field,
-  FieldError,
-  SectionShell,
-  SLUG_PREVIEW_CLASSES,
-} from './form-fields';
+import { CONTROL_CLASSES, Field, FieldError, SectionShell } from './form-fields';
 
 /** One etiqueta row — all strings (the schema coerces/validates). */
 export interface CharacteristicRowValues {
@@ -105,7 +98,7 @@ export function CharacteristicsSection({
             <div
               key={index}
               data-testid="characteristic-row"
-              className="grid gap-4 rounded-xl border border-border bg-card/40 p-4 shadow-sm transition hover:shadow-md sm:grid-cols-2 motion-safe:animate-[fade-up_0.28s_var(--ease-out-strong)_both]"
+              className="grid grid-cols-[1fr_160px_44px] items-end gap-3 rounded-xl border border-border bg-card/40 p-3 motion-safe:animate-[fade-up_0.28s_var(--ease-out-strong)_both]"
               style={{ animationDelay: `${Math.min(index * 40, 160)}ms` } as React.CSSProperties}
             >
               <Field id={`characteristic-name-${index}`} label="Nombre" required>
@@ -115,34 +108,29 @@ export function CharacteristicsSection({
                   onChange={(event) => onChange(index, 'name', event.target.value)}
                 />
               </Field>
-              <div className="grid content-start gap-2">
-                <Field id={`characteristic-category-${index}`} label="Categoría" required>
-                  <select
-                    className={CONTROL_CLASSES}
-                    value={row.category}
-                    onChange={(event) => onChange(index, 'category', event.target.value)}
-                  >
-                    <option value="">Seleccionar…</option>
-                    {CHARACTERISTIC_CATEGORIES.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <p className={SLUG_PREVIEW_CLASSES}>Slug: {row.slug === '' ? '—' : row.slug}</p>
-              </div>
-              <div className="flex justify-end sm:col-span-2">
-                <button
-                  type="button"
-                  aria-label="Eliminar etiqueta"
-                  onClick={() => onRemove(index)}
-                  className="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 text-sm font-medium text-destructive transition hover:bg-destructive/10 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+              <Field id={`characteristic-category-${index}`} label="Categoría" required>
+                <select
+                  className={CONTROL_CLASSES}
+                  value={row.category}
+                  onChange={(event) => onChange(index, 'category', event.target.value)}
                 >
-                  <Trash2 aria-hidden="true" className="size-4" />
-                  Eliminar
-                </button>
-              </div>
+                  <option value="">Seleccionar…</option>
+                  {CHARACTERISTIC_CATEGORIES.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <button
+                type="button"
+                aria-label="Eliminar etiqueta"
+                title="Eliminar"
+                onClick={() => onRemove(index)}
+                className="inline-flex size-11 cursor-pointer items-center justify-center rounded-full text-destructive transition hover:bg-destructive/10 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+              >
+                <Trash2 aria-hidden="true" className="size-4" />
+              </button>
             </div>
           ))}
         </div>
