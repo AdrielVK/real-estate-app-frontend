@@ -8,9 +8,11 @@
  *   and hydrates the parent through 11 `onChange(FieldKey, string)`
  *   calls only. Rendering the real hook + MSW-backed routes proves the
  *   whole chain — a mocked hook would let drift hide in the wiring.
- * - The legacy grid contract (ids, Spanish labels, disclosure button
- *   copy, required marks) is asserted here too, because
- *   `PropertyCreateForm.test.tsx` queries those verbatim (AS-6/AS-7).
+ * - The legacy grid contract (ids, Spanish labels, required marks) is
+ *   asserted here too, because `PropertyCreateForm.test.tsx` queries
+ *   those verbatim (AS-6). property-address-clear-layout migrated the
+ *   disclosure block to always-visible assertions (AS-12) and added the
+ *   AS-13/AS-14 clear paths + the AS-15 grid contract.
  *
  * Fake-timer mechanics follow the Phase 2/3 precedent: `fireEvent`
  * (not userEvent) drives input so no userEvent timer fights
@@ -66,6 +68,24 @@ function hydrateMap(onChange: ReturnType<typeof vi.fn>): Map<string, string> {
     calls.set(key, value);
   }
   return calls;
+}
+
+/**
+ * Token-exact class check (AddressSearchInput.test.tsx precedent): the
+ * AS-15 spec pins the grid tokens themselves — jsdom cannot resolve
+ * `@media` layout, so the responsive contract is asserted as the class
+ * list, per the design Testing Strategy.
+ */
+function hasClassToken(el: HTMLElement, token: string): boolean {
+  return el.className.split(/\s+/).includes(token);
+}
+
+/** The row grid a Field's control sits in (Field wrapper's parent). */
+function rowGridOf(label: string): HTMLElement {
+  const control = screen.getByLabelText(label);
+  const row = control.parentElement?.parentElement;
+  if (!row) throw new Error(`row grid for "${label}" not found`);
+  return row;
 }
 
 function component(type: string, longText: string, shortText = longText): AddressComponent {
@@ -345,16 +365,22 @@ describe('AddressField', () => {
       }
     });
 
-    it('exposes exactly the five editable optional fields behind the 5-campo disclosure (AS-12)', () => {
+    it('renders all eight editable fields always visible, with no disclosure toggle (AS-12)', () => {
       renderField();
-      const button = screen.getByRole('button', {
-        name: /Mostrar detalles opcionales \(5 campos\)/,
-      });
-      expect(button).toHaveAttribute('aria-expanded', 'false');
 
-      fireEvent.click(button);
-      expect(button).toHaveAttribute('aria-expanded', 'true');
-      for (const label of ['Calle', 'Número', 'Barrio', 'Provincia', 'Código postal']) {
+      // property-address-clear-layout (AS-12): progressive disclosure is
+      // deleted — the toggle never exists, in any value/error state.
+      expect(screen.queryByRole('button', { name: /detalles opcionales/i })).toBeNull();
+      for (const label of [
+        'Dirección formateada',
+        'Ciudad',
+        'País',
+        'Calle',
+        'Número o altura de calle',
+        'Barrio',
+        'Provincia',
+        'Código postal',
+      ]) {
         expect(screen.getByLabelText(label)).toBeInTheDocument();
       }
       // AS-12/ACS-4: no user-editable control for the system trio —
@@ -381,36 +407,75 @@ describe('AddressField', () => {
       ).toBeInTheDocument();
     });
 
-    it('starts the disclosure open when an optional already has a value', () => {
-      renderField({ ...EMPTY_VALUES, addressStreet: 'Calle Falsa 123' });
-      expect(screen.getByRole('button', { name: /Ocultar detalles opcionales/ })).toHaveAttribute(
-        'aria-expanded',
-        'true',
-      );
-    });
-
-    // D6 heuristics split: the VALUE heuristic tracks only the 5 editable
-    // keys (lat/lng always hydrate on selection — counting them would
-    // force the disclosure open on every search), while the ERROR
-    // heuristic keeps all 8 keys so no server-mapped error loses the
-    // SectionShell "Revisar" signal or the auto-open.
-    it('keeps the disclosure closed when only system values are hydrated (D6)', () => {
-      renderField({
-        ...EMPTY_VALUES,
-        addressPlaceId: 'ChIJ-hydrated',
-        addressLatitude: '-34.6083',
-        addressLongitude: '-58.3928',
-      });
-      expect(
-        screen.getByRole('button', { name: /Mostrar detalles opcionales \(5 campos\)/ }),
-      ).toHaveAttribute('aria-expanded', 'false');
-    });
-
-    it('starts the disclosure open when a system key carries a server error (D6)', () => {
+    // AS-12 deletes the D6 heuristics: `hasError` is now the required
+    // trio alone. Optional-field errors surface through the always-
+    // visible Field error text; the form-level summary keeps the
+    // system-key anchors (PropertyCreateForm tests).
+    it('does not light the section error dot for an optional or system key error (AS-12)', () => {
       renderField(EMPTY_VALUES, { addressLatitude: 'Latitud fuera de rango' });
-      expect(screen.getByRole('button', { name: /Ocultar detalles opcionales/ })).toHaveAttribute(
-        'aria-expanded',
-        'true',
+      expect(screen.queryByText('Revisar')).toBeNull();
+
+      renderField(
+        { ...EMPTY_VALUES, addressStreet: 'Calle Falsa 123' },
+        {
+          addressPostalCode: 'CP inválido',
+        },
+      );
+      expect(screen.queryByText('Revisar')).toBeNull();
+    });
+
+    it('lights the section error dot when a required field carries an error', () => {
+      renderField(EMPTY_VALUES, { addressFormatted: 'La dirección formateada es obligatoria' });
+      expect(screen.getByText('Revisar')).toBeInTheDocument();
+    });
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* AS-15 — four-row responsive grid + label rename                      */
+  /* ------------------------------------------------------------------ */
+
+  describe('responsive grid (AS-15)', () => {
+    it('renames the numero label to "Número o altura de calle"', () => {
+      renderField();
+      expect(screen.getByLabelText('Número o altura de calle')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Número')).toBeNull();
+    });
+
+    it('rows país|provincia|ciudad in sm:grid-cols-3, calle|numero and barrio|cp in sm:grid-cols-2', () => {
+      renderField();
+
+      const row1 = rowGridOf('País');
+      expect(hasClassToken(row1, 'sm:grid-cols-3')).toBe(true);
+      expect(rowGridOf('Provincia')).toBe(row1);
+      expect(rowGridOf('Ciudad')).toBe(row1);
+
+      const row3 = rowGridOf('Calle');
+      expect(hasClassToken(row3, 'sm:grid-cols-2')).toBe(true);
+      expect(rowGridOf('Número o altura de calle')).toBe(row3);
+      expect(row3).not.toBe(row1);
+
+      const row4 = rowGridOf('Barrio');
+      expect(hasClassToken(row4, 'sm:grid-cols-2')).toBe(true);
+      expect(rowGridOf('Código postal')).toBe(row4);
+      expect(row4).not.toBe(row3);
+    });
+
+    it('keeps dirección formateada as its own full-width row between rows 1 and 3', () => {
+      renderField();
+      const formatted = screen.getByLabelText('Dirección formateada');
+      const formattedRow = formatted.parentElement?.parentElement as HTMLElement;
+      const row1 = rowGridOf('País');
+      const row3 = rowGridOf('Calle');
+
+      // Full width = NOT inside any multi-column row grid.
+      expect(hasClassToken(formattedRow, 'sm:grid-cols-3')).toBe(false);
+      expect(hasClassToken(formattedRow, 'sm:grid-cols-2')).toBe(false);
+      // DOM order: row1 → formatted → calle row.
+      expect(row1.compareDocumentPosition(formatted) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
+        0,
+      );
+      expect(formatted.compareDocumentPosition(row3) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
+        0,
       );
     });
   });
@@ -495,6 +560,160 @@ describe('AddressField', () => {
       await flush();
 
       expect(screen.queryByTestId('address-map')).toBeNull();
+    });
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* AS-13/AS-14 — debounced empty-input clear + immediate X clear       */
+  /* ------------------------------------------------------------------ */
+
+  describe('clear paths (AS-13/AS-14/ACS-1/AS-8)', () => {
+    const ALL_KEYS = Object.keys(EMPTY_VALUES) as (keyof AddressValues)[];
+    const CLEAR_LABEL = 'Limpiar búsqueda';
+
+    /**
+     * Hydrate through the real chain, then fold the 11 `onChange` calls
+     * back into the controlled values (what the real parent does — see
+     * the AS-4 map tests) so the confirmed section carries its hidden
+     * inputs and the map. Returns the spy with its history cleared, so
+     * each test asserts ONLY on post-condition calls.
+     */
+    async function hydrateAndApply() {
+      serveDetails(fullDetails());
+      const onChange = vi.fn();
+      const { rerender } = render(
+        <AddressField values={EMPTY_VALUES} errors={{}} onChange={onChange} />,
+      );
+
+      await selectFirstSuggestion();
+
+      const hydrated: AddressValues = { ...EMPTY_VALUES };
+      for (const [key, value] of onChange.mock.calls as [keyof AddressValues, string][]) {
+        hydrated[key] = value;
+      }
+      rerender(<AddressField values={hydrated} errors={{}} onChange={onChange} />);
+      await flush(); // dynamic map chunk resolves
+      expect(screen.getByTestId('address-map')).toBeInTheDocument();
+      onChange.mockClear();
+      return { onChange };
+    }
+
+    /** The 11-key reset contract: exactly 11 calls, every key `''`. */
+    function expectAllKeysCleared(onChange: ReturnType<typeof vi.fn>) {
+      expect(onChange).toHaveBeenCalledTimes(11);
+      const cleared = hydrateMap(onChange);
+      for (const key of ALL_KEYS) {
+        expect(cleared.get(key), key).toBe('');
+      }
+    }
+
+    it('emptied input clears hydration after 5 idle seconds, unmounting the section atomically (AS-13, ACS-1)', async () => {
+      const { onChange } = await hydrateAndApply();
+
+      fireEvent.change(screen.getByRole('combobox'), { target: { value: '' } });
+      await flush(5000);
+
+      expectAllKeysCleared(onChange);
+      // ACS-1: description, hidden system inputs and the map leave in
+      // the SAME tick — asserted together with no advance in between.
+      expect(screen.queryByText(/dirección confirmada/i)).toBeNull();
+      expect(document.getElementById('addressPlaceId')).toBeNull();
+      expect(screen.queryByTestId('address-map')).toBeNull();
+    });
+
+    it('retype at 4.9s cancels the clear and a new selection keeps hydration alive (AS-13)', async () => {
+      const { onChange } = await hydrateAndApply();
+
+      fireEvent.change(screen.getByRole('combobox'), { target: { value: '' } });
+      await flush(4900);
+      fireEvent.change(screen.getByRole('combobox'), { target: { value: 'ab' } });
+      await flush(5100);
+
+      expect(onChange).not.toHaveBeenCalled();
+      expect(screen.getByText(/dirección confirmada/i)).toBeInTheDocument();
+
+      // New selection path: complete a fresh search + commit, then idle
+      // past 5s — the effect cleanup (retype AND confirmedDescription
+      // change) must have cancelled the old timer.
+      await selectFirstSuggestion();
+      await flush(5000);
+
+      expect(screen.getByText(/dirección confirmada/i)).toBeInTheDocument();
+      // The last write per key is the SECOND hydration, not a clear.
+      expect(hydrateMap(onChange).get('addressStreet')).toBe('Av. Rivadavia');
+    });
+
+    it('partial deletion (1+ characters) never starts the clear timer (AS-13)', async () => {
+      const { onChange } = await hydrateAndApply();
+
+      fireEvent.change(screen.getByRole('combobox'), { target: { value: 'a' } });
+      await flush(5000);
+
+      expect(onChange).not.toHaveBeenCalled();
+      expect(screen.getByText(/dirección confirmada/i)).toBeInTheDocument();
+    });
+
+    it('X clears synchronously: 11 keys, input, listbox and section in one click — no timer left behind (AS-14)', async () => {
+      const { onChange } = await hydrateAndApply();
+
+      fireEvent.click(screen.getByRole('button', { name: CLEAR_LABEL }));
+
+      expectAllKeysCleared(onChange);
+      expect(screen.getByRole('combobox')).toHaveValue('');
+      expect(screen.queryByText(/dirección confirmada/i)).toBeNull();
+      expect(document.getElementById('addressPlaceId')).toBeNull();
+      expect(screen.queryByTestId('address-map')).toBeNull();
+
+      // The effect guard (confirmedDescription === null) means idling
+      // past 5s after an X clear never re-fires a clear.
+      onChange.mockClear();
+      await flush(5000);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('neither clear path rotates the session token (AS-8)', async () => {
+      // Deterministic tokens: the hook consumes `crypto.randomUUID` at
+      // mount and on every selection rotation. A clear that rotated
+      // would consume an extra value and shift the second search's
+      // token — both observable here.
+      const tokens = [
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+        '33333333-3333-4333-8333-333333333333',
+      ];
+      let issued = 0;
+      const randomUUID = vi
+        .spyOn(globalThis.crypto, 'randomUUID')
+        .mockImplementation(
+          () => tokens[issued++] as `${string}-${string}-${string}-${string}-${string}`,
+        );
+      const seen: string[] = [];
+      server.use(
+        http.get('*/api/geocoding/autocomplete', ({ request }) => {
+          seen.push(`a:${new URL(request.url).searchParams.get('sessionToken')}`);
+          return HttpResponse.json({
+            predictions: [{ placeId: 'ChIJ-hydrated', description: 'Av. Rivadavia 742' }],
+          });
+        }),
+        http.get('*/api/geocoding/details', ({ request }) => {
+          seen.push(`d:${new URL(request.url).searchParams.get('sessionToken')}`);
+          return HttpResponse.json(fullDetails());
+        }),
+      );
+      renderField();
+
+      await selectFirstSuggestion();
+      // Search + details share the mount token (GP-3), selection rotates once.
+      expect(seen).toEqual([`a:${tokens[0]}`, `d:${tokens[0]}`]);
+
+      fireEvent.click(screen.getByRole('button', { name: CLEAR_LABEL }));
+      expect(randomUUID).toHaveBeenCalledTimes(2); // mount + selection only
+
+      // The post-clear search bills under the post-SELECTION token —
+      // proof the X clear consumed nothing.
+      fireEvent.change(screen.getByRole('combobox'), { target: { value: 'xyz' } });
+      await flush(300);
+      expect(seen).toEqual([`a:${tokens[0]}`, `d:${tokens[0]}`, `a:${tokens[1]}`]);
     });
   });
 });

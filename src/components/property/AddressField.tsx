@@ -14,10 +14,10 @@
  *   contract ONLY — eleven calls, no bypass of the schema/buildPayload/
  *   buildDto pipeline (AS-7 hard constraint). The parent's functional
  *   setState makes the eleven calls compose into one render.
- * - Renders the required trio (formatted/city/country) plus the five
- *   EDITABLE optional fields behind the disclosure (street, number,
- *   neighborhood, state, postal code — AS-12, ids and Spanish labels
- *   kept) so every `PropertyCreateForm.test.tsx` query survives (AS-6).
+ * - Renders the three required fields plus the five EDITABLE optional
+ *   fields ALWAYS visible (AS-12 rewrite in property-address-clear-
+ *   layout: the disclosure is gone) — ids and Spanish labels kept, so
+ *   every `PropertyCreateForm.test.tsx` query survives (AS-6).
  *   The system trio (`addressPlaceId`/`addressLatitude`/
  *   `addressLongitude`) has NO editable control here: it rides as
  *   hidden inputs inside `AddressConfirmedSection` (ACS-4, AS-3).
@@ -33,17 +33,19 @@
  *   once the (controlled) required values are non-empty.
  * - Details failure (AS-9): calm inline message, nothing hydrated, the
  *   manual grid stays fully available.
+ * - Clear (property-address-clear-layout): AS-13 debounces a 5s
+ *   discard when the search box is emptied beside a live selection;
+ *   AS-14's X (rendered by the combobox, wired via `onClear`) discards
+ *   synchronously. Both run through `clearHydration` — the exact
+ *   inverse of the eleven-call hydration, token untouched (AS-8).
  *
  * `mapDetailsToAddressValues` is exported pure so the payload-proof
  * test (task 4.5) can run the REAL mapping through the schema — the
  * hydration chain cannot drift from what the proof asserts.
  */
-import { useCallback, useId, useState } from 'react';
-
-import { ChevronDown } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 
 import type { AddressComponent, PlaceDetailsResponse, Prediction } from '@/types/geocoding';
-import { cn } from '@/lib/utils';
 
 import {
   CONTROL_CLASSES,
@@ -117,6 +119,29 @@ const DETAILS_ERROR_MESSAGE =
 const MISSING_REQUIRED_MESSAGE =
   'No pudimos completar todos los campos obligatorios desde la búsqueda. Escribí los que faltan a mano.';
 
+/**
+ * AS-13 (property-address-clear-layout): the eleven controlled keys the
+ * clear paths reset — the exact inverse of the AS-3 hydration contract.
+ * Kept as a module constant so both clear paths (debounce and X) share
+ * one source of truth and can never drift from the eleven-key set.
+ */
+const ADDRESS_VALUE_KEYS: readonly (keyof AddressValues)[] = [
+  'addressFormatted',
+  'addressCity',
+  'addressCountry',
+  'addressPlaceId',
+  'addressStreet',
+  'addressStreetNumber',
+  'addressNeighborhood',
+  'addressState',
+  'addressPostalCode',
+  'addressLatitude',
+  'addressLongitude',
+];
+
+/** AS-13: idle window before an emptied search box discards the selection. */
+const EMPTY_INPUT_CLEAR_MS = 5000;
+
 export function AddressField({ values, errors, onChange }: AddressFieldProps) {
   // Frozen prediction description for the confirmed section (AS-5/D2):
   // only the description is snapshotted — the section reads the LIVE
@@ -162,37 +187,55 @@ export function AddressField({ values, errors, onChange }: AddressFieldProps) {
     },
   });
 
+  // AS-13/AS-14 (property-address-clear-layout): the inverse of the
+  // eleven-call hydration. One synchronous batch — React 18 auto-batches
+  // inside timers and event handlers, the parent's functional setState
+  // composes the calls into one render, and the null
+  // `confirmedDescription` gate unmounts the description, the hidden
+  // system inputs and the map in the SAME tick (ACS-1). The session
+  // token is deliberately untouched: rotation stays selection-only
+  // (AS-8).
+  const clearHydration = useCallback(() => {
+    for (const key of ADDRESS_VALUE_KEYS) {
+      onChange(key, '');
+    }
+    setConfirmedDescription(null);
+    setDetailsError(null);
+    setMissingRequired(false);
+  }, [onChange]);
+
+  // AS-13: an emptied search box beside a live selection starts the idle
+  // timer. The effect cleanup is the ONLY cancel mechanism — retype,
+  // new selection (confirmedDescription changes), unmount and the X
+  // clear all pass through it. Strict `=== ''` on purpose: the clear is
+  // keyed to the search box, never to manual field edits, and
+  // whitespace-only input keeps hydration alive.
+  useEffect(() => {
+    if (search.inputValue === '' && confirmedDescription !== null) {
+      const timer = setTimeout(clearHydration, EMPTY_INPUT_CLEAR_MS);
+      return () => clearTimeout(timer);
+    }
+  }, [search.inputValue, confirmedDescription, clearHydration]);
+
+  // AS-14: the X button clears synchronously — explicit intent is not
+  // accidental deletion, so it never waits for the debounce. Handler
+  // order matters: emptying the input and closing the listbox first,
+  // then the batch; the effect guard (`confirmedDescription === null`)
+  // keeps the emptied input from re-arming a timer after the clear.
+  const handleClear = useCallback(() => {
+    search.setInputValue('');
+    search.close();
+    clearHydration();
+  }, [search, clearHydration]);
+
+  // AS-12 (property-address-clear-layout): progressive disclosure is
+  // deleted — all eight editable fields are always visible, so the old
+  // `hasOptionalValue`/`hasOptionalError` auto-open heuristics are gone
+  // too. The section error dot tracks the required trio only; optional
+  // errors surface through each always-visible Field's own message.
   const hasRequiredError = Boolean(
     errors.addressFormatted ?? errors.addressCity ?? errors.addressCountry,
   );
-  // Progressive disclosure (D6 heuristics split):
-  // - VALUE heuristic → the 5 EDITABLE optional keys only. lat/lng
-  //   always hydrate on selection, so counting them (or placeId) would
-  //   force the disclosure open on every search — noise.
-  // - ERROR heuristic → all 8 optional keys, so a server-mapped error on
-  //   a system field never loses the SectionShell "Revisar" signal or
-  //   the auto-open (the hidden inputs keep the `#addressLatitude`-style
-  //   anchors alive for the error summary — design D3).
-  const hasOptionalError = Boolean(
-    errors.addressPlaceId ??
-    errors.addressStreet ??
-    errors.addressStreetNumber ??
-    errors.addressNeighborhood ??
-    errors.addressState ??
-    errors.addressPostalCode ??
-    errors.addressLatitude ??
-    errors.addressLongitude,
-  );
-  const hasOptionalValue = Boolean(
-    values.addressStreet ||
-    values.addressStreetNumber ||
-    values.addressNeighborhood ||
-    values.addressState ||
-    values.addressPostalCode,
-  );
-  const shouldStartOpen = hasOptionalError || hasOptionalValue;
-  const [open, setOpen] = useState(shouldStartOpen);
-  const disclosureId = useId();
 
   // The hint tracks the hydration outcome while the required values are
   // still blank — typing them manually retires the hint (controlled
@@ -206,7 +249,7 @@ export function AddressField({ values, errors, onChange }: AddressFieldProps) {
       eyebrow="02 · Dirección"
       title="Dirección"
       description="Ubicación principal y georreferenciación."
-      hasError={hasRequiredError || hasOptionalError}
+      hasError={hasRequiredError}
     >
       <div className="grid gap-4">
         <AddressSearchInput
@@ -214,6 +257,7 @@ export function AddressField({ values, errors, onChange }: AddressFieldProps) {
           label="Buscar dirección"
           placeholder="Calle, ciudad o lugar — desde 3 caracteres"
           search={search}
+          onClear={handleClear}
         />
         {confirmedDescription ? (
           <AddressConfirmedSection description={confirmedDescription} values={values} />
@@ -228,7 +272,37 @@ export function AddressField({ values, errors, onChange }: AddressFieldProps) {
         ) : null}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      {/*
+       * AS-15 (property-address-clear-layout): four-row responsive grid —
+       * sibling grids in one `gap-4` flow, every row 1-col below `sm`.
+       * Row 2 (formatted address) is a direct child, so it spans full
+       * width. The required trio keeps its marks wherever it sits.
+       */}
+      <div className="grid gap-4">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field id="addressCountry" label="País" error={errors.addressCountry} required>
+            <input
+              className={CONTROL_CLASSES}
+              value={values.addressCountry}
+              onChange={(event) => onChange('addressCountry', event.target.value)}
+            />
+          </Field>
+          <Field id="addressState" label="Provincia" error={errors.addressState}>
+            <input
+              className={CONTROL_CLASSES}
+              value={values.addressState}
+              onChange={(event) => onChange('addressState', event.target.value)}
+            />
+          </Field>
+          <Field id="addressCity" label="Ciudad" error={errors.addressCity} required>
+            <input
+              className={CONTROL_CLASSES}
+              value={values.addressCity}
+              onChange={(event) => onChange('addressCity', event.target.value)}
+            />
+          </Field>
+        </div>
+
         <Field
           id="addressFormatted"
           label="Dirección formateada"
@@ -241,48 +315,8 @@ export function AddressField({ values, errors, onChange }: AddressFieldProps) {
             onChange={(event) => onChange('addressFormatted', event.target.value)}
           />
         </Field>
-        <Field id="addressCity" label="Ciudad" error={errors.addressCity} required>
-          <input
-            className={CONTROL_CLASSES}
-            value={values.addressCity}
-            onChange={(event) => onChange('addressCity', event.target.value)}
-          />
-        </Field>
-        <Field id="addressCountry" label="País" error={errors.addressCountry} required>
-          <input
-            className={CONTROL_CLASSES}
-            value={values.addressCountry}
-            onChange={(event) => onChange('addressCountry', event.target.value)}
-          />
-        </Field>
-      </div>
 
-      <div className="grid gap-3">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={disclosureId}
-          onClick={() => setOpen((prev) => !prev)}
-          className="inline-flex min-h-[44px] w-fit cursor-pointer items-center gap-2 rounded-full border border-border bg-background/60 px-4 py-2 text-sm font-medium transition hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-        >
-          <ChevronDown
-            aria-hidden="true"
-            className={cn('size-4 transition-transform duration-200', open && 'rotate-180')}
-          />
-          {open ? 'Ocultar detalles opcionales' : 'Mostrar detalles opcionales (5 campos)'}
-          {hasOptionalError ? (
-            <span className="inline-flex size-2 rounded-full bg-destructive" aria-hidden="true" />
-          ) : null}
-        </button>
-
-        <div
-          id={disclosureId}
-          hidden={!open}
-          className={cn(
-            'grid gap-4 sm:grid-cols-2',
-            open && 'motion-safe:animate-[fade-up_0.28s_var(--ease-out-strong)_both]',
-          )}
-        >
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field id="addressStreet" label="Calle" error={errors.addressStreet}>
             <input
               className={CONTROL_CLASSES}
@@ -290,25 +324,25 @@ export function AddressField({ values, errors, onChange }: AddressFieldProps) {
               onChange={(event) => onChange('addressStreet', event.target.value)}
             />
           </Field>
-          <Field id="addressStreetNumber" label="Número" error={errors.addressStreetNumber}>
+          <Field
+            id="addressStreetNumber"
+            label="Número o altura de calle"
+            error={errors.addressStreetNumber}
+          >
             <input
               className={CONTROL_CLASSES}
               value={values.addressStreetNumber}
               onChange={(event) => onChange('addressStreetNumber', event.target.value)}
             />
           </Field>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field id="addressNeighborhood" label="Barrio" error={errors.addressNeighborhood}>
             <input
               className={CONTROL_CLASSES}
               value={values.addressNeighborhood}
               onChange={(event) => onChange('addressNeighborhood', event.target.value)}
-            />
-          </Field>
-          <Field id="addressState" label="Provincia" error={errors.addressState}>
-            <input
-              className={CONTROL_CLASSES}
-              value={values.addressState}
-              onChange={(event) => onChange('addressState', event.target.value)}
             />
           </Field>
           <Field id="addressPostalCode" label="Código postal" error={errors.addressPostalCode}>
