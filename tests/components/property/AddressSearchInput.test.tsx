@@ -65,20 +65,30 @@ function servePredictions(predictions: Prediction[]) {
 
 interface HarnessProps {
   onSelect(prediction: Prediction, sessionToken: string): void;
+  onClear?(): void;
 }
 
 /**
  * The Phase 4 arrangement, verbatim: parent owns the hook, combobox
- * receives `UseAddressSearchResult` as the `search` prop.
+ * receives `UseAddressSearchResult` as the `search` prop. `onClear`
+ * (AS-14) is the parent-supplied immediate-clear handler.
  */
-function Harness({ onSelect }: HarnessProps) {
+function Harness({ onSelect, onClear }: HarnessProps) {
   const search = useAddressSearch({ onSelect });
-  return <AddressSearchInput id={ID} label="Search address" search={search} />;
+  return <AddressSearchInput id={ID} label="Search address" search={search} onClear={onClear} />;
 }
 
 function renderHarness(onSelect = vi.fn()) {
   render(<Harness onSelect={onSelect} />);
   return onSelect;
+}
+
+/** Harness variant for the AS-14 X button: exposes the onClear spy. */
+function renderHarnessWithClear() {
+  const onSelect = vi.fn();
+  const onClear = vi.fn();
+  render(<Harness onSelect={onSelect} onClear={onClear} />);
+  return { onSelect, onClear };
 }
 
 function getCombobox(): HTMLInputElement {
@@ -445,6 +455,56 @@ describe('AddressSearchInput', () => {
       expect(getLiveRegion()).toHaveTextContent(/manual/i);
       expect(getCombobox().value).toBe('abc');
       expect(screen.queryByRole('listbox')).toBeNull();
+    });
+  });
+
+  // property-address-clear-layout — AS-14: the X button is the
+  // immediate-clear affordance. Visibility is keyed strictly to
+  // `inputValue !== ''` (no trim), the click delegates to the parent's
+  // `onClear` handler, and the input reserves `pr-8` only while the
+  // button is visible so text never runs under it.
+  describe('AS-14 X clear button', () => {
+    const CLEAR_LABEL = 'Limpiar búsqueda';
+
+    function getClearButton(): HTMLElement {
+      return screen.getByRole('button', { name: CLEAR_LABEL });
+    }
+
+    it('is hidden while the input is empty', () => {
+      renderHarnessWithClear();
+      expect(screen.queryByRole('button', { name: CLEAR_LABEL })).toBeNull();
+    });
+
+    it('appears as soon as the input has text (no search round-trip needed)', () => {
+      renderHarnessWithClear();
+
+      typeQuery('abc');
+
+      expect(getClearButton()).toBeInTheDocument();
+    });
+
+    it('clicking X delegates to onClear exactly once', () => {
+      const { onSelect, onClear } = renderHarnessWithClear();
+      typeQuery('abc');
+
+      fireEvent.click(getClearButton());
+
+      expect(onClear).toHaveBeenCalledTimes(1);
+      // Presentational contract: the button itself never selects.
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('reserves pr-8 on the input only while the button is visible', () => {
+      renderHarnessWithClear();
+      expect(hasClassToken(getCombobox(), 'pr-8')).toBe(false);
+
+      typeQuery('abc');
+      expect(hasClassToken(getCombobox(), 'pr-8')).toBe(true);
+
+      // Whitespace-only input still counts as non-empty (strict `!== ''`).
+      typeQuery(' ');
+      expect(hasClassToken(getCombobox(), 'pr-8')).toBe(true);
+      expect(screen.queryByRole('button', { name: CLEAR_LABEL })).not.toBeNull();
     });
   });
 });

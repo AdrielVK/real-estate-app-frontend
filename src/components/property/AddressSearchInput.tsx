@@ -48,6 +48,8 @@
  */
 import { type KeyboardEvent } from 'react';
 
+import { X } from 'lucide-react';
+
 import { cn } from '@/lib/utils';
 
 import { CONTROL_CLASSES } from '@/components/admin/properties/create/form-fields';
@@ -63,6 +65,14 @@ export interface AddressSearchInputProps {
   placeholder?: string;
   /** The parent-owned search state machine (design: AddressField owns the hook). */
   search: UseAddressSearchResult;
+  /**
+   * AS-14 immediate-clear handler (property-address-clear-layout):
+   * additive and optional so standalone combobox tests keep compiling.
+   * The parent owns the clear semantics (hydration reset, list close);
+   * this component only contributes the affordance and its visibility
+   * rule — visible while `inputValue !== ''` (strict, no trim).
+   */
+  onClear?: () => void;
 }
 
 /** Loading copy for the polite live region (AS-9 calm UX). */
@@ -79,7 +89,13 @@ function liveMessage(status: SearchStatus, message: string | null): string {
   return '';
 }
 
-export function AddressSearchInput({ id, label, placeholder, search }: AddressSearchInputProps) {
+export function AddressSearchInput({
+  id,
+  label,
+  placeholder,
+  search,
+  onClear,
+}: AddressSearchInputProps) {
   const {
     inputValue,
     setInputValue,
@@ -100,6 +116,10 @@ export function AddressSearchInput({ id, label, placeholder, search }: AddressSe
   // AS-2 edge: never pop an empty listbox — the hook reports OPEN even
   // when a successful search returned zero predictions.
   const expanded = isOpen && suggestions.length > 0;
+
+  // AS-14: the X affordance is keyed strictly to `inputValue !== ''`
+  // (no trim) — whitespace-only text is still content worth clearing.
+  const showClear = inputValue !== '';
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     // IME guard (OptionSelect precedent): Enter during composition
@@ -131,8 +151,26 @@ export function AddressSearchInput({ id, label, placeholder, search }: AddressSe
           onChange={(event) => setInputValue(event.target.value)}
           onKeyDown={handleKeyDown}
           onBlur={close}
-          className={CONTROL_CLASSES}
+          className={cn(CONTROL_CLASSES, showClear && 'pr-8')}
         />
+        {/*
+         * AS-14 immediate-clear affordance (property-address-clear-layout):
+         * absolute inside the relative wrapper so the combobox geometry
+         * never shifts; `type=button` keeps it out of the form submit
+         * path. The input's blur-triggered `close()` firing alongside
+         * the click is harmless — the listbox is already collapsed by
+         * the parent's clear (design: X handler order).
+         */}
+        {showClear ? (
+          <button
+            type="button"
+            aria-label="Limpiar búsqueda"
+            onClick={onClear}
+            className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        ) : null}
         {expanded ? (
           <ul
             id={listboxId}

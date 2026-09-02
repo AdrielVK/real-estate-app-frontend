@@ -108,6 +108,9 @@ describe('AddressConfirmedSection', () => {
       // placeId/lat/lng are NOT part of the read-only summary lines.
       expect(screen.queryByText('ChIJ-confirmed-1', { selector: 'dd' })).toBeNull();
       expect(screen.queryByText('-34.6083', { selector: 'dd' })).toBeNull();
+      // AS-15 dl parity: the summary label follows the Field rename.
+      expect(screen.getByText('Número o altura de calle:', { selector: 'dt' })).toBeInTheDocument();
+      expect(screen.queryByText('Número:', { selector: 'dt' })).toBeNull();
     });
 
     it('follows a manual edit of a controlled value immediately', () => {
@@ -191,15 +194,43 @@ describe('AddressConfirmedSection', () => {
       }
     });
 
-    it('states the editable scope as the 3 required + 5 optional fields, not "cualquier campo" (AS-12 copy)', () => {
+    it('states the editable scope with the exact footer copy (ACS-5)', () => {
       renderSection();
 
-      // The footer must stop promising manual editing of the system trio
-      // now that placeId/lat/lng are selection-owned (task 3.3).
-      expect(
-        screen.getByText(/editar los campos obligatorios y los 5 opcionales/i),
-      ).toBeInTheDocument();
+      // property-address-clear-layout pinned the string verbatim:
+      // accent-free `direccion`, no scope enumeration, no trailing text.
+      expect(screen.getByText('Puedes editar los campos de la direccion')).toBeInTheDocument();
+      // The old copy must be gone — it enumerated the disclosure scope
+      // (3 required + 5 optional) which no longer exists (AS-12).
       expect(screen.queryByText(/cualquier campo/i)).toBeNull();
+      expect(screen.queryByText(/5 opcionales/i)).toBeNull();
+    });
+  });
+
+  describe('ACS-1 — atomic unmount when the gate closes', () => {
+    /** The orchestrator's arrangement: the section renders ONLY while a
+     *  selection is confirmed; closing the gate is what AS-13/AS-14 do. */
+    function Gate({ confirmed }: { confirmed: string | null }) {
+      return confirmed ? <AddressConfirmedSection description={confirmed} values={VALUES} /> : null;
+    }
+
+    it('removes the description, hidden system inputs and map in the same render', async () => {
+      const { rerender } = render(<Gate confirmed={DESCRIPTION} />);
+
+      // Everything is mounted: map chunk resolved, hidden input present.
+      await screen.findByTestId('address-map');
+      expect(document.getElementById('addressPlaceId')).not.toBeNull();
+      expect(screen.getByText(DESCRIPTION)).toBeInTheDocument();
+
+      rerender(<Gate confirmed={null} />);
+
+      // ACS-1: one tick, all three gone — no half-cleared confirmed view.
+      expect(screen.queryByText(DESCRIPTION)).toBeNull();
+      expect(screen.queryByText(/dirección confirmada/i)).toBeNull();
+      expect(document.getElementById('addressPlaceId')).toBeNull();
+      expect(document.getElementById('addressLatitude')).toBeNull();
+      expect(document.getElementById('addressLongitude')).toBeNull();
+      expect(screen.queryByTestId('address-map')).toBeNull();
     });
   });
 });

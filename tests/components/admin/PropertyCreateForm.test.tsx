@@ -304,7 +304,15 @@ describe('AddressSection', () => {
   it('renders the five editable optional address fields without required (AS-12)', () => {
     render(<AddressSection values={ADDRESS_VALUES} errors={{}} onChange={noop} />);
 
-    const optionalLabels = ['Calle', 'Número', 'Barrio', 'Provincia', 'Código postal'];
+    // property-address-clear-layout (AS-12/AS-15): no disclosure — the
+    // optionals are always visible, and the numero label was renamed.
+    const optionalLabels = [
+      'Calle',
+      'Número o altura de calle',
+      'Barrio',
+      'Provincia',
+      'Código postal',
+    ];
     expect(optionalLabels).toHaveLength(5);
     for (const label of optionalLabels) {
       const control = screen.getByLabelText(label);

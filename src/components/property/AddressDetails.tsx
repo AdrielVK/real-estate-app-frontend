@@ -7,10 +7,11 @@
  *
  * Shown only AFTER an autocomplete selection (hidden pre-selection):
  * it reflects the LIVE controlled values it receives, so manual edits
- * in the disclosure grid update the summary immediately (ACS-2). The
- * footer states the editable scope honestly: the 3 required + 5
- * optional fields are manual-editable; placeId/lat/lng belong to the
- * selection (AS-12/ACS-4).
+ * in the field grid update the summary immediately (ACS-2). The
+ * footer is the short ACS-5 hint (property-address-clear-layout): the
+ * exact string `Puedes editar los campos de la direccion` — the
+ * disclosure it used to enumerate is gone and placeId/lat/lng belong
+ * to the selection (ACS-4).
  *
  * Why a `<dl>` of text instead of disabled inputs:
  * - the form's a11y contract counts every labeled control; read-only
@@ -34,7 +35,7 @@ function summaryLines(values: AddressValues): { label: string; value: string }[]
     { label: 'Ciudad', value: values.addressCity },
     { label: 'País', value: values.addressCountry },
     { label: 'Calle', value: values.addressStreet },
-    { label: 'Número', value: values.addressStreetNumber },
+    { label: 'Número o altura de calle', value: values.addressStreetNumber },
     { label: 'Barrio', value: values.addressNeighborhood },
     { label: 'Provincia', value: values.addressState },
     { label: 'Código postal', value: values.addressPostalCode },
@@ -58,8 +59,7 @@ export function AddressDetails({ description, values }: AddressDetailsProps) {
         ))}
       </dl>
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Podés editar los campos obligatorios y los 5 opcionales; la ubicación y el Place ID los fija
-        la selección.
+        Puedes editar los campos de la direccion
       </p>
     </div>
   );
