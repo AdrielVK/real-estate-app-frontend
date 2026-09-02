@@ -30,6 +30,7 @@ import { createPropertyAction } from '@/lib/properties/actions';
 import { MOCK_AGENTS } from '@/lib/properties/mock-profiles';
 import {
   AREA_NON_NEGATIVE,
+  CONSERVATION_STATES,
   PROPERTY_STATUSES,
   PROPERTY_TYPES,
 } from '@/lib/validation/property-create.schema';
@@ -49,8 +50,10 @@ import {
   OptionSelect,
 } from '@/components/admin/properties/create/form-fields';
 import {
+  buildConservationOptions,
   buildPropertyTypeOptions,
   buildStatusOptions,
+  CONSERVATION_STATE_LABEL,
   PROPERTY_STATUS_LABEL,
 } from '@/components/admin/properties/create/property-create.labels';
 
@@ -1373,6 +1376,23 @@ describe('property-create labels (REQ-005)', () => {
     expect(options).toHaveLength(PROPERTY_TYPES.length);
     expect(options.find((option) => option.value === 'galpon')?.label).toBe('Galpón');
     expect(options.find((option) => option.value === 'casa')?.label).toBe('Casa');
+  });
+
+  it('maps every conservation slug to a semantic Spanish label (physical-features-ux)', () => {
+    expect(CONSERVATION_STATE_LABEL).toEqual({
+      a_estrenar: 'A estrenar',
+      excelente: 'Excelente',
+      muy_bueno: 'Muy bueno',
+      bueno: 'Bueno',
+      regular: 'Regular',
+      a_refaccionar: 'A refaccionar',
+    });
+  });
+
+  it('builds conservation options in schema order keeping the slug as value', () => {
+    const options = buildConservationOptions();
+    expect(options.map((option) => option.value)).toEqual([...CONSERVATION_STATES]);
+    expect(options.find((option) => option.value === 'a_refaccionar')?.label).toBe('A refaccionar');
   });
 });
 
