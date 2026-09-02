@@ -13,7 +13,7 @@
  *   `buildPayload` reads state so the values ride regardless, and the
  *   ids keep the error-summary anchors `#addressPlaceId/
  *   #addressLatitude/#addressLongitude` alive;
- * - the Leaflet pin renders inside the block, gated by
+ * - the Mapbox GL pin renders inside the block, gated by
  *   `parseCoordinates` over the LIVE values (ACS-3) — the
  *   `dynamic(ssr:false)` const moved here from `AddressField` (AS-4
  *   boundary unchanged: the chunk is never requested without real
@@ -38,8 +38,8 @@ import { AddressDetails } from './AddressDetails';
 import type { AddressValues } from './AddressField';
 
 /**
- * AS-4 mount boundary (moved verbatim from `AddressField`): Leaflet is
- * client-only and heavy, so the map module loads through `next/dynamic`
+ * AS-4 mount boundary (moved verbatim from `AddressField`): the Mapbox
+ * GL module is client-only and heavy, so it loads through `next/dynamic`
  * with `ssr:false` — and only when the controlled lat/lng pass
  * `parseCoordinates` (the render below is gated, so the chunk is never
  * even requested without real coordinates).
