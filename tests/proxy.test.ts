@@ -198,7 +198,7 @@ describe('proxy', () => {
 
     const response = await proxy(request, {} as never);
 
-    expect(response.status).toBe(307);
+    expect(response.status).toBe(303);
     const target = new URL(response.headers.get('location')!);
     expect(target.origin).toBe(TEST_ORIGIN);
     expect(target.pathname).toBe('/');
@@ -212,7 +212,7 @@ describe('proxy', () => {
 
     const response = await proxy(request, {} as never);
 
-    expect(response.status).toBe(307);
+    expect(response.status).toBe(303);
     const target = new URL(response.headers.get('location')!);
     expect(target.pathname).toBe('/');
   });
@@ -228,7 +228,7 @@ describe('proxy', () => {
 
     const response = await proxy(request, {} as never);
 
-    expect(response.status).toBe(307);
+    expect(response.status).toBe(303);
     const target = new URL(response.headers.get('location')!);
     expect(target.pathname).toBe('/');
   });
@@ -240,7 +240,7 @@ describe('proxy', () => {
 
     const response = await proxy(request, {} as never);
 
-    expect(response.status).toBe(307);
+    expect(response.status).toBe(303);
     const location = response.headers.get('location');
     expect(location).not.toBeNull();
     // The redirect target is an absolute URL built from the request
@@ -258,7 +258,7 @@ describe('proxy', () => {
 
     const response = await proxy(request, {} as never);
 
-    expect(response.status).toBe(307);
+    expect(response.status).toBe(303);
     const target = new URL(response.headers.get('location')!);
     expect(target.searchParams.get('next')).toBe('/admin/properties/123/edit');
   });
@@ -268,7 +268,7 @@ describe('proxy', () => {
 
     const response = await proxy(request, {} as never);
 
-    expect(response.status).toBe(307);
+    expect(response.status).toBe(303);
     const location = response.headers.get('location');
     expect(location).not.toBeNull();
     const target = new URL(location!);
@@ -286,7 +286,7 @@ describe('proxy', () => {
     const request = buildRequest('/buscar');
 
     const response = await proxy(request, {} as never);
-    expect(response.status).toBe(307);
+    expect(response.status).toBe(303);
     expect(new URL(response.headers.get('location')!).pathname).toBe('/login');
   });
 });

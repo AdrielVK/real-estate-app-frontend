@@ -41,6 +41,7 @@
  */
 'use server';
 
+import { isRedirectError } from 'next/dist/client/components/redirect-error';
 import { redirect } from 'next/navigation';
 
 import type { CreatePropertyActionState, CreatePropertyInput, FieldKey } from '@/types/properties';
@@ -110,18 +111,18 @@ function buildDto(input: CreatePropertyInput): Record<string, unknown> {
   setIfDefined(dto, 'agentProfileId', input.agentProfileId);
 
   const address: Record<string, unknown> = {
-    formattedAddress: input.address.formattedAddress,
-    city: input.address.city,
-    country: input.address.country,
+    addressFormatted: input.address.formattedAddress,
+    addressCity: input.address.city,
+    addressCountry: input.address.country,
   };
-  setIfDefined(address, 'placeId', input.address.placeId);
-  setIfDefined(address, 'street', input.address.street);
-  setIfDefined(address, 'streetNumber', input.address.streetNumber);
-  setIfDefined(address, 'neighborhood', input.address.neighborhood);
-  setIfDefined(address, 'state', input.address.state);
-  setIfDefined(address, 'postalCode', input.address.postalCode);
-  setIfDefined(address, 'latitude', input.address.latitude);
-  setIfDefined(address, 'longitude', input.address.longitude);
+  setIfDefined(address, 'addressPlaceId', input.address.placeId);
+  setIfDefined(address, 'addressStreet', input.address.street);
+  setIfDefined(address, 'addressStreetNumber', input.address.streetNumber);
+  setIfDefined(address, 'addressNeighborhood', input.address.neighborhood);
+  setIfDefined(address, 'addressState', input.address.state);
+  setIfDefined(address, 'addressPostalCode', input.address.postalCode);
+  setIfDefined(address, 'addressLatitude', input.address.latitude);
+  setIfDefined(address, 'addressLongitude', input.address.longitude);
   dto.address = address;
 
   if (input.features !== undefined) {
@@ -197,11 +198,14 @@ async function postProperty(dto: Record<string, unknown>): Promise<PostResult> {
       method: 'POST',
       body: JSON.stringify(dto),
     });
-  } catch {
-    // `authFetch` redirects on terminal auth failure (its own
-    // `NEXT_REDIRECT` propagates). Any other throw is a
-    // network/server blip — collapse to a generic message; never
-    // leak the underlying reason to the form.
+  } catch (e) {
+    // `authFetch` calls `redirect('/login')` on terminal auth failure,
+    // which throws `NEXT_REDIRECT`. That throw MUST propagate — swallowing
+    // it collapses the redirect into a generic form error and no navigation
+    // occurs.
+    if (isRedirectError(e)) throw e;
+    // Any other throw is a network/server blip — collapse to a generic
+    // message; never leak the underlying reason to the form.
     return { kind: 'error', state: { fieldErrors: {}, formError: GENERIC_FORM_ERROR } };
   }
 

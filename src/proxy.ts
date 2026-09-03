@@ -119,6 +119,15 @@ export function proxy(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Next 16 proxy signature accepts an event for `waitUntil`; unused in this guard
   _event?: NextFetchEvent,
 ): NextResponse {
+  // Server Actions (POST with next-action header) must not be intercepted
+  // by the proxy's refresh redirect. They expect an RSC payload with the
+  // action result, but a 303 to /api/auth/refresh breaks the client with
+  // "unexpected response" (see page.tsx:65). Let them reach the Server
+  // Action where authFetch handles refresh/redirect correctly.
+  if (request.headers.has('next-action')) {
+    return NextResponse.next();
+  }
+
   const access = request.cookies.get(ACCESS_TOKEN_COOKIE);
   const refresh = request.cookies.get(REFRESH_TOKEN_COOKIE);
 
@@ -145,15 +154,15 @@ export function proxy(
     case 'refresh': {
       const refreshUrl = new URL(REFRESH_ROUTE, request.nextUrl.origin);
       refreshUrl.searchParams.set('next', outcome.next);
-      return NextResponse.redirect(refreshUrl, 307);
+      return NextResponse.redirect(refreshUrl, 303);
     }
     case 'denied':
       // Fail-closed: a token without a privileged role never reaches
       // the admin zone. Bounce to `/` (design D4 — `/login` would be
       // a confusing target for an authenticated user).
-      return NextResponse.redirect(new URL(DENIED_ROUTE, request.nextUrl.origin), 307);
+      return NextResponse.redirect(new URL(DENIED_ROUTE, request.nextUrl.origin), 303);
     case 'login':
-      return NextResponse.redirect(new URL(LOGIN_ROUTE, request.nextUrl.origin), 307);
+      return NextResponse.redirect(new URL(LOGIN_ROUTE, request.nextUrl.origin), 303);
   }
 }
 

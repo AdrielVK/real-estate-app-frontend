@@ -91,12 +91,12 @@ describe('createPropertyAction — success path', () => {
     // status defaults to 'disponible'.
     expect(body.status).toBe('disponible');
     const address = body.address as Record<string, unknown>;
-    expect(address.formattedAddress).toBe('Av. Siempre Viva 742');
-    expect(address.city).toBe('Springfield');
-    expect(address.country).toBe('AR');
+    expect(address.addressFormatted).toBe('Av. Siempre Viva 742');
+    expect(address.addressCity).toBe('Springfield');
+    expect(address.addressCountry).toBe('AR');
     // Optional address fields omitted when not provided.
-    expect(address.latitude).toBeUndefined();
-    expect(address.longitude).toBeUndefined();
+    expect(address.addressLatitude).toBeUndefined();
+    expect(address.addressLongitude).toBeUndefined();
 
     const features = body.features as Record<string, unknown>;
     // buildDto preserves numbers as numbers (no string coercion).
@@ -152,10 +152,10 @@ describe('createPropertyAction — success path', () => {
     expect(body.agentProfileId).toBe('22222222-2222-4222-8222-222222222222');
 
     const address = body.address as Record<string, unknown>;
-    expect(address.latitude).toBeCloseTo(-34.6, 10);
-    expect(address.longitude).toBeCloseTo(-58.4, 10);
-    expect(address.street).toBe('Av. Siempre Viva');
-    expect(address.streetNumber).toBe('742');
+    expect(address.addressLatitude).toBeCloseTo(-34.6, 10);
+    expect(address.addressLongitude).toBeCloseTo(-58.4, 10);
+    expect(address.addressStreet).toBe('Av. Siempre Viva');
+    expect(address.addressStreetNumber).toBe('742');
 
     const features = body.features as Record<string, unknown>;
     expect(features.rooms).toBe(3);
