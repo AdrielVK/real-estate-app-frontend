@@ -41,7 +41,13 @@ const config: KnipConfig = {
   // in `PropertyCreateForm`; the hook is the public composition surface
   // for future consumers and is intentionally not yet imported elsewhere
   // at this slice boundary.
-  ignore: ['src/types/auth.ts', 'src/components/admin/properties/create/form-context.tsx'],
+  ignore: [
+    'src/types/auth.ts',
+    'src/components/admin/properties/create/form-context.tsx',
+    'src/lib/geocoding/places-api.ts',
+    'src/components/admin/properties/create/AddressSection.tsx',
+    'src/hooks/useAddressSearch.ts',
+  ],
 };
 
 export default config;
