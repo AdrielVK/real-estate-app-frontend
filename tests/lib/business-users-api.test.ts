@@ -86,14 +86,14 @@ describe('buildBusinessUsersQuery', () => {
 /* -------------------------------------------------------------------------- */
 
 describe('fetchBusinessUsers', () => {
-  it('calls authFetch with GET /business-user and the built query', async () => {
+  it('calls authFetch with GET /profiles/business-users and the built query', async () => {
     authFetchMock.mockResolvedValue(jsonResponse({ success: true, data: [] }));
 
     await fetchBusinessUsers({ role: 'AGENT' });
 
     expect(authFetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = authFetchMock.mock.calls[0];
-    expect(url).toBe('/business-user?role=AGENT&page=1&limit=50');
+    expect(url).toBe('profiles/business-users?role=AGENT&page=1&limit=50');
     expect(init).toEqual({ method: 'GET' });
   });
 
@@ -102,7 +102,7 @@ describe('fetchBusinessUsers', () => {
 
     await fetchBusinessUsers({});
 
-    expect(authFetchMock.mock.calls[0][0]).toBe('/business-user?page=1&limit=50');
+    expect(authFetchMock.mock.calls[0][0]).toBe('profiles/business-users?page=1&limit=50');
   });
 
   // REQ-BUA-004: five known backend shapes must all parse.

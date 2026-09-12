@@ -33,9 +33,9 @@
  *   the gate + composition.
  * - admin-property-business-users (REQ-PROP-002): the business-user
  *   fetcher is mocked at the module boundary. The page must call it
- *   with `{role:'AGENT'}` and `{role:'CLIENT'}` server-side and
- *   thread the results into the form's `options` prop — proven on the
- *   RSC element tree (the DOM proof lives in the component suite).
+ *   with `{role:'AGENT'}` server-side and thread the result into the
+ *   form's `options` prop (owners is empty) — proven on the RSC
+ *   element tree (the DOM proof lives in the component suite).
  */
 import { cookies } from 'next/headers';
 
@@ -219,42 +219,34 @@ describe('AdminPropertiesCreatePage', () => {
     expect(screen.getByLabelText('Tipo de propiedad')).toBeInTheDocument();
   });
 
-  // REQ-PROP-002: the RSC is the fetch point — exactly one AGENT call and
-  // one CLIENT call per render, both server-side, before the island sees
-  // any options.
-  it('fetches agents (AGENT) and owners (CLIENT) server-side', async () => {
+  // REQ-PROP-002: the RSC is the fetch point — only AGENT role is
+  // fetched server-side (owners not fetched per product decision).
+  it('fetches only agents (AGENT) server-side', async () => {
     mockCookies.mockResolvedValue(makeCookieStore('fake-jwt'));
     mockResolveAdminUser.mockReturnValue(makeUser('ADMIN'));
 
     await AdminPropertiesCreatePage();
 
     expect(mockFetchBusinessUsers).toHaveBeenCalledWith({ role: 'AGENT' });
-    expect(mockFetchBusinessUsers).toHaveBeenCalledWith({ role: 'CLIENT' });
-    expect(mockFetchBusinessUsers).toHaveBeenCalledTimes(2);
+    expect(mockFetchBusinessUsers).toHaveBeenCalledTimes(1);
   });
 
-  // REQ-PROP-002 + design D5: the two role queries run in parallel and
-  // their results reach the island as plain-JSON props — the element
-  // tree is the proof of the threading (survives prop renames).
+  // REQ-PROP-002 + design D5: the AGENT query result reaches the island
+  // as plain-JSON props — owners is always empty (not fetched).
   it('threads the fetched options into the form as plain-JSON props', async () => {
     mockCookies.mockResolvedValue(makeCookieStore('fake-jwt'));
     mockResolveAdminUser.mockReturnValue(makeUser('ADMIN'));
     const agents: ProfileOption[] = [
       { id: '11111111-1111-4111-8111-111111111111', name: 'Mariano Díaz', type: 'agent' },
     ];
-    const owners: ProfileOption[] = [
-      { id: '22222222-2222-4222-8222-222222222222', name: 'Ana Pérez', type: 'owner' },
-    ];
-    mockFetchBusinessUsers.mockImplementation((dto) =>
-      Promise.resolve(dto?.role === 'AGENT' ? agents : owners),
-    );
+    mockFetchBusinessUsers.mockResolvedValue(agents);
 
     const element = await AdminPropertiesCreatePage();
     const formElement = findFormElement(element);
 
     expect(formElement).not.toBeNull();
     expect(formElement!.props.canCreate).toBe(true);
-    expect(formElement!.props.options).toEqual({ agents, owners });
+    expect(formElement!.props.options).toEqual({ agents, owners: [] });
   });
 
   // REQ-BUA-005 (RSC side): a terminal 401 inside the fetcher must bounce

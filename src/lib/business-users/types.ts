@@ -56,10 +56,13 @@ export interface ListBusinessUsersQueryDto {
  * A single business-user item BEFORE narrowing. Every field is `unknown`
  * until `mapBusinessUser` validates it — the tolerant-parse contract
  * (REQ-BUA-003/004): bad items are skipped, never thrown on.
+ * Backend may send `name` or `firstName`+`lastName` (profiles module).
  */
 export interface BusinessUserRaw {
   id?: unknown;
   name?: unknown;
+  firstName?: unknown;
+  lastName?: unknown;
   role?: unknown;
 }
 

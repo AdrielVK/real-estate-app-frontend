@@ -100,18 +100,27 @@ function parseBusinessUsersEnvelope(body: unknown): unknown[] | null {
 /**
  * Narrow one raw item to a `ProfileOption` (REQ-BUA-003). Tolerant by
  * contract: a non-object item, or a missing/empty/non-string `id` or
- * `name`, is skipped (`null`) — never thrown on. `role==='AGENT'` maps to
- * the `agent` combobox; every other role (including unknown ones) maps to
- * `owner`.
+ * derived name, is skipped (`null`) — never thrown on. `role==='AGENT'`
+ * maps to the `agent` combobox; every other role (including unknown ones)
+ * maps to `owner`. Backend may send `name` or `firstName`+`lastName`.
  */
 function mapBusinessUser(item: unknown): ProfileOption | null {
   if (!item || typeof item !== 'object') return null;
   const raw: BusinessUserRaw = item as BusinessUserRaw;
   if (typeof raw.id !== 'string' || raw.id === '') return null;
-  if (typeof raw.name !== 'string' || raw.name === '') return null;
+  let name: string | null = null;
+  if (typeof raw.name === 'string' && raw.name.trim() !== '') {
+    name = raw.name.trim();
+  } else if (typeof raw.firstName === 'string' && typeof raw.lastName === 'string') {
+    const combined = `${raw.firstName} ${raw.lastName}`.trim();
+    if (combined !== '') name = combined;
+  } else if (typeof raw.firstName === 'string' && raw.firstName.trim() !== '') {
+    name = raw.firstName.trim();
+  }
+  if (!name) return null;
   return {
     id: raw.id,
-    name: raw.name,
+    name,
     type: raw.role === 'AGENT' ? 'agent' : 'owner',
   };
 }

@@ -29,11 +29,11 @@
  *   `Container py-8` treatment as the rest of the zone.
  *
  * RSC lift (admin-property-business-users, design D5):
- * - The agent/owner selector options are fetched HERE, server-side, via
+ * - The AGENT selector options are fetched HERE, server-side, via
  *   `fetchBusinessUsers` (`authFetch` is server-only by contract) and
- *   threaded into the island as plain-JSON props. The two role queries
- *   are independent, so they run in parallel; both fail-open to `[]`,
- *   so a backend outage degrades to empty selectors, never a crash.
+ *   threaded into the island as plain-JSON props. Single role query
+ *   fail-opens to `[]`, so a backend outage degrades to empty selector,
+ *   never a crash. Owner is not fetched (product: only AGENT).
  *   The only pre-existing exception: a terminal 401 re-throws
  *   `NEXT_REDIRECT` from inside the fetcher and bounces to `/login`
  *   (REQ-BUA-005) — the redirect is NOT masked as an empty list.
@@ -59,12 +59,11 @@ export default async function AdminPropertiesCreatePage() {
   // that cannot honor it.
   if (!canCreate) redirect('/admin/properties');
 
-  // Design D5: independent role queries, parallel; each fail-opens to
-  // `[]` (selectors render empty) while NEXT_REDIRECT propagates.
-  const [agents, owners] = await Promise.all([
-    fetchBusinessUsers({ role: 'AGENT' }),
-    fetchBusinessUsers({ role: 'CLIENT' }),
-  ]);
+  // Design D5: only AGENT role is selectable (owner field is informational
+  // and not backed by business-users per product decision). Single query
+  // fail-opens to `[]` while NEXT_REDIRECT propagates.
+  const agents = await fetchBusinessUsers({ role: 'AGENT' });
+  const owners: typeof agents = [];
 
   return (
     <Container className="space-y-6 py-8">
