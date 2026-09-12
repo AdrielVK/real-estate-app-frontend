@@ -30,7 +30,7 @@ export interface ProfileOption {
 }
 
 /**
- * The full set of roles `GET /business-user` may filter or return:
+ * The full set of roles `GET /profiles/business-users` may filter or return:
  * the four auth-boundary roles plus the backend-only `VISITOR` (REQ-BUA-002).
  * Derived from `USER_ROLES` so the shared prefix cannot drift silently.
  */
@@ -45,7 +45,7 @@ export const BUSINESS_USER_ROLES = [...USER_ROLES, 'VISITOR'] as const;
 // Intentionally shadows the narrower auth `UserRole`; see the module header.
 export type UserRole = (typeof BUSINESS_USER_ROLES)[number];
 
-/** Query DTO for `GET /business-user` (backend `ListBusinessUsersQueryDto`). */
+/** Query DTO for `GET /profiles/business-users` (backend `ListBusinessUsersQueryDto`). */
 export interface ListBusinessUsersQueryDto {
   role?: UserRole;
   page?: number;

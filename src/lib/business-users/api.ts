@@ -1,5 +1,5 @@
 /**
- * Server-only data access for `GET /business-user`
+ * Server-only data access for `GET /profiles/business-users`
  * (`change: admin-property-business-users`, design D3/D4).
  *
  * Why a dedicated domain module (not a `properties/` subfolder)?
@@ -117,20 +117,22 @@ function mapBusinessUser(item: unknown): ProfileOption | null {
 }
 
 /**
- * Fetch selectable agent/owner profiles from `GET /business-user`.
+ * Fetch selectable agent/owner profiles from `GET /profiles/business-users`.
  * Fail-open: any non-redirect failure resolves to `[]` (REQ-BUA-001);
  * `NEXT_REDIRECT` propagates untouched (REQ-BUA-005).
  */
 export async function fetchBusinessUsers(
   dto: ListBusinessUsersQueryDto = {},
 ): Promise<ProfileOption[]> {
-  const url = `/business-user${buildBusinessUsersQuery(dto)}`;
+  const url = `profiles/business-users${buildBusinessUsersQuery(dto)}`;
 
   try {
     const res = await authFetch(url, { method: 'GET' });
     if (!res.ok) {
       if (process.env.NODE_ENV !== 'test') {
-        console.error(`[business-users] /business-user returned ${res.status} ${res.statusText}`);
+        console.error(
+          `[business-users] /profiles/business-users returned ${res.status} ${res.statusText}`,
+        );
       }
       return [];
     }
@@ -138,7 +140,7 @@ export async function fetchBusinessUsers(
     const items = parseBusinessUsersEnvelope(body);
     if (!items) {
       if (process.env.NODE_ENV !== 'test') {
-        console.error('[business-users] /business-user envelope parse failed', body);
+        console.error('[business-users] /profiles/business-users envelope parse failed', body);
       }
       return [];
     }
@@ -148,7 +150,7 @@ export async function fetchBusinessUsers(
     // see it (actions.ts precedent: guard with isRedirectError, then re-throw).
     if (isRedirectError(error)) throw error;
     if (process.env.NODE_ENV !== 'test') {
-      console.error('[business-users] /business-user fetch failed:', error);
+      console.error('[business-users] /profiles/business-users fetch failed:', error);
     }
     return [];
   }
