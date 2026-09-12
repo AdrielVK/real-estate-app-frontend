@@ -47,6 +47,15 @@ const config: KnipConfig = {
     'src/lib/geocoding/places-api.ts',
     'src/components/admin/properties/create/AddressSection.tsx',
     'src/hooks/useAddressSearch.ts',
+    // create-business-users-modal: the GET-list surface
+    // (`business-users/api.ts` + the `ListBusinessUsersQueryDto` /
+    // `BusinessUserRaw` / `ProfileType` anchors in `types.ts`) was
+    // carried onto this branch as the task-1.1 prerequisite and is
+    // consumed by the parent backend-integration change — this slice
+    // only extends `types.ts` with the create DTOs. Remove these two
+    // entries once the parent lands and imports the GET surface here.
+    'src/lib/business-users/api.ts',
+    'src/lib/business-users/types.ts',
   ],
 };
 

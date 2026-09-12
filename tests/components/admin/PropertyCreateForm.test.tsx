@@ -900,7 +900,11 @@ describe('PropertyCreateForm', () => {
     // With the toggle off the feature inputs are not rendered, and the
     // characteristics section has zero rows — no orphan controls either
     // way.
-    expect(controls).toHaveLength(15);
+    // create-business-users-modal: only the AGENT combobox mounts
+    // the 5-field form (email, firstName, lastName, password, role);
+    // the ADMINISTRATIVE ("Crear propietario") combobox renders a
+    // title-only stub (no form controls) — so 15 + 5 = 20.
+    expect(controls).toHaveLength(20);
     for (const control of controls) {
       const labeled = control as HTMLInputElement;
       expect(labeled.id).not.toBe('');
