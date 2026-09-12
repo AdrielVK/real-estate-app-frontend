@@ -286,6 +286,43 @@
   }
 }
 
+/*
+ * Toast glass surface (change `admin-property-create-snackbar`, design D4
+ * fallback). The `glass-panel!` important suffix emits `.glass-panel\!` —
+ * a DIFFERENT class token, so the `.dark .glass-panel` and
+ * `prefers-reduced-transparency` overrides above never match a toast and
+ * the variants would silently drop (verified against the generated CSS).
+ * Sonner's `[data-rich-colors]` chrome is beaten instead with this
+ * token-only `!important` block (no hex — same vars as the utility):
+ * toasts keep FULL glass-panel fidelity across light/dark/
+ * reduced-transparency while carrying the plain `glass-panel` hook class.
+ */
+li[data-sonner-toast].glass-panel {
+  background: color-mix(in oklch, var(--card) 72%, transparent) !important;
+  backdrop-filter: blur(20px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(150%) !important;
+  border-color: var(--border) !important;
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 55%, transparent),
+    0 1px 2px color-mix(in oklch, var(--primary) 8%, transparent),
+    0 18px 44px -22px color-mix(in oklch, var(--primary) 34%, transparent) !important;
+}
+
+.dark li[data-sonner-toast].glass-panel {
+  background: color-mix(in oklch, var(--card) 66%, transparent) !important;
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 10%, transparent),
+    0 18px 44px -20px oklch(0 0 0 / 0.55) !important;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  li[data-sonner-toast].glass-panel {
+    background: var(--card) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
 @utility glow-primary {
   box-shadow: 0 20px 50px -26px color-mix(in oklch, var(--primary) 55%, transparent);
 }

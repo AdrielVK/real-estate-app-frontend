@@ -18,13 +18,16 @@
  *  3. `authFetch` posts the DTO with the bearer from the httpOnly
  *     cookie (handles 401 refresh + terminal redirect internally).
  *  4. The response is mapped back to form state:
- *      - 201/200 → `redirect('/admin/properties?created=1')`.
- *        The `NEXT_REDIRECT` throw MUST propagate.
+ *      - 201/200 → `{ success: true }`. The client form reacts to the
+ *        flag with a toast + a clean `router.push` (change
+ *        `admin-property-create-snackbar`); the action itself never
+ *        navigates.
  *      - 400 `VALIDATION_ERROR` → field errors via path map.
  *      - 409 `CONFLICT` → `internalCode` field error.
  *      - 404 `NOT_FOUND` → owner/agent profile field (via the
  *        backend's `details.target`).
  *      - Anything else → generic form-level error.
+ *     Every failure return carries `success: false`.
  *
  * Why re-validate on the server when the client already did?
  * - The client gate is a UX optimization. A direct submission that
@@ -42,13 +45,11 @@
 'use server';
 
 import { isRedirectError } from 'next/dist/client/components/redirect-error';
-import { redirect } from 'next/navigation';
 
 import type { CreatePropertyActionState, CreatePropertyInput, FieldKey } from '@/types/properties';
 import { authFetch } from '@/lib/auth/api';
 import { propertyCreateSchema } from '@/lib/validation/property-create.schema';
 
-const CREATED_REDIRECT = '/admin/properties?created=1';
 const GENERIC_FORM_ERROR = 'No se pudo crear la propiedad. Intentá de nuevo.';
 
 /**
@@ -164,9 +165,11 @@ function setIfDefined<K extends string>(
 /**
  * Server action entry point. Consumes the previous `useActionState`
  * state (unused) and a validated `CreatePropertyInput` from the
- * client. Returns the next state; on success it never returns
- * because `redirect` throws `NEXT_REDIRECT` and the throw must
- * propagate to the framework.
+ * client. Returns the next state: `success: true` ONLY on 201/200,
+ * `success: false` on every failure. The action never navigates —
+ * the retired `redirect(CREATED_REDIRECT)` throw was replaced by
+ * this actionable state contract (design D6); the client form owns
+ * the post-success navigation.
  */
 export async function createPropertyAction(
   _prev: CreatePropertyActionState,
@@ -180,12 +183,15 @@ export async function createPropertyAction(
     return {
       fieldErrors: mapIssuesToFieldErrors(parsed.error.issues),
       formError: null,
+      success: false,
     };
   }
 
   const dto = buildDto(parsed.data);
   const res = await postProperty(dto);
-  if (res.kind === 'success') redirect(CREATED_REDIRECT);
+  if (res.kind === 'success') {
+    return { fieldErrors: {}, formError: null, success: true };
+  }
   return res.state;
 }
 
@@ -206,7 +212,10 @@ async function postProperty(dto: Record<string, unknown>): Promise<PostResult> {
     if (isRedirectError(e)) throw e;
     // Any other throw is a network/server blip — collapse to a generic
     // message; never leak the underlying reason to the form.
-    return { kind: 'error', state: { fieldErrors: {}, formError: GENERIC_FORM_ERROR } };
+    return {
+      kind: 'error',
+      state: { fieldErrors: {}, formError: GENERIC_FORM_ERROR, success: false },
+    };
   }
 
   // 201 is the create contract; 200 is tolerated for back-compat
@@ -223,11 +232,11 @@ async function mapErrorResponse(res: Response): Promise<CreatePropertyActionStat
   try {
     body = await res.json();
   } catch {
-    return { fieldErrors: {}, formError: GENERIC_FORM_ERROR };
+    return { fieldErrors: {}, formError: GENERIC_FORM_ERROR, success: false };
   }
 
   if (body === null || typeof body !== 'object') {
-    return { fieldErrors: {}, formError: GENERIC_FORM_ERROR };
+    return { fieldErrors: {}, formError: GENERIC_FORM_ERROR, success: false };
   }
 
   const envelope = body as {
@@ -236,7 +245,7 @@ async function mapErrorResponse(res: Response): Promise<CreatePropertyActionStat
   };
   const error = envelope.error;
   if (!error || typeof error !== 'object') {
-    return { fieldErrors: {}, formError: GENERIC_FORM_ERROR };
+    return { fieldErrors: {}, formError: GENERIC_FORM_ERROR, success: false };
   }
 
   return mapErrorEnvelope(error);
@@ -253,6 +262,7 @@ function mapErrorEnvelope(error: {
     return {
       fieldErrors: mapDetailsToFieldErrors(details),
       formError: null,
+      success: false,
     };
   }
 
@@ -262,14 +272,19 @@ function mapErrorEnvelope(error: {
     return {
       fieldErrors: { internalCode: message ?? 'El código interno ya está en uso' },
       formError: null,
+      success: false,
     };
   }
 
   if (code === 'NOT_FOUND') {
-    return { fieldErrors: mapNotFoundToFields(details, message), formError: null };
+    return {
+      fieldErrors: mapNotFoundToFields(details, message),
+      formError: null,
+      success: false,
+    };
   }
 
-  return { fieldErrors: {}, formError: GENERIC_FORM_ERROR };
+  return { fieldErrors: {}, formError: GENERIC_FORM_ERROR, success: false };
 }
 
 /**

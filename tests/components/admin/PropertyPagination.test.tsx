@@ -26,8 +26,8 @@
  *   `pagination-current`, `pagination-page-N`) so the assertions
  *   are structural, not coupled to Tailwind classes.
  */
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import { PropertyPagination } from '@/components/admin/properties/PropertyPagination';
 
@@ -171,5 +171,81 @@ describe('PropertyPagination', () => {
   it('marks the navigation with an accessible name', () => {
     render(<PropertyPagination currentPage={2} totalPages={5} />);
     expect(screen.getByRole('navigation', { name: /paginación/i })).toBeInTheDocument();
+  });
+
+  /* ---------------------------------------------------------------------- */
+  /* Client-driven mode (change admin-properties-frontend-search, task 4.1)  */
+  /* ---------------------------------------------------------------------- */
+
+  // Spec delta `paginated-listing` "Client buttons": when `onPageChange`
+  // is provided the control renders <button>s — no <Link>/<a> and no
+  // `?page=` hrefs anywhere (the URL contract is retired on this page).
+  describe('with onPageChange (client mode)', () => {
+    it('renders non-current pages as buttons and keeps no anchors', () => {
+      render(<PropertyPagination currentPage={2} totalPages={5} onPageChange={vi.fn()} />);
+      const page4 = screen.getByTestId('pagination-page-4');
+      expect(page4.tagName).toBe('BUTTON');
+      expect(page4).toHaveAttribute('aria-label', 'Ir a la página 4');
+      // The retired URL contract: zero anchors in the whole control.
+      expect(document.querySelectorAll('a')).toHaveLength(0);
+    });
+
+    it('keeps the current page as the aria-current span', () => {
+      render(<PropertyPagination currentPage={2} totalPages={5} onPageChange={vi.fn()} />);
+      const current = screen.getByTestId('pagination-current');
+      expect(current.tagName).toBe('SPAN');
+      expect(current).toHaveAttribute('aria-current', 'page');
+      expect(current).toHaveTextContent('2');
+    });
+
+    it('calls onPageChange when a page button is clicked', () => {
+      const onPageChange = vi.fn();
+      render(<PropertyPagination currentPage={2} totalPages={5} onPageChange={onPageChange} />);
+      fireEvent.click(screen.getByTestId('pagination-page-4'));
+      expect(onPageChange).toHaveBeenCalledTimes(1);
+      expect(onPageChange).toHaveBeenCalledWith(4);
+    });
+
+    it('drives previous / next through onPageChange(current ± 1)', () => {
+      const onPageChange = vi.fn();
+      render(<PropertyPagination currentPage={3} totalPages={5} onPageChange={onPageChange} />);
+      const prev = screen.getByTestId('pagination-prev');
+      const next = screen.getByTestId('pagination-next');
+      expect(prev.tagName).toBe('BUTTON');
+      expect(next.tagName).toBe('BUTTON');
+      fireEvent.click(prev);
+      fireEvent.click(next);
+      expect(onPageChange).toHaveBeenNthCalledWith(1, 2);
+      expect(onPageChange).toHaveBeenNthCalledWith(2, 4);
+    });
+
+    it('keeps the aria-disabled span placeholders at the bounds', () => {
+      render(<PropertyPagination currentPage={1} totalPages={5} onPageChange={vi.fn()} />);
+      const prev = screen.getByTestId('pagination-prev');
+      expect(prev.tagName).toBe('SPAN');
+      expect(prev).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getByTestId('pagination-next').tagName).toBe('BUTTON');
+    });
+
+    it('preserves the computePageWindow shape (1 … current±2 … N)', () => {
+      render(<PropertyPagination currentPage={5} totalPages={10} onPageChange={vi.fn()} />);
+      const items = document.querySelectorAll('ol li');
+      // Same window the link mode produces: [1, gap, 3, 4, 5, 6, 7, gap, 10].
+      expect(items).toHaveLength(9);
+      expect(screen.getByTestId('pagination-page-1')).toBeInTheDocument();
+      expect(screen.getByTestId('pagination-page-10')).toBeInTheDocument();
+    });
+
+    it('still renders nothing when totalPages <= 1', () => {
+      const { container } = render(
+        <PropertyPagination currentPage={1} totalPages={1} onPageChange={vi.fn()} />,
+      );
+      expect(container.firstChild).toBeNull();
+    });
+
+    it('keeps the navigation accessible name', () => {
+      render(<PropertyPagination currentPage={2} totalPages={5} onPageChange={vi.fn()} />);
+      expect(screen.getByRole('navigation', { name: /paginación/i })).toBeInTheDocument();
+    });
   });
 });

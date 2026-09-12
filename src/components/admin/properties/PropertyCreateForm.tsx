@@ -39,11 +39,14 @@ import {
   useState,
 } from 'react';
 
+import { useRouter } from 'next/navigation';
+
 import { AlertCircle, Check } from 'lucide-react';
+import { toast } from 'sonner';
 
 import type { CreatePropertyActionState, FieldKey } from '@/types/properties';
+import type { ProfileOption } from '@/lib/business-users/types';
 import { createPropertyAction } from '@/lib/properties/actions';
-import { fetchProfiles, type ProfileOption } from '@/lib/properties/profiles';
 import { cn } from '@/lib/utils';
 import { featuresSchema, propertyCreateSchema } from '@/lib/validation/property-create.schema';
 import { slugify } from '@/lib/validation/slug';
@@ -144,7 +147,11 @@ function validateFeatureField(key: string, value: string): string | undefined {
   return parsed.success ? undefined : parsed.error.issues[0]?.message;
 }
 
-const INITIAL_STATE: CreatePropertyActionState = { fieldErrors: {}, formError: null };
+const INITIAL_STATE: CreatePropertyActionState = {
+  fieldErrors: {},
+  formError: null,
+  success: false,
+};
 
 /** Summary copy shown in the aria-live region while fields are invalid. */
 const SUMMARY_ERROR = 'Revisá los campos marcados.';
@@ -277,9 +284,24 @@ function mapIssuesToFieldErrors(
 
 export interface PropertyCreateFormProps {
   canCreate: boolean;
+  /**
+   * Agent/owner selector options, provisioned server-side by the create
+   * RSC (`fetchBusinessUsers`, design D6/REQ-PROP-002). Plain-JSON props
+   * are the only sanctioned path: `authFetch` is server-only, so the
+   * island MUST NOT fetch profiles itself. Empty/omitted → empty
+   * comboboxes (fail-open); the fields stay optional and submittable.
+   */
+  options?: {
+    agents: ProfileOption[];
+    owners: ProfileOption[];
+  };
 }
 
-export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
+export function PropertyCreateForm({
+  canCreate,
+  options = { agents: [], owners: [] },
+}: PropertyCreateFormProps) {
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState(createPropertyAction, INITIAL_STATE);
   const [values, setValues] = useState<FormValues>(INITIAL_VALUES);
   const [clientErrors, setClientErrors] = useState<Partial<Record<FieldKey, string>>>({});
@@ -288,27 +310,7 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
   // DCS-1/DCS-4 lift: the address section reports core-vs-snapshot drift;
   // the submit gate below never lets stale lat/lng reach the action.
   const [addressDirty, setAddressDirty] = useState(false);
-  const [profileOptions, setProfileOptions] = useState<{
-    agent: ProfileOption[];
-    owner: ProfileOption[];
-  }>({ agent: [], owner: [] });
   const errorSummaryRef = useRef<HTMLDivElement>(null);
-
-  // Design D5: the shell owns the profile fetch (sections stay
-  // declarative). `fetchProfiles` is mock-backed today (REQ-101/S6) and
-  // the async contract is the future backend swap point — no call-site
-  // change when it lands. The cancelled flag guards against a late
-  // resolve after unmount.
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.all([fetchProfiles('agent'), fetchProfiles('owner')]).then(([agent, owner]) => {
-      if (cancelled) return;
-      setProfileOptions({ agent, owner });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Debounced per-field re-validation (physical-features-ux D1): only
   // the changed feature key is re-parsed ~350ms after the last
@@ -330,6 +332,24 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
       });
     },
   });
+
+  // Success feedback (change `admin-property-create-snackbar`, design
+  // D6/D7): the action now RETURNS `{ success: true }` instead of
+  // throwing `NEXT_REDIRECT`. The effect fires the toast and a clean
+  // client navigation to the list — no `?created=1` in the URL. The
+  // stable toast `id` dedupes the StrictMode double-effect (one toast
+  // per create), and the `<Toaster>` lives in `AdminShell`, so the
+  // toast survives this island unmounting on push. Before the
+  // `canCreate` early return: hooks must run unconditionally.
+  useEffect(() => {
+    if (!state.success) return;
+    toast.success('Propiedad creada correctamente.', {
+      id: 'property-created',
+      duration: 4000,
+      action: { label: 'Ver', onClick: () => router.push('/admin/properties') },
+    });
+    router.push('/admin/properties');
+  }, [state.success, router]);
 
   if (!canCreate) return null;
 
@@ -616,8 +636,8 @@ export function PropertyCreateForm({ canCreate }: PropertyCreateFormProps) {
           values={values}
           errors={fieldErrors}
           onChange={handleChange}
-          agentOptions={profileOptions.agent}
-          ownerOptions={profileOptions.owner}
+          agentOptions={options.agents}
+          ownerOptions={options.owners}
         />
         <AddressSection
           values={values}

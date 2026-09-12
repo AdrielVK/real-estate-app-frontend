@@ -35,14 +35,77 @@
  *    class, via the hook).
  * 8. (slice 2) Forwards a `null` user alongside the lifted theme
  *    state — the defense-in-depth case.
+ * 9. (admin-property-create-snackbar) Mounts exactly one sonner
+ *    `<Toaster>` live region (role=status bridge, 4000ms
+ *    auto-dismiss, queue capped at 3) — and the public home renders
+ *    no toast surface at all.
  */
-import { render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import { toast } from 'sonner';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AdminUser } from '@/lib/auth/admin-session';
 import type { Theme } from '@/lib/theme/theme';
 
 import { AdminShell } from '@/components/admin/AdminShell';
+
+import HomePage from '@/app/(public)/page';
+
+// The public-home negative test renders the real `HomePage`, whose
+// `SearchPanel` calls `useRouter` (same mock shape as
+// `tests/components/HomePage.test.tsx` — the SearchPanel precedent).
+// The shell itself never touches `next/navigation` (Sidebar and
+// AdminMobileNav are mocked below), so this is scope-safe.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => '/',
+}));
+
+// jsdom does not implement IntersectionObserver (SiteHeader sticky
+// flip) or ResizeObserver (SearchPanel tag overflow); the public-home
+// render needs no-op stubs. Same as HomePage.test.tsx.
+class IntersectionObserverStub {
+  readonly root: Element | Document | null = null;
+  readonly rootMargin = '0px';
+  readonly thresholds: readonly number[] = [0];
+  observe(): undefined {
+    return undefined;
+  }
+  unobserve(): undefined {
+    return undefined;
+  }
+  disconnect(): undefined {
+    return undefined;
+  }
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+}
+
+class ResizeObserverStub {
+  observe(): undefined {
+    return undefined;
+  }
+  unobserve(): undefined {
+    return undefined;
+  }
+  disconnect(): undefined {
+    return undefined;
+  }
+}
+
+beforeAll(() => {
+  Object.defineProperty(globalThis, 'IntersectionObserver', {
+    configurable: true,
+    writable: true,
+    value: IntersectionObserverStub,
+  });
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    writable: true,
+    value: ResizeObserverStub,
+  });
+});
 
 vi.mock('@/components/admin/Sidebar', () => ({
   Sidebar: vi.fn(() => <aside data-testid="mock-sidebar" />),
@@ -296,5 +359,135 @@ describe('AdminShell', () => {
     // test is to confirm the lift does not break rendering, not
     // to re-pin AdminMobileNav's behavior (its own suite covers
     // that).
+  });
+
+  // ---------------------------------------------------------------------------
+  // admin-property-create-snackbar — toast surface (spec `admin-toast-feedback`)
+  //
+  // REAL sonner here (no module mock): the Toaster DOM is the contract.
+  // The form suite pins the `toast.success` CALL contract; this suite
+  // pins the region (mount, role, queue, auto-dismiss) and the
+  // admin-only scope (public home renders none).
+  // ---------------------------------------------------------------------------
+
+  describe('toast surface (admin-toast-feedback)', () => {
+    afterEach(() => {
+      // sonner's toast store is module-global — pending toasts would
+      // leak into the next mount.
+      toast.dismiss();
+      vi.useRealTimers();
+    });
+
+    it('mounts exactly one polite live-region Toaster under the admin shell', () => {
+      render(
+        <AdminShell user={mockUser} onLogout={mockOnLogout}>
+          <div>page</div>
+        </AdminShell>,
+      );
+
+      const regions = document.querySelectorAll('section[aria-live="polite"]');
+      expect(regions).toHaveLength(1);
+    });
+
+    it('exposes the toast region with role="status" (spec bridge over sonner v2)', async () => {
+      render(
+        <AdminShell user={mockUser} onLogout={mockOnLogout}>
+          <div>page</div>
+        </AdminShell>,
+      );
+
+      // sonner v2 ships only `aria-live="polite"` on the section; the
+      // AdminShell effect pins `role="status"` (the polite-announce
+      // semantics of the retired server banner) on the SAME element —
+      // one region, no double announcement.
+      const region = await waitFor(() => {
+        const el = document.querySelector('section[aria-live="polite"]');
+        expect(el).toHaveAttribute('role', 'status');
+        return el;
+      });
+      expect(region).toBeInTheDocument();
+    });
+
+    it('announces a success toast in the polite region with a labeled close button', async () => {
+      render(
+        <AdminShell user={mockUser} onLogout={mockOnLogout}>
+          <div>page</div>
+        </AdminShell>,
+      );
+
+      act(() => {
+        toast.success('Propiedad creada correctamente.', {
+          id: 'property-created',
+          duration: 4000,
+        });
+      });
+
+      // sonner's Toaster subscriber defers the store update through a
+      // `setTimeout(0) + flushSync` (anti-batching), so the insertion
+      // is not synchronous inside `act` — wait for the toast node.
+      await waitFor(() => {
+        expect(document.querySelector('li[data-sonner-toast]')).not.toBeNull();
+      });
+
+      const region = document.querySelector('section[aria-live="polite"]');
+      expect(region).toHaveTextContent('Propiedad creada correctamente.');
+      expect(screen.getByRole('button', { name: /close toast/i })).toBeInTheDocument();
+    });
+
+    it('auto-dismisses the success toast at 4000ms (never Infinity)', async () => {
+      vi.useFakeTimers();
+      render(
+        <AdminShell user={mockUser} onLogout={mockOnLogout}>
+          <div>page</div>
+        </AdminShell>,
+      );
+
+      act(() => {
+        toast.success('Propiedad creada correctamente.', {
+          id: 'property-created',
+          duration: 4000,
+        });
+      });
+      // Flush the deferred insertion (setTimeout(0) + flushSync) first.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(document.querySelector('li[data-sonner-toast]')).not.toBeNull();
+
+      // 4000ms duration + sonner's TIME_BEFORE_UNMOUNT (200ms) + buffer.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(screen.queryByText('Propiedad creada correctamente.')).toBeNull();
+    });
+
+    it('caps the visible queue at 3 (visibleToasts=3), the 4th stays hidden', async () => {
+      render(
+        <AdminShell user={mockUser} onLogout={mockOnLogout}>
+          <div>page</div>
+        </AdminShell>,
+      );
+
+      act(() => {
+        for (const copy of ['t-1', 't-2', 't-3', 't-4']) {
+          toast.success(copy);
+        }
+      });
+
+      // Deferred insertion again: wait until all four landed.
+      await waitFor(() => {
+        expect(document.querySelectorAll('li[data-sonner-toast]')).toHaveLength(4);
+      });
+      expect(document.querySelectorAll('li[data-sonner-toast][data-visible="true"]')).toHaveLength(
+        3,
+      );
+    });
+
+    it('renders NO toast region on the public home (admin-only scope)', () => {
+      render(<HomePage />);
+
+      expect(document.querySelector('section[aria-live="polite"]')).toBeNull();
+      expect(document.querySelector('[data-sonner-toast]')).toBeNull();
+    });
   });
 });

@@ -1,3 +1,5 @@
+'use client';
+
 import Link from 'next/link';
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -14,23 +16,37 @@ export interface PropertyPaginationProps {
    * Path the page links point to. Defaults to `/admin/properties`
    * (the admin listing route). The `?page=` query is appended to
    * this base, and page 1 omits the query for the canonical URL.
+   * Ignored when `onPageChange` is provided (client mode).
    */
   baseHref?: string;
   /** Number of page links to show on each side of the current page. */
   windowSize?: number;
   /** Extra classes for the navigation row. */
   className?: string;
+  /**
+   * Client-driven pagination (change `admin-properties-frontend-search`).
+   * When provided, every control renders a `<button>` that calls this
+   * callback instead of a `<Link>` with a `?page=` URL — the server URL
+   * contract is retired on the client-paginated listing, and the same
+   * windowing/a11y shape is preserved.
+   */
+  onPageChange?: (page: number) => void;
 }
 
 /**
- * `PropertyPagination` — RSC windowed pagination for the admin
- * properties listing (spec "Paginated Listing", design D3).
+ * `PropertyPagination` — windowed pagination for the admin properties
+ * listing (spec "Paginated Listing", design D3).
  *
- * Why a server component?
- * - Pure URL construction; no client state. The toolbar (the only
- *   client island) owns the search/filters interactivity so this
- *   control ships zero JavaScript. `<Link>` gives free prefetch and
- *   a11y.
+ * Two rendering modes:
+ * - **Link mode (default)** — pure URL construction (`?page=` links).
+ *   The historical contract for server-paginated consumers.
+ * - **Client mode (`onPageChange`)** — renders `<button>`s that call the
+ *   handler. Required when the dataset lives in client state (the search
+ *   island), because the URL carries no `?q=` and a link-based control
+ *   would silently drop the active filter.
+ *
+ * `'use client'` is safe for link-mode consumers: the component has no
+ * state of its own; the directive only opts the buttons into hydration.
  *
  * Windowing algorithm
  * - Delegates to `computePageWindow` from `@/lib/pagination` so the
@@ -57,6 +73,7 @@ export function PropertyPagination({
   baseHref = '/admin/properties',
   windowSize = 2,
   className,
+  onPageChange,
 }: PropertyPaginationProps) {
   if (totalPages <= 1) {
     return null;
@@ -74,18 +91,15 @@ export function PropertyPagination({
       data-testid="property-pagination"
       className={cn('flex items-center justify-center gap-1', className)}
     >
-      {isFirst ? (
-        <DisabledSlot ariaLabel="Página anterior" testId="pagination-prev" side="left" />
-      ) : (
-        <PageLink
-          href={buildHref(currentPage - 1)}
-          ariaLabel="Página anterior"
-          testId="pagination-prev"
-        >
-          <ChevronLeft aria-hidden className="size-4" />
-          <span className="hidden sm:inline">Anterior</span>
-        </PageLink>
-      )}
+      <BoundaryControl
+        side="left"
+        page={currentPage - 1}
+        disabled={isFirst}
+        ariaLabel="Página anterior"
+        testId="pagination-prev"
+        href={buildHref(currentPage - 1)}
+        onPageChange={onPageChange}
+      />
 
       <ol className="flex items-center gap-1" data-testid="pagination-pages">
         {pages.map((entry, index) =>
@@ -99,42 +113,127 @@ export function PropertyPagination({
             </li>
           ) : (
             <li key={entry.page}>
-              {entry.page === currentPage ? (
-                <span
-                  aria-current="page"
-                  data-testid="pagination-current"
-                  className="inline-flex h-9 min-w-9 items-center justify-center rounded-full bg-primary px-3 text-sm font-medium text-primary-foreground"
-                >
-                  {entry.page}
-                </span>
-              ) : (
-                <Link
-                  href={buildHref(entry.page)}
-                  aria-label={`Ir a la página ${entry.page}`}
-                  data-testid={`pagination-page-${entry.page}`}
-                  className="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-border px-3 text-sm font-medium transition-colors hover:bg-secondary focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-                >
-                  {entry.page}
-                </Link>
-              )}
+              <PageEntryControl
+                page={entry.page}
+                currentPage={currentPage}
+                href={buildHref(entry.page)}
+                onPageChange={onPageChange}
+              />
             </li>
           ),
         )}
       </ol>
 
-      {isLast ? (
-        <DisabledSlot ariaLabel="Página siguiente" testId="pagination-next" side="right" />
-      ) : (
-        <PageLink
-          href={buildHref(currentPage + 1)}
-          ariaLabel="Página siguiente"
-          testId="pagination-next"
-        >
-          <span className="hidden sm:inline">Siguiente</span>
-          <ChevronRight aria-hidden className="size-4" />
-        </PageLink>
-      )}
+      <BoundaryControl
+        side="right"
+        page={currentPage + 1}
+        disabled={isLast}
+        ariaLabel="Página siguiente"
+        testId="pagination-next"
+        href={buildHref(currentPage + 1)}
+        onPageChange={onPageChange}
+      />
     </nav>
+  );
+}
+
+interface BoundaryControlProps {
+  side: 'left' | 'right';
+  page: number;
+  /** True at the lower/upper bound — renders the aria-disabled span. */
+  disabled: boolean;
+  ariaLabel: string;
+  testId: string;
+  /** Link-mode href (ignored in client mode / disabled). */
+  href: string;
+  onPageChange?: (page: number) => void;
+}
+
+/**
+ * Previous / next control. Three shapes, one per mode:
+ * disabled `<span>` at the bounds, `<button>` in client mode, `<Link>`
+ * otherwise. Extracted so the main render stays a flat composition.
+ */
+function BoundaryControl({
+  side,
+  page,
+  disabled,
+  ariaLabel,
+  testId,
+  href,
+  onPageChange,
+}: BoundaryControlProps) {
+  const label = side === 'left' ? 'Anterior' : 'Siguiente';
+  const children = (
+    <>
+      {side === 'left' ? <ChevronLeft aria-hidden className="size-4" /> : null}
+      <span className="hidden sm:inline">{label}</span>
+      {side === 'right' ? <ChevronRight aria-hidden className="size-4" /> : null}
+    </>
+  );
+
+  if (disabled) {
+    return <DisabledSlot ariaLabel={ariaLabel} testId={testId} side={side} />;
+  }
+  if (onPageChange) {
+    return (
+      <PageButton page={page} ariaLabel={ariaLabel} testId={testId} onPageChange={onPageChange}>
+        {children}
+      </PageButton>
+    );
+  }
+  return (
+    <PageLink href={href} ariaLabel={ariaLabel} testId={testId}>
+      {children}
+    </PageLink>
+  );
+}
+
+interface PageEntryControlProps {
+  page: number;
+  currentPage: number;
+  href: string;
+  onPageChange?: (page: number) => void;
+}
+
+/**
+ * Numbered page entry: aria-current `<span>` for the active page,
+ * `<button>` in client mode, `<Link>` otherwise.
+ */
+function PageEntryControl({ page, currentPage, href, onPageChange }: PageEntryControlProps) {
+  if (page === currentPage) {
+    return (
+      <span
+        aria-current="page"
+        data-testid="pagination-current"
+        className="inline-flex h-9 min-w-9 items-center justify-center rounded-full bg-primary px-3 text-sm font-medium text-primary-foreground"
+      >
+        {page}
+      </span>
+    );
+  }
+  if (onPageChange) {
+    return (
+      <PageButton
+        page={page}
+        ariaLabel={`Ir a la página ${page}`}
+        testId={`pagination-page-${page}`}
+        onPageChange={onPageChange}
+        square
+      >
+        {page}
+      </PageButton>
+    );
+  }
+  return (
+    <Link
+      href={href}
+      aria-label={`Ir a la página ${page}`}
+      data-testid={`pagination-page-${page}`}
+      className="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-border px-3 text-sm font-medium transition-colors hover:bg-secondary focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+    >
+      {page}
+    </Link>
   );
 }
 
@@ -155,6 +254,46 @@ function PageLink({ href, ariaLabel, testId, children }: PageLinkProps) {
     >
       {children}
     </Link>
+  );
+}
+
+interface PageButtonProps {
+  page: number;
+  ariaLabel: string;
+  testId: string;
+  onPageChange: (page: number) => void;
+  /** Square (min-w-9) shape used by the numbered page entries. */
+  square?: boolean;
+  children: React.ReactNode;
+}
+
+/**
+ * Client-mode control — same visual/a11y shape as `PageLink` but a real
+ * `<button>` (keyboard-activatable, focusable) calling `onPageChange`.
+ * No URL is ever written (spec: client pagination must not touch the
+ * address bar).
+ */
+function PageButton({
+  page,
+  ariaLabel,
+  testId,
+  onPageChange,
+  square = false,
+  children,
+}: PageButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => onPageChange(page)}
+      aria-label={ariaLabel}
+      data-testid={testId}
+      className={cn(
+        'inline-flex h-9 cursor-pointer items-center gap-1 rounded-full border border-border px-3 text-sm font-medium transition-colors hover:bg-secondary focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
+        square && 'min-w-9 justify-center px-0',
+      )}
+    >
+      {children}
+    </button>
   );
 }
 

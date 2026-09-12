@@ -27,12 +27,23 @@
  *   `AdminShell`. It MUST NOT add another shell — a duplicate would
  *   render two sidebars. The heading + island sit in the same
  *   `Container py-8` treatment as the rest of the zone.
+ *
+ * RSC lift (admin-property-business-users, design D5):
+ * - The agent/owner selector options are fetched HERE, server-side, via
+ *   `fetchBusinessUsers` (`authFetch` is server-only by contract) and
+ *   threaded into the island as plain-JSON props. The two role queries
+ *   are independent, so they run in parallel; both fail-open to `[]`,
+ *   so a backend outage degrades to empty selectors, never a crash.
+ *   The only pre-existing exception: a terminal 401 re-throws
+ *   `NEXT_REDIRECT` from inside the fetcher and bounces to `/login`
+ *   (REQ-BUA-005) — the redirect is NOT masked as an empty list.
  */
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { resolveAdminUser } from '@/lib/auth/admin-session';
 import { canCreateProperty } from '@/lib/auth/roles';
+import { fetchBusinessUsers } from '@/lib/business-users/api';
 
 import { PropertyCreateForm } from '@/components/admin/properties';
 import { Container } from '@/components/ui/Container';
@@ -48,6 +59,13 @@ export default async function AdminPropertiesCreatePage() {
   // that cannot honor it.
   if (!canCreate) redirect('/admin/properties');
 
+  // Design D5: independent role queries, parallel; each fail-opens to
+  // `[]` (selectors render empty) while NEXT_REDIRECT propagates.
+  const [agents, owners] = await Promise.all([
+    fetchBusinessUsers({ role: 'AGENT' }),
+    fetchBusinessUsers({ role: 'CLIENT' }),
+  ]);
+
   return (
     <Container className="space-y-6 py-8">
       <header className="space-y-2">
@@ -62,7 +80,7 @@ export default async function AdminPropertiesCreatePage() {
           marcan dónde revisar.
         </p>
       </header>
-      <PropertyCreateForm canCreate={canCreate} />
+      <PropertyCreateForm canCreate={canCreate} options={{ agents, owners }} />
     </Container>
   );
 }

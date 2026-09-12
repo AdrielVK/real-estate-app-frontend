@@ -1,64 +1,58 @@
 /**
- * Unit tests for the profile data layer (REQ-101, S6, NFR-3).
+ * Shim contract tests for `src/lib/properties/profiles.ts`
+ * (`change: admin-property-business-users`, design D4 — replaces the old
+ * REQ-101/S6 mock pins).
  *
- * `fetchProfiles` is the future swap point to the real backend, so the
- * contract pinned here is: async, mock-backed, Zod-UUID-safe ids, and
- * ZERO network. The fetch spy proves the swap has not happened yet.
+ * Why the module survives at all:
+ * - `ProfileCombobox` and `BasicInfoSection` carry
+ *   `import type { ProfileOption } from '@/lib/properties/profiles'`.
+ *   The shim keeps those `import type` statements compiling while the
+ *   real home of the types is `business-users/types.ts` (design D1).
+ * - `fetchProfiles` is GONE: the RSC lift (REQ-PROP-002) removed its only
+ *   consumer, and delegating to `fetchBusinessUsers` from a client-safe
+ *   module is impossible (`authFetch` is server-only — design D4).
+ *
+ * Pinned contract:
+ * - ZERO value exports (a pure type re-export has an empty runtime
+ *   namespace object).
+ * - The types are re-exported from `business-users/types` (static source
+ *   assertion — type identity is then proven by `pnpm type-check`).
+ * - No mock import: the data path through this file is closed.
  */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as profilesShim from '@/lib/properties/profiles';
 
-import { MOCK_AGENTS, MOCK_OWNERS } from '@/lib/properties/mock-profiles';
-import { fetchProfiles } from '@/lib/properties/profiles';
-import { propertyCreateSchema } from '@/lib/validation/property-create.schema';
+/** Source with block/line comments stripped — prose must not trip the guard. */
+function codeOf(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+}
 
-/** Schema gate per profile type — the same field submit-time `safeParse` hits. */
-const uuidFieldFor = (type: 'agent' | 'owner') =>
-  type === 'agent'
-    ? propertyCreateSchema.shape.agentProfileId
-    : propertyCreateSchema.shape.ownerProfileId;
-
-describe('fetchProfiles (REQ-101, S6)', () => {
-  afterEach(() => vi.restoreAllMocks());
-
-  it('resolves agents and owners from the mocks as two distinct sets', async () => {
-    const agents = await fetchProfiles('agent');
-    const owners = await fetchProfiles('owner');
-
-    expect(agents).toEqual([...MOCK_AGENTS]);
-    expect(owners).toEqual([...MOCK_OWNERS]);
-    expect(agents.length).toBeGreaterThan(0);
-    expect(owners.length).toBeGreaterThan(0);
-    // Triangulation: the sets are not the same array wearing two hats.
-    const agentIds = new Set(agents.map((agent) => agent.id));
-    expect(owners.some((owner) => agentIds.has(owner.id))).toBe(false);
+describe('profiles.ts deprecated type-only shim (design D4)', () => {
+  it('has no value exports — fetchProfiles is gone from the namespace', () => {
+    // A pure `export type { … } from …` compiles to an empty runtime module.
+    expect(Object.keys(profilesShim)).toEqual([]);
+    expect('fetchProfiles' in profilesShim).toBe(false);
   });
 
-  it('carries the requested type on every option', async () => {
-    const agents = await fetchProfiles('agent');
-    const owners = await fetchProfiles('owner');
-    expect(agents.every((agent) => agent.type === 'agent')).toBe(true);
-    expect(owners.every((owner) => owner.type === 'owner')).toBe(true);
+  it('re-exports ProfileType/ProfileOption from business-users/types (static)', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/lib/properties/profiles.ts'), 'utf8');
+    const code = codeOf(source);
+    expect(code).toMatch(/export\s+type\s*\{/);
+    expect(code).toMatch(/ProfileType/);
+    expect(code).toMatch(/ProfileOption/);
+    expect(code).toMatch(/from\s+['"]@\/lib\/business-users\/types['"]/);
   });
 
-  it('uses ids accepted by the Zod uuid gate (NFR-3)', async () => {
-    for (const type of ['agent', 'owner'] as const) {
-      const profiles = await fetchProfiles(type);
-      for (const profile of profiles) {
-        expect(
-          uuidFieldFor(type).safeParse(profile.id).success,
-          `${profile.id} must pass the schema uuid gate`,
-        ).toBe(true);
-        // Literal UUIDv4: the version nibble sits at index 14.
-        expect(profile.id[14]).toBe('4');
-      }
-    }
+  it('is marked @deprecated so new code targets the real home', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/lib/properties/profiles.ts'), 'utf8');
+    expect(source).toMatch(/@deprecated/);
   });
 
-  it('never touches the network (S6)', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    await fetchProfiles('agent');
-    await fetchProfiles('owner');
-    expect(fetchSpy).not.toHaveBeenCalled();
+  it('no longer imports the mock fixtures (data path closed)', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/lib/properties/profiles.ts'), 'utf8');
+    expect(codeOf(source)).not.toMatch(/from\s+['"]\.\/mock-profiles['"]/);
   });
 });

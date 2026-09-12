@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 import Link from 'next/link';
 
@@ -10,6 +10,9 @@ import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
+
+/** Debounce window for `onSearchChange` emissions (spec-pinned). */
+const SEARCH_DEBOUNCE_MS = 250;
 
 export interface PropertyToolbarProps {
   /**
@@ -21,6 +24,25 @@ export interface PropertyToolbarProps {
   canCreate: boolean;
   /** Optional className appended to the toolbar's outer flex row. */
   className?: string;
+  /**
+   * Controlled search value (change `admin-properties-frontend-search`).
+   * The `PropertyList` island owns this state; the toolbar mirrors it
+   * and emits debounced updates via `onSearchChange`.
+   */
+  searchValue: string;
+  /**
+   * Called ONCE per 250 ms settle window with the latest input value
+   * (spec scenario "Debounced emit"). The debounce lives HERE, before
+   * the emit, so consumers receive settled values only (design
+   * "Debounce location").
+   */
+  onSearchChange: (value: string) => void;
+  /**
+   * Result count for the active query. When present together with a
+   * non-empty `searchValue`, the toolbar announces it through an
+   * `aria-live="polite"` region (spec scenario "Live announcement").
+   */
+  resultCount?: number;
 }
 
 /**
@@ -45,6 +67,9 @@ export interface PropertyToolbarProps {
  *   announce its purpose (the spec calls for a labelled input;
  *   the visible label is intentionally hidden to keep the row
  *   compact — the placeholder text doubles as a visual hint).
+ * - While a query is active, an `aria-live="polite"` region announces
+ *   the filtered count ("3 resultados" / "Sin resultados") without
+ *   stealing focus from the input (spec "Controlled Search Input").
  * - The "Filtros avanzados" button carries an explicit `aria-label`
  *   so the visible text — which is hidden on small viewports — is
  *   always announced (matches the search filter-bar pattern).
@@ -57,26 +82,84 @@ export interface PropertyToolbarProps {
  * - The CTA uses `Button asChild` so the underlying `<Link>` keeps
  *   real navigation semantics (no `<a>` workarounds).
  */
-export function PropertyToolbar({ canCreate, className }: PropertyToolbarProps) {
+export function PropertyToolbar({
+  canCreate,
+  className,
+  searchValue,
+  onSearchChange,
+  resultCount,
+}: PropertyToolbarProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const headingId = useId();
+
+  // Local mirror of the controlled value. Keystrokes update this
+  // immediately (input stays responsive); the debounced emit updates the
+  // island's `searchValue` prop, which flows back down.
+  const [text, setText] = useState(searchValue);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Last value we handed to `onSearchChange`. The sync effect below only
+  // overrides local text when the prop moved WITHOUT us (e.g. an island
+  // reset) — never clobbering in-flight typing.
+  const lastEmittedRef = useRef(searchValue);
+  // Keep the latest callback without retriggering the debounce effect.
+  const onSearchChangeRef = useRef(onSearchChange);
+  useEffect(() => {
+    onSearchChangeRef.current = onSearchChange;
+  }, [onSearchChange]);
+
+  useEffect(() => {
+    if (searchValue !== lastEmittedRef.current) {
+      lastEmittedRef.current = searchValue;
+      setText(searchValue);
+    }
+  }, [searchValue]);
+
+  // Cancel any pending emit on unmount (no setState / emit after teardown).
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    },
+    [],
+  );
+
+  function handleSearchInput(next: string) {
+    setText(next);
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      lastEmittedRef.current = next;
+      onSearchChangeRef.current(next);
+    }, SEARCH_DEBOUNCE_MS);
+  }
+
+  const showAnnouncement = resultCount !== undefined && searchValue.trim() !== '';
 
   return (
     <div
       data-slot="property-toolbar"
       className={cn('flex flex-wrap items-center gap-2', className)}
     >
-      {/* Search field — input styling mirrors the search filter-bar
-          tokens per the design. On wide viewports it stretches to a
-          comfortable width; on narrow viewports it occupies the full
-          row and the buttons wrap below. */}
+      {/* Search field — controlled (change admin-properties-frontend-search):
+          value + debounced onChange, focus stays on the input while the
+          island re-filters. Styling mirrors the search filter-bar tokens. */}
       <input
         type="search"
         aria-label="Buscar propiedades"
         placeholder="Buscar propiedades…"
         data-testid="property-toolbar-search"
+        value={text}
+        onChange={(event) => handleSearchInput(event.target.value)}
         className="h-9 w-full min-w-0 flex-1 rounded-full border border-border bg-background/70 px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:max-w-sm"
       />
+
+      {/* Live region — announces the filtered count only while a query is
+          active (spec scenario "Live announcement"). Rendered next to the
+          input so focus never leaves it. Visually quiet by design. */}
+      {showAnnouncement ? (
+        <p aria-live="polite" className="text-sm text-muted-foreground">
+          {resultCount === 0 ? 'Sin resultados' : `${resultCount} resultados`}
+        </p>
+      ) : null}
 
       <Button
         type="button"

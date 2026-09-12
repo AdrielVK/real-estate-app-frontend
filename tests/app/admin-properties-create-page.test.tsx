@@ -31,6 +31,11 @@
  * - The server action module is mocked at the import boundary (the
  *   component test owns the form behavior); this file only proves
  *   the gate + composition.
+ * - admin-property-business-users (REQ-PROP-002): the business-user
+ *   fetcher is mocked at the module boundary. The page must call it
+ *   with `{role:'AGENT'}` and `{role:'CLIENT'}` server-side and
+ *   thread the results into the form's `options` prop — proven on the
+ *   RSC element tree (the DOM proof lives in the component suite).
  */
 import { cookies } from 'next/headers';
 
@@ -38,6 +43,9 @@ import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { type AdminUser, resolveAdminUser } from '@/lib/auth/admin-session';
+import { fetchBusinessUsers, type ProfileOption } from '@/lib/business-users/api';
+
+import { PropertyCreateForm } from '@/components/admin/properties';
 
 import AdminPropertiesCreatePage from '@/app/(admin)/admin/properties/create/page';
 
@@ -54,14 +62,28 @@ const { redirectMock } = vi.hoisted(() => ({
     throw new Error('NEXT_REDIRECT');
   }),
 }));
-vi.mock('next/navigation', () => ({ redirect: redirectMock }));
+// The create page uses `redirect` (role gate) and the rendered
+// `PropertyCreateForm` uses `useRouter` (success navigation —
+// `admin-property-create-snackbar`); the mock must cover both exports.
+vi.mock('next/navigation', () => ({
+  redirect: redirectMock,
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
 vi.mock('@/lib/properties/actions', () => ({
   createPropertyAction: vi.fn(),
 }));
 
+// admin-property-business-users: the RSC fetcher is mocked at the module
+// boundary (the unit suite owns its behavior). This file pins the CALL
+// contract — AGENT + CLIENT, server-side — and the prop threading.
+vi.mock('@/lib/business-users/api', () => ({
+  fetchBusinessUsers: vi.fn(),
+}));
+
 const mockCookies = vi.mocked(cookies);
 const mockResolveAdminUser = vi.mocked(resolveAdminUser);
+const mockFetchBusinessUsers = vi.mocked(fetchBusinessUsers);
 
 function makeCookieStore(value: string | undefined): Awaited<ReturnType<typeof cookies>> {
   return {
@@ -74,6 +96,32 @@ function makeUser(role: AdminUser['role']): AdminUser {
   return { displayName: 'Test User', role };
 }
 
+/**
+ * Walk the RSC element tree looking for the `PropertyCreateForm` element
+ * (type identity — same module instance the page imports). Prop threading
+ * is asserted on the element's props, NOT the mounted DOM: the form's
+ * client fetch removal is owned by the component suite (3.3/3.4), so this
+ * file must pass with the fetcher mock alone.
+ */
+interface FormElement {
+  type: unknown;
+  props: { canCreate?: boolean; options?: { agents: ProfileOption[]; owners: ProfileOption[] } };
+}
+
+function findFormElement(node: unknown): FormElement | null {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findFormElement(child);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (!node || typeof node !== 'object') return null;
+  const element = node as FormElement & { props?: { children?: unknown } };
+  if (element.type === PropertyCreateForm) return element;
+  return findFormElement(element.props?.children);
+}
+
 describe('AdminPropertiesCreatePage', () => {
   beforeEach(() => {
     mockCookies.mockReset();
@@ -83,6 +131,10 @@ describe('AdminPropertiesCreatePage', () => {
     redirectMock.mockImplementation(() => {
       throw new Error('NEXT_REDIRECT');
     });
+    // Default: both selector lists resolve empty (fail-open shape); the
+    // threading test overrides per-call.
+    mockFetchBusinessUsers.mockReset();
+    mockFetchBusinessUsers.mockResolvedValue([]);
   });
 
   // Spec: "Functional render" — the DELTA replaces the placeholder
@@ -165,5 +217,57 @@ describe('AdminPropertiesCreatePage', () => {
     // would render an empty container — the fieldsets are the proof
     // the boolean crossed as `true`.
     expect(screen.getByLabelText('Tipo de propiedad')).toBeInTheDocument();
+  });
+
+  // REQ-PROP-002: the RSC is the fetch point — exactly one AGENT call and
+  // one CLIENT call per render, both server-side, before the island sees
+  // any options.
+  it('fetches agents (AGENT) and owners (CLIENT) server-side', async () => {
+    mockCookies.mockResolvedValue(makeCookieStore('fake-jwt'));
+    mockResolveAdminUser.mockReturnValue(makeUser('ADMIN'));
+
+    await AdminPropertiesCreatePage();
+
+    expect(mockFetchBusinessUsers).toHaveBeenCalledWith({ role: 'AGENT' });
+    expect(mockFetchBusinessUsers).toHaveBeenCalledWith({ role: 'CLIENT' });
+    expect(mockFetchBusinessUsers).toHaveBeenCalledTimes(2);
+  });
+
+  // REQ-PROP-002 + design D5: the two role queries run in parallel and
+  // their results reach the island as plain-JSON props — the element
+  // tree is the proof of the threading (survives prop renames).
+  it('threads the fetched options into the form as plain-JSON props', async () => {
+    mockCookies.mockResolvedValue(makeCookieStore('fake-jwt'));
+    mockResolveAdminUser.mockReturnValue(makeUser('ADMIN'));
+    const agents: ProfileOption[] = [
+      { id: '11111111-1111-4111-8111-111111111111', name: 'Mariano Díaz', type: 'agent' },
+    ];
+    const owners: ProfileOption[] = [
+      { id: '22222222-2222-4222-8222-222222222222', name: 'Ana Pérez', type: 'owner' },
+    ];
+    mockFetchBusinessUsers.mockImplementation((dto) =>
+      Promise.resolve(dto?.role === 'AGENT' ? agents : owners),
+    );
+
+    const element = await AdminPropertiesCreatePage();
+    const formElement = findFormElement(element);
+
+    expect(formElement).not.toBeNull();
+    expect(formElement!.props.canCreate).toBe(true);
+    expect(formElement!.props.options).toEqual({ agents, owners });
+  });
+
+  // REQ-BUA-005 (RSC side): a terminal 401 inside the fetcher must bounce
+  // the whole page to /login — the fetcher's fail-open `[]` contract never
+  // masks the redirect as "no agents, render empty form".
+  it('propagates NEXT_REDIRECT from the fetcher instead of rendering the form', async () => {
+    mockCookies.mockResolvedValue(makeCookieStore('fake-jwt'));
+    mockResolveAdminUser.mockReturnValue(makeUser('ADMIN'));
+    const redirectError = Object.assign(new Error('NEXT_REDIRECT'), {
+      digest: 'NEXT_REDIRECT;replace;/login;307;',
+    });
+    mockFetchBusinessUsers.mockRejectedValue(redirectError);
+
+    await expect(AdminPropertiesCreatePage()).rejects.toBe(redirectError);
   });
 });

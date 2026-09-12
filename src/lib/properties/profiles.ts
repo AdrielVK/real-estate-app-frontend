@@ -1,31 +1,18 @@
 /**
- * Profile data access for the admin property-create form (REQ-101).
+ * @deprecated Compatibility shim — the real home of these types is
+ * `@/lib/business-users/types` (change `admin-property-business-users`,
+ * design D1/D4).
  *
- * `fetchProfiles` is the single swap point: when the backend exposes the
- * agent/owner endpoints, ONLY this function changes (mock return →
- * `authFetch`). The async contract means zero call-site churn — the
- * components already await it.
+ * What was here: `fetchProfiles`, the mock-backed profile swap point
+ * (REQ-101/S6). It is GONE: the RSC lift (REQ-PROP-002) fetches
+ * `GET /business-user` server-side via `business-users/api.ts` and threads
+ * the options as props, and a client-safe module can never delegate to the
+ * server-only `authFetch` behind that fetcher (design D4).
  *
- * S6 pins the current reality: data resolves from mocks and NO network
- * request is made (asserted with a `fetch` spy in
- * `tests/lib/properties-profiles.test.ts`).
+ * What remains: a TYPE-ONLY re-export so the existing
+ * `import type { ProfileOption } from '@/lib/properties/profiles'` in
+ * `ProfileCombobox`/`BasicInfoSection` keeps compiling. New code must
+ * import the types from `@/lib/business-users/types` directly; this file
+ * is deleted once those two imports are migrated (follow-up cleanup).
  */
-
-import { MOCK_AGENTS, MOCK_OWNERS } from './mock-profiles';
-
-export type ProfileType = 'agent' | 'owner';
-
-/** One selectable agent/owner profile. `id` is a UUIDv4 accepted by Zod. */
-export interface ProfileOption {
-  id: string;
-  name: string;
-  type: ProfileType;
-}
-
-/**
- * Resolve the available profiles for a type. Mock-backed until the
- * backend endpoints exist (out of scope for this change).
- */
-export async function fetchProfiles(type: ProfileType): Promise<ProfileOption[]> {
-  return type === 'agent' ? [...MOCK_AGENTS] : [...MOCK_OWNERS];
-}
+export type { ProfileOption, ProfileType } from '@/lib/business-users/types';

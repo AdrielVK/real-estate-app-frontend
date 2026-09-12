@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
 
 import { Toaster } from 'sonner';
 
@@ -68,10 +68,35 @@ export interface AdminShellProps {
  *     and the scrollable `<main>` (overflow-y-auto). The inner
  *     `overflow-y-auto` is what makes the sidebar + topbar stay in
  *     place while page content scrolls.
+ * - `<Toaster>` (change `admin-property-create-snackbar`, design
+ *   D2/D3/D4/D8): mounted ONCE here — the admin zone's only toast
+ *   surface. The shell is already `'use client'` so the static import
+ *   costs zero extra boundary; the layout persists across the soft
+ *   `router.push` after create, so toasts survive the form island
+ *   unmounting. Admin-only scope is enforced by the route group:
+ *   public routes never render this component. Styling stays on
+ *   design tokens: the toast carries the plain `glass-panel` hook
+ *   class and `globals.css` owns the token-only `!important` override
+ *   (design D4 fallback — the `glass-panel!` suffix emits
+ *   `.glass-panel\!`, which the `.dark`/reduced-transparency variants
+ *   would not match, so the override block keeps full glass fidelity
+ *   over sonner's `[data-rich-colors]` chrome without leaking hex).
+ *   The toast chrome follows the lifted admin theme.
  */
 export function AdminShell({ user, onLogout, children }: AdminShellProps) {
   // Lifted theme state — design D2. Called exactly once.
   const { theme, toggleTheme } = useTheme();
+
+  // sonner v2 renders the live-region `<section>` with
+  // `aria-live="polite"` but no explicit role; the spec pins
+  // `role="status"` (the polite-announcement semantics the retired
+  // server banner had). The ref lands on that section, so setting
+  // the attribute keeps ONE region (role=status implies polite) —
+  // no double announcement, no wrapper live region.
+  const toasterRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    toasterRef.current?.setAttribute('role', 'status');
+  }, []);
 
   return (
     <div className="flex h-screen">
@@ -80,7 +105,18 @@ export function AdminShell({ user, onLogout, children }: AdminShellProps) {
         <AdminMobileNav user={user} onLogout={onLogout} theme={theme} onToggleTheme={toggleTheme} />
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
-      <Toaster richColors position="top-right" closeButton />
+      <Toaster
+        ref={toasterRef}
+        position="bottom-right"
+        richColors
+        closeButton
+        visibleToasts={3}
+        theme={theme}
+        toastOptions={{
+          duration: 4000,
+          classNames: { toast: 'glass-panel' },
+        }}
+      />
     </div>
   );
 }

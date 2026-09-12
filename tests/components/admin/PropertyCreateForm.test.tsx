@@ -27,7 +27,6 @@ import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createPropertyAction } from '@/lib/properties/actions';
-import { MOCK_AGENTS } from '@/lib/properties/mock-profiles';
 import {
   AREA_NON_NEGATIVE,
   CONSERVATION_STATES,
@@ -61,6 +60,22 @@ import { server } from '@/mocks/server';
 
 vi.mock('@/lib/properties/actions', () => ({
   createPropertyAction: vi.fn(),
+}));
+
+// admin-property-create-snackbar: the success path is now client
+// feedback — `toast.success` (sonner) + a clean `router.push`. Both
+// surfaces are mocked at the import boundary (SearchPanel precedent
+// for next/navigation): the form test pins the CALL contract (copy,
+// id, duration, action, target URL); the real toast DOM/a11y lives in
+// the AdminShell suite where the `<Toaster>` is mounted.
+const { toastSuccessMock, routerPushMock } = vi.hoisted(() => ({
+  toastSuccessMock: vi.fn(),
+  routerPushMock: vi.fn(),
+}));
+
+vi.mock('sonner', () => ({ toast: { success: toastSuccessMock } }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: routerPushMock }),
 }));
 
 const mockCreatePropertyAction = vi.mocked(createPropertyAction);
@@ -810,7 +825,7 @@ describe('CharacteristicsSection', () => {
 /* 2.4/2.6 — PropertyCreateForm shell (state owner + Zod gate)                */
 /* -------------------------------------------------------------------------- */
 
-const INITIAL_ACTION_STATE = { fieldErrors: {}, formError: null };
+const INITIAL_ACTION_STATE = { fieldErrors: {}, formError: null, success: false };
 
 function setupUser() {
   // `delay: null` keeps every keystroke synchronous (LoginForm precedent).
@@ -853,8 +868,10 @@ function characteristicRows(): HTMLElement[] {
 describe('PropertyCreateForm', () => {
   beforeEach(() => {
     mockCreatePropertyAction.mockReset();
-    // Default: the action resolves cleanly (production redirects on
-    // success; the form only needs the returned state shape).
+    toastSuccessMock.mockReset();
+    routerPushMock.mockReset();
+    // Default: the action resolves with a failure-shaped state
+    // (success:false) — the form only reacts to the returned state.
     mockCreatePropertyAction.mockResolvedValue(INITIAL_ACTION_STATE);
   });
 
@@ -1008,10 +1025,11 @@ describe('PropertyCreateForm', () => {
     expect((target as HTMLInputElement).value).toBe('200');
   });
 
-  it('renders server-returned field errors on the matching control', async () => {
+  it('renders server-returned field errors on the matching control — no toast, no navigation', async () => {
     mockCreatePropertyAction.mockResolvedValueOnce({
       fieldErrors: { internalCode: 'El código interno ya está en uso' },
       formError: null,
+      success: false,
     });
     const user = setupUser();
     render(<PropertyCreateForm canCreate />);
@@ -1026,6 +1044,46 @@ describe('PropertyCreateForm', () => {
     expect(
       screen.getByText('El código interno ya está en uso', { selector: 'p' }),
     ).toBeInTheDocument();
+    // Spec "Validation error returns no success": success:false means
+    // zero toast, zero navigation — the user stays to fix the fields.
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(routerPushMock).not.toHaveBeenCalled();
+  });
+
+  // ---- admin-property-create-snackbar: success → toast + clean nav ----
+
+  it('fires the success toast with the pinned contract and a clean push when the action returns success', async () => {
+    mockCreatePropertyAction.mockResolvedValueOnce({
+      fieldErrors: {},
+      formError: null,
+      success: true,
+    });
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate />);
+
+    await fillValidRequiredFields(user);
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+
+    await waitFor(() => expect(toastSuccessMock).toHaveBeenCalledTimes(1));
+    const [message, options] = toastSuccessMock.mock.calls[0]!;
+    // Copy verbatim (spec); stable id dedupes the StrictMode
+    // double-effect; 4000ms is the AT announce floor.
+    expect(message).toBe('Propiedad creada correctamente.');
+    expect(options).toMatchObject({
+      id: 'property-created',
+      duration: 4000,
+      action: { label: 'Ver' },
+    });
+    expect(typeof options.action?.onClick).toBe('function');
+
+    // Clean navigation: exactly the list path, no `?created=` query.
+    expect(routerPushMock).toHaveBeenCalledWith('/admin/properties');
+    expect(routerPushMock).toHaveBeenCalledTimes(1);
+
+    // "Ver" before dismiss: the action handler navigates to the list
+    // (sonner closes the toast on action click by default).
+    options.action?.onClick?.();
+    expect(routerPushMock).toHaveBeenLastCalledWith('/admin/properties');
   });
 
   it('disables the submit button while the action is pending', async () => {
@@ -1564,40 +1622,90 @@ describe('UX polish — semantic labels survive the submit payload (S2)', () => 
 });
 
 /* -------------------------------------------------------------------------- */
-/* UX polish slice 4 — profile comboboxes wired through the form shell        */
+/* admin-property-business-users — props-driven options (REQ-PROP-002)        */
 /* -------------------------------------------------------------------------- */
 
-describe('UX polish — profile selection in the form (REQ-101/102, S4, 4.6)', () => {
-  // This describe is a sibling of the main one, so its beforeEach does
-  // not reach here — without its own reset, the S2 submit test above
-  // leaks a call into the 4.6 count assertion.
+/**
+ * The RSC lift (design D6): options arrive via the `options` prop — the
+ * island performs ZERO client fetching. The global `fetch` spy is the
+ * negative proof; the combobox DOM is the positive threading proof.
+ */
+const AGENT_OPTIONS = [
+  { id: '11111111-1111-4111-8111-111111111111', name: 'Mariano', type: 'agent' as const },
+  { id: '33333333-3333-4333-8333-333333333333', name: 'Beatriz', type: 'agent' as const },
+];
+const OWNER_OPTIONS = [
+  { id: '22222222-2222-4222-8222-222222222222', name: 'Ana', type: 'owner' as const },
+];
+
+describe('PropertyCreateForm — server-provisioned options (REQ-PROP-002)', () => {
   beforeEach(() => {
     mockCreatePropertyAction.mockReset();
     mockCreatePropertyAction.mockResolvedValue(INITIAL_ACTION_STATE);
   });
 
-  it('threads the fetched mock profiles into the agent combobox listbox (D5)', async () => {
+  it('renders the passed options in the comboboxes with zero client fetch', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
     const user = setupUser();
-    render(<PropertyCreateForm canCreate />);
+    render(
+      <PropertyCreateForm canCreate options={{ agents: AGENT_OPTIONS, owners: OWNER_OPTIONS }} />,
+    );
 
     await user.click(screen.getByLabelText('Asignar propiedad a un agente'));
-    // The options arrive asynchronously from fetchProfiles — waitFor is
-    // the proof the shell did the fetch + threading, not the section.
-    await waitFor(() =>
-      expect(screen.getByRole('option', { name: 'María Gómez' })).toBeInTheDocument(),
+    expect(screen.getByRole('option', { name: 'Mariano' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Beatriz' })).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByLabelText('Seleccionar un propietario'));
+    expect(screen.getByRole('option', { name: 'Ana' })).toBeInTheDocument();
+
+    // The negative proof of the RSC lift: mounting + opening both
+    // comboboxes never touched the network (no fetchProfiles, no
+    // /business-user — options are props).
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it('keeps the client-side "mar" filter intact over passed options (REQ-PROP-001)', async () => {
+    const user = setupUser();
+    render(
+      <PropertyCreateForm canCreate options={{ agents: AGENT_OPTIONS, owners: OWNER_OPTIONS }} />,
     );
-    expect(screen.getByRole('option', { name: 'Marcos Díaz' })).toBeInTheDocument();
+
+    const agentInput = screen.getByLabelText('Asignar propiedad a un agente');
+    await user.click(agentInput);
+    await user.type(agentInput, 'mar');
+
+    expect(screen.getByRole('option', { name: 'Mariano' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Beatriz' })).toBeNull();
+  });
+
+  it('renders empty comboboxes and still submits when options are empty (fail-open)', async () => {
+    const user = setupUser();
+    render(<PropertyCreateForm canCreate options={{ agents: [], owners: [] }} />);
+
+    await user.click(screen.getByLabelText('Asignar propiedad a un agente'));
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    await user.keyboard('{Escape}');
+
+    await fillValidRequiredFields(user);
+    await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
+
+    // Owner/agent stay optional: an empty option set never blocks create.
+    expect(mockCreatePropertyAction).toHaveBeenCalledTimes(1);
+    const [, payload] = mockCreatePropertyAction.mock.calls[0];
+    expect(payload.agentProfileId).toBeUndefined();
+    expect(payload.ownerProfileId).toBeUndefined();
   });
 
   it('commits the selected agent UUID through the Zod gate on submit (4.6)', async () => {
     const user = setupUser();
-    render(<PropertyCreateForm canCreate />);
+    render(
+      <PropertyCreateForm canCreate options={{ agents: AGENT_OPTIONS, owners: OWNER_OPTIONS }} />,
+    );
 
     await user.click(screen.getByLabelText('Asignar propiedad a un agente'));
-    await waitFor(() =>
-      expect(screen.getByRole('option', { name: 'María Gómez' })).toBeInTheDocument(),
-    );
-    await user.click(screen.getByRole('option', { name: 'María Gómez' }));
+    await user.click(screen.getByRole('option', { name: 'Mariano' }));
 
     await fillValidRequiredFields(user);
     await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
@@ -1605,7 +1713,7 @@ describe('UX polish — profile selection in the form (REQ-101/102, S4, 4.6)', (
     expect(mockCreatePropertyAction).toHaveBeenCalledTimes(1);
     const [, payload] = mockCreatePropertyAction.mock.calls[0];
     // The flat string survives as the real UUID and z.uuid() accepted it.
-    expect(payload.agentProfileId).toBe(MOCK_AGENTS[0].id);
+    expect(payload.agentProfileId).toBe(AGENT_OPTIONS[0].id);
     expect(payload.ownerProfileId).toBeUndefined();
   });
 });

@@ -1,23 +1,40 @@
 // @vitest-environment node
 //
 // `createPropertyAction` is a server-only action. Node env keeps the
-// `next/navigation` / `next/headers` / `authFetch` mocks free of DOM
-// bindings, matching the auth-actions / auth-fetch test boundary.
+// `next/headers` / `authFetch` mocks free of DOM bindings, matching
+// the auth-actions / auth-fetch test boundary.
+//
+// Contract note (change `admin-property-create-snackbar`, design D6):
+// the action NEVER calls `redirect` on success — it returns
+// `{ success: true }`. The only `NEXT_REDIRECT` that may still escape
+// is the one thrown INSIDE `authFetch` (terminal `/login` redirect),
+// which the action re-throws untouched. There is intentionally no
+// `next/navigation` mock: if the action re-acquired a `redirect`
+// success throw, the un-mocked `redirect` throws outside a request
+// context and the suite fails loudly.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CreatePropertyActionState } from '@/types/properties';
 import { createPropertyAction } from '@/lib/properties/actions';
 
-const { redirectMock, authFetchMock } = vi.hoisted(() => ({
-  redirectMock: vi.fn(),
+const { authFetchMock } = vi.hoisted(() => ({
   authFetchMock: vi.fn(),
 }));
 
-vi.mock('next/navigation', () => ({ redirect: redirectMock }));
 vi.mock('@/lib/auth/api', () => ({ authFetch: authFetchMock }));
 
-const INITIAL_STATE: CreatePropertyActionState = { fieldErrors: {}, formError: null };
+const INITIAL_STATE: CreatePropertyActionState = {
+  fieldErrors: {},
+  formError: null,
+  success: false,
+};
+
+const SUCCESS_STATE: CreatePropertyActionState = {
+  fieldErrors: {},
+  formError: null,
+  success: true,
+};
 
 function validInput(): Record<string, unknown> {
   return {
@@ -56,13 +73,6 @@ function decodeBody(call: { body?: BodyInit | null } | undefined): Record<string
 
 beforeEach(() => {
   authFetchMock.mockReset();
-  redirectMock.mockReset();
-  // `redirect()` throws `NEXT_REDIRECT` in real Next.js. The action
-  // MUST let that throw propagate so the framework can complete the
-  // redirect — same contract as `loginAction`.
-  redirectMock.mockImplementation(() => {
-    throw new Error('NEXT_REDIRECT');
-  });
 });
 
 afterEach(() => {
@@ -70,12 +80,15 @@ afterEach(() => {
 });
 
 describe('createPropertyAction — success path', () => {
-  it('POSTs to /properties with the whitelisted DTO body and redirects on 201', async () => {
+  it('POSTs to /properties with the whitelisted DTO body and returns success on 201', async () => {
     authFetchMock.mockResolvedValue(jsonResponse({ success: true, data: { id: 'prop-1' } }, 201));
 
-    await expect(createPropertyAction(INITIAL_STATE, validInput() as never)).rejects.toThrow(
-      'NEXT_REDIRECT',
-    );
+    const result = await createPropertyAction(INITIAL_STATE, validInput() as never);
+
+    // Success contract (design D5/D6): a plain resolved state — the
+    // action never throws NEXT_REDIRECT on create, so nothing here
+    // rejects.
+    expect(result).toEqual(SUCCESS_STATE);
 
     expect(authFetchMock).toHaveBeenCalledTimes(1);
     const [path, init] = authFetchMock.mock.calls[0]!;
@@ -104,8 +117,6 @@ describe('createPropertyAction — success path', () => {
     expect(typeof features.totalAreaM2).toBe('number');
     expect(features.coveredAreaM2).toBe(75);
     expect(features.conservationState).toBe('bueno');
-
-    expect(redirectMock).toHaveBeenCalledWith('/admin/properties?created=1');
   });
 
   it('sends optional DTO keys (internalCode, ownerProfileId, address latitude/longitude, characteristics) when provided', async () => {
@@ -142,9 +153,8 @@ describe('createPropertyAction — success path', () => {
       ],
     };
 
-    await expect(createPropertyAction(INITIAL_STATE, input as never)).rejects.toThrow(
-      'NEXT_REDIRECT',
-    );
+    const result = await createPropertyAction(INITIAL_STATE, input as never);
+    expect(result).toEqual(SUCCESS_STATE);
 
     const body = decodeBody(authFetchMock.mock.calls[0]?.[1]);
     expect(body.internalCode).toBe('INT-001');
@@ -180,9 +190,8 @@ describe('createPropertyAction — success path', () => {
       creatorId: 'injected-creator',
     };
 
-    await expect(createPropertyAction(INITIAL_STATE, input as never)).rejects.toThrow(
-      'NEXT_REDIRECT',
-    );
+    const result = await createPropertyAction(INITIAL_STATE, input as never);
+    expect(result).toEqual(SUCCESS_STATE);
 
     const body = decodeBody(authFetchMock.mock.calls[0]?.[1]);
     expect(body.id).toBeUndefined();
@@ -201,12 +210,27 @@ describe('createPropertyAction — success path', () => {
       },
     };
 
-    await expect(createPropertyAction(INITIAL_STATE, input as never)).rejects.toThrow(
-      'NEXT_REDIRECT',
-    );
+    const result = await createPropertyAction(INITIAL_STATE, input as never);
+    expect(result).toEqual(SUCCESS_STATE);
 
     const body = decodeBody(authFetchMock.mock.calls[0]?.[1]);
     expect(body.features).toBeUndefined();
+  });
+
+  it('re-throws the NEXT_REDIRECT coming from authFetch (terminal /login redirect) — security passthrough (design D6)', async () => {
+    // `authFetch` calls `redirect('/login')` on terminal auth failure,
+    // which throws NEXT_REDIRECT (a digest-coded error in production).
+    // The action's `isRedirectError` guard MUST re-throw it: swallowing
+    // it would collapse the security redirect into a generic formError
+    // and no navigation would occur.
+    const redirectError = Object.assign(new Error('NEXT_REDIRECT'), {
+      digest: 'NEXT_REDIRECT;replace;/login;307;',
+    });
+    authFetchMock.mockRejectedValue(redirectError);
+
+    await expect(createPropertyAction(INITIAL_STATE, validInput() as never)).rejects.toBe(
+      redirectError,
+    );
   });
 });
 
@@ -229,6 +253,7 @@ describe('createPropertyAction — trust boundary (re-safeParse)', () => {
     expect(authFetchMock).not.toHaveBeenCalled();
     expect(result.formError).toBeNull();
     expect(result.fieldErrors.propertyType).toBeTruthy();
+    expect(result.success).toBe(false);
   });
 
   it('returns field errors for nested address validation failures without calling authFetch', async () => {
@@ -346,7 +371,7 @@ describe('createPropertyAction — backend error mapping', () => {
     expect(result.formError).toBeNull();
     expect(result.fieldErrors.addressFormatted).toBe('La dirección es obligatoria');
     expect(result.fieldErrors.featuresTotalAreaM2).toBe('Debe ser mayor a 0');
-    expect(redirectMock).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
   });
 
   it('maps a top-level internalCode validation error to fieldErrors.internalCode', async () => {
@@ -387,7 +412,7 @@ describe('createPropertyAction — backend error mapping', () => {
 
     expect(result.formError).toBeNull();
     expect(result.fieldErrors.internalCode).toBe('Internal code already in use');
-    expect(redirectMock).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
   });
 
   it('maps 404 NOT_FOUND on ownerProfileId to that field', async () => {
@@ -440,7 +465,7 @@ describe('createPropertyAction — backend error mapping', () => {
 
     expect(result.formError).toBeTruthy();
     expect(Object.keys(result.fieldErrors)).toHaveLength(0);
-    expect(redirectMock).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
   });
 
   it('falls back to a generic formError when the response body is not JSON', async () => {
@@ -452,6 +477,7 @@ describe('createPropertyAction — backend error mapping', () => {
 
     expect(result.formError).toBeTruthy();
     expect(result.formError).not.toContain('500');
+    expect(result.success).toBe(false);
   });
 
   it('falls back to a generic formError when authFetch rejects (network failure)', async () => {
@@ -461,18 +487,18 @@ describe('createPropertyAction — backend error mapping', () => {
 
     expect(result.formError).toBeTruthy();
     expect(result.formError).not.toContain('network');
-    expect(redirectMock).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
   });
 
-  it('returns a single empty state (no errors) on a 200 with success envelope but no redirect (non-201 success)', async () => {
+  it('returns a success state on a 200 (non-201 success tolerated, no redirect)', async () => {
     // Backend contract says 201 on create. Some upstreams answer 200.
-    // The action treats 200 as success too: still redirect.
+    // The action treats 200 as success too: same `{ success: true }`
+    // state — the redirect throw is gone from both branches.
     authFetchMock.mockResolvedValue(jsonResponse({ success: true, data: { id: 'p' } }, 200));
 
-    await expect(createPropertyAction(INITIAL_STATE, validInput() as never)).rejects.toThrow(
-      'NEXT_REDIRECT',
-    );
-    expect(redirectMock).toHaveBeenCalledWith('/admin/properties?created=1');
+    const result = await createPropertyAction(INITIAL_STATE, validInput() as never);
+
+    expect(result).toEqual(SUCCESS_STATE);
   });
 });
 
@@ -480,9 +506,8 @@ describe('createPropertyAction — payload composition', () => {
   it('sends the body as a JSON string (authFetch sets Content-Type internally)', async () => {
     authFetchMock.mockResolvedValue(jsonResponse({ success: true, data: { id: 'p' } }, 201));
 
-    await expect(createPropertyAction(INITIAL_STATE, validInput() as never)).rejects.toThrow(
-      'NEXT_REDIRECT',
-    );
+    const result = await createPropertyAction(INITIAL_STATE, validInput() as never);
+    expect(result).toEqual(SUCCESS_STATE);
 
     const init = authFetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     // The action hands `authFetch` a JSON-stringified body and lets
@@ -505,9 +530,8 @@ describe('createPropertyAction — payload composition', () => {
       },
     };
 
-    await expect(createPropertyAction(INITIAL_STATE, inputWithoutStatus as never)).rejects.toThrow(
-      'NEXT_REDIRECT',
-    );
+    const result = await createPropertyAction(INITIAL_STATE, inputWithoutStatus as never);
+    expect(result).toEqual(SUCCESS_STATE);
 
     const body = decodeBody(authFetchMock.mock.calls[0]?.[1]);
     expect(body.status).toBe('disponible');

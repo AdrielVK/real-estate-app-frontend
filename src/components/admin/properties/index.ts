@@ -14,8 +14,11 @@
  * - **create-form PR 2**: `PropertyCreateForm` (client island for
  *   `/admin/properties/create`; the RSC wrapper starts importing it
  *   through this barrel in PR 3).
+ * - **frontend-search**: `PropertyList` (client island owning the
+ *   debounced query + client pagination for `/admin/properties`).
  */
-export { PropertyCard } from './PropertyCard';
+export { PropertyCard, type PropertyCardProps } from './PropertyCard';
 export { PropertyCreateForm } from './PropertyCreateForm';
+export { PropertyList, type PropertyListProps } from './PropertyList';
 export { PropertyPagination } from './PropertyPagination';
 export { PropertyToolbar } from './PropertyToolbar';
