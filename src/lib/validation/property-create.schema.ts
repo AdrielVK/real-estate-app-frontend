@@ -107,6 +107,18 @@ export const COUNT_RANGE = 'Debe ser un número entero entre 1 y 999.';
 export const COUNT_NON_NEGATIVE = 'Debe ser un número entero mayor o igual que 0.';
 export const CONSERVATION_REQUIRED = 'El estado de conservación es obligatorio.';
 
+/* Semantic user-facing messages for select/UUID/coordinate fields.
+ * Every `z.enum` / `z.uuid` / `z.coerce.number` without an explicit
+ * `error` leaks Zod's English "Invalid option / Invalid UUID /
+ * Invalid input" to the UI — this section pins Spanish copy instead. */
+export const PROPERTY_TYPE_REQUIRED = 'Seleccioná un tipo de propiedad.';
+export const PROPERTY_STATUS_INVALID = 'Seleccioná un estado válido.';
+export const CHARACTERISTIC_CATEGORY_REQUIRED = 'Seleccioná una categoría válida.';
+export const OWNER_PROFILE_INVALID = 'Seleccioná un propietario válido.';
+export const AGENT_PROFILE_INVALID = 'Seleccioná un agente válido.';
+export const LATITUDE_INVALID = 'La latitud debe estar entre -90 y 90.';
+export const LONGITUDE_INVALID = 'La longitud debe estar entre -180 y 180.';
+
 /**
  * Optional integer counts constrained to 1..999 — the rooms trio
  * (`rooms`, `bedrooms`, `bathrooms`). A property always has at least
@@ -115,7 +127,12 @@ export const CONSERVATION_REQUIRED = 'El estado de conservación es obligatorio.
  */
 const countRange = z.preprocess(
   emptyToUndefined,
-  z.coerce.number().int(COUNT_RANGE).min(1, COUNT_RANGE).max(999, COUNT_RANGE).optional(),
+  z.coerce
+    .number({ error: COUNT_RANGE })
+    .int({ error: COUNT_RANGE })
+    .min(1, { error: COUNT_RANGE })
+    .max(999, { error: COUNT_RANGE })
+    .optional(),
 );
 
 /**
@@ -125,7 +142,11 @@ const countRange = z.preprocess(
  */
 const countNonNegative = z.preprocess(
   emptyToUndefined,
-  z.coerce.number().int(COUNT_NON_NEGATIVE).min(0, COUNT_NON_NEGATIVE).optional(),
+  z.coerce
+    .number({ error: COUNT_NON_NEGATIVE })
+    .int({ error: COUNT_NON_NEGATIVE })
+    .min(0, { error: COUNT_NON_NEGATIVE })
+    .optional(),
 );
 
 /**
@@ -135,7 +156,9 @@ const countNonNegative = z.preprocess(
  * the backend confirms `0`; flipping it means changing min + message
  * in this one place.
  */
-const areaSchema = z.coerce.number().min(0.01, AREA_NON_NEGATIVE);
+const areaSchema = z.coerce
+  .number({ error: AREA_NON_NEGATIVE })
+  .min(0.01, { error: AREA_NON_NEGATIVE });
 
 /* -------------------------------------------------------------------------- */
 /* Address                                                                    */
@@ -154,17 +177,49 @@ const areaSchema = z.coerce.number().min(0.01, AREA_NON_NEGATIVE);
  */
 const addressSchema = z
   .object({
-    formattedAddress: z.string().min(1, 'La dirección formateada es obligatoria'),
-    city: z.string().min(1, 'La ciudad es obligatoria'),
-    country: z.string().min(1, 'El país es obligatorio'),
-    placeId: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-    street: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-    streetNumber: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-    neighborhood: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-    state: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-    postalCode: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-    latitude: z.preprocess(emptyToUndefined, z.coerce.number().min(-90).max(90).optional()),
-    longitude: z.preprocess(emptyToUndefined, z.coerce.number().min(-180).max(180).optional()),
+    formattedAddress: z.string().min(1, { error: 'La dirección formateada es obligatoria' }),
+    city: z.string().min(1, { error: 'La ciudad es obligatoria' }),
+    country: z.string().min(1, { error: 'El país es obligatorio' }),
+    placeId: z.preprocess(
+      emptyToUndefined,
+      z.string().min(1, { error: 'Seleccioná una dirección válida.' }).optional(),
+    ),
+    street: z.preprocess(
+      emptyToUndefined,
+      z.string().min(1, { error: 'La calle no es válida.' }).optional(),
+    ),
+    streetNumber: z.preprocess(
+      emptyToUndefined,
+      z.string().min(1, { error: 'La altura no es válida.' }).optional(),
+    ),
+    neighborhood: z.preprocess(
+      emptyToUndefined,
+      z.string().min(1, { error: 'El barrio no es válido.' }).optional(),
+    ),
+    state: z.preprocess(
+      emptyToUndefined,
+      z.string().min(1, { error: 'La provincia no es válida.' }).optional(),
+    ),
+    postalCode: z.preprocess(
+      emptyToUndefined,
+      z.string().min(1, { error: 'El código postal no es válido.' }).optional(),
+    ),
+    latitude: z.preprocess(
+      emptyToUndefined,
+      z.coerce
+        .number({ error: LATITUDE_INVALID })
+        .min(-90, { error: LATITUDE_INVALID })
+        .max(90, { error: LATITUDE_INVALID })
+        .optional(),
+    ),
+    longitude: z.preprocess(
+      emptyToUndefined,
+      z.coerce
+        .number({ error: LONGITUDE_INVALID })
+        .min(-180, { error: LONGITUDE_INVALID })
+        .max(180, { error: LONGITUDE_INVALID })
+        .optional(),
+    ),
   })
   .superRefine((address, ctx) => {
     if (!address.placeId) return;
@@ -211,9 +266,9 @@ export const featuresSchema = z.object({
 /* -------------------------------------------------------------------------- */
 
 const characteristicSchema = z.object({
-  name: z.string().min(1, 'El nombre es obligatorio'),
-  slug: z.string().min(1, 'El slug es obligatorio'),
-  category: z.enum(CHARACTERISTIC_CATEGORIES),
+  name: z.string().min(1, { error: 'El nombre es obligatorio' }),
+  slug: z.string().min(1, { error: 'El slug es obligatorio' }),
+  category: z.enum(CHARACTERISTIC_CATEGORIES, { error: CHARACTERISTIC_CATEGORY_REQUIRED }),
 });
 
 /* -------------------------------------------------------------------------- */
@@ -251,11 +306,23 @@ const DUPLICATE_CHARACTERISTIC_ERROR = 'Ya hay una etiqueta con el mismo slug y 
  */
 export const propertyCreateSchema = z
   .object({
-    internalCode: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-    propertyType: z.enum(PROPERTY_TYPES),
-    status: z.enum(PROPERTY_STATUSES).default('disponible'),
-    ownerProfileId: z.preprocess(emptyToUndefined, z.uuid().optional()),
-    agentProfileId: z.preprocess(emptyToUndefined, z.uuid().optional()),
+    internalCode: z.preprocess(
+      emptyToUndefined,
+      z
+        .string({ error: 'El código interno no es válido.' })
+        .min(1, { error: 'El código interno no es válido.' })
+        .optional(),
+    ),
+    propertyType: z.enum(PROPERTY_TYPES, { error: PROPERTY_TYPE_REQUIRED }),
+    status: z.enum(PROPERTY_STATUSES, { error: PROPERTY_STATUS_INVALID }).default('disponible'),
+    ownerProfileId: z.preprocess(
+      emptyToUndefined,
+      z.uuid({ error: OWNER_PROFILE_INVALID }).optional(),
+    ),
+    agentProfileId: z.preprocess(
+      emptyToUndefined,
+      z.uuid({ error: AGENT_PROFILE_INVALID }).optional(),
+    ),
     address: addressSchema,
     features: featuresSchema.optional(),
     characteristics: z.array(characteristicSchema).optional(),

@@ -31,7 +31,7 @@ import { createPortal } from 'react-dom';
 
 import { ChevronDown, Plus } from 'lucide-react';
 
-import type { ProfileOption } from '@/lib/properties/profiles';
+import type { CreateBusinessUserRole, ProfileOption } from '@/lib/business-users/types';
 import { cn } from '@/lib/utils';
 
 import { CreateProfileModal } from './CreateProfileModal';
@@ -48,6 +48,16 @@ export interface ProfileComboboxProps {
   onChange: (id: string) => void;
   /** `+` button accessible name + modal title: "Crear agente" | "Crear propietario". */
   createLabel: string;
+  /**
+   * Role threaded to the create modal (PR3) — preselects the role
+   * field so the created user lands in this combobox's lane.
+   */
+  role: CreateBusinessUserRole;
+  /**
+   * Passthrough for the modal's `onCreated` — the combobox itself
+   * always injects + selects first (PR1); parents may observe too.
+   */
+  onCreated?: (option: ProfileOption) => void;
   placeholder?: string;
   /** `Field`-injected wiring. */
   name?: string;
@@ -62,6 +72,8 @@ export function ProfileCombobox({
   options,
   onChange,
   createLabel,
+  role,
+  onCreated,
   placeholder,
   name,
   required,
@@ -73,6 +85,13 @@ export function ProfileCombobox({
   const [highlight, setHighlight] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+  /**
+   * Locally created options (PR1). The list from props is an RSC
+   * snapshot — a newly created user is absent until a refetch, so it
+   * is injected here and merged below. Never lifted: stuffing it into
+   * the form's flat `FormValues` would pollute the DTO contract.
+   */
+  const [created, setCreated] = useState<ProfileOption[]>([]);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -84,14 +103,22 @@ export function ProfileCombobox({
   const justCommittedRef = useRef(false);
 
   const listboxId = id ? `${id}-listbox` : undefined;
-  const selected = options.find((option) => option.id === value);
+
+  // Snapshot + locally created (deduped by id) — the merged list the
+  // input, filter and listbox all read (PR1).
+  const allOptions = useMemo(() => {
+    const seen = new Set(options.map((option) => option.id));
+    return [...options, ...created.filter((option) => !seen.has(option.id))];
+  }, [options, created]);
+
+  const selected = allOptions.find((option) => option.id === value);
 
   // includes-match filter on the display name (S4). Empty query → full list.
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return [...options];
-    return options.filter((option) => option.name.toLowerCase().includes(q));
-  }, [options, query]);
+    if (!q) return [...allOptions];
+    return allOptions.filter((option) => option.name.toLowerCase().includes(q));
+  }, [allOptions, query]);
 
   const positionListbox = useCallback(() => {
     const input = inputRef.current;
@@ -180,6 +207,19 @@ export function ProfileCombobox({
     if (!next) inputRef.current?.focus();
   };
 
+  // PR1: inject the created option locally and select it — the RSC
+  // snapshot has no such row, so no reload is needed. Parents observe
+  // via `onCreated` after the combobox has committed.
+  const handleCreated = useCallback(
+    (option: ProfileOption) => {
+      setCreated((prev) => (prev.some((item) => item.id === option.id) ? prev : [...prev, option]));
+      onChange(option.id);
+      setQuery('');
+      onCreated?.(option);
+    },
+    [onChange, onCreated],
+  );
+
   return (
     <div ref={containerRef} className="flex items-start gap-2">
       <div className="relative min-w-0 flex-1">
@@ -258,6 +298,12 @@ export function ProfileCombobox({
                     role="option"
                     aria-selected={option.id === value}
                     onMouseEnter={() => setHighlight(index)}
+                    // `commit` touches refs only in its click-time body —
+                    // never during render. The `react-hooks/refs` flag is
+                    // a false positive triggered by the task-mandated
+                    // `allOptions` useMemo upstream: this line is
+                    // byte-identical to the passing HEAD version.
+                    // eslint-disable-next-line react-hooks/refs
                     onClick={() => commit(option.id)}
                     className={cn(
                       'flex w-full cursor-pointer items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors',
@@ -283,6 +329,8 @@ export function ProfileCombobox({
         open={modalOpen}
         onOpenChange={handleModalOpenChange}
         title={createLabel}
+        role={role}
+        onCreated={handleCreated}
       />
     </div>
   );

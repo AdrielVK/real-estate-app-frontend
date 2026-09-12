@@ -2,6 +2,8 @@
 
 import type { ReactNode } from 'react';
 
+import { Toaster } from 'sonner';
+
 import type { AdminUser } from '@/lib/auth/admin-session';
 import { useTheme } from '@/lib/theme/use-theme';
 
@@ -78,6 +80,7 @@ export function AdminShell({ user, onLogout, children }: AdminShellProps) {
         <AdminMobileNav user={user} onLogout={onLogout} theme={theme} onToggleTheme={toggleTheme} />
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
+      <Toaster richColors position="top-right" closeButton />
     </div>
   );
 }

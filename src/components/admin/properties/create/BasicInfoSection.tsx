@@ -123,6 +123,11 @@ export function BasicInfoSection({
             options={ownerOptions}
             createLabel="Crear propietario"
             placeholder="Buscar propietario…"
+            // Domain prop (CreateBusinessUserRole), not the ARIA role
+            // attribute — the rule cannot tell them apart on custom
+            // components.
+            // eslint-disable-next-line jsx-a11y/aria-role
+            role="ADMINISTRATIVE"
             onChange={(next) => onChange('ownerProfileId', next)}
           />
         </Field>
@@ -137,6 +142,10 @@ export function BasicInfoSection({
             options={agentOptions}
             createLabel="Crear agente"
             placeholder="Buscar agente…"
+            // Domain prop (CreateBusinessUserRole), not the ARIA role
+            // attribute — see the owner combobox above.
+            // eslint-disable-next-line jsx-a11y/aria-role
+            role="AGENT"
             onChange={(next) => onChange('agentProfileId', next)}
           />
         </Field>
