@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 
 import { resolveAdminUser } from '@/lib/auth/admin-session';
 import { canCreateProperty } from '@/lib/auth/roles';
-import { getPropertyAgentName } from '@/lib/properties/agent';
+import { fetchBusinessUsers } from '@/lib/business-users/api';
 import { fetchPropertiesByRole } from '@/lib/properties/api';
 import { buildAgentMap, buildOwnerMap } from '@/lib/properties/name-maps';
 
@@ -77,18 +77,19 @@ export default async function AdminPropertiesPage() {
   // Truncation: the backend knows about more rows than we fetched.
   const truncated = result.total > result.properties.length;
 
-  // Resolve agent names server-side, merged over the client-safe mock
-  // registry. Dedup by profile id so the batch scales with distinct
-  // agents, not rows.
+  // Resolve agent names server-side for the cards (no hashtag fallback).
+  // Single AGENT fetch (fail-open) merged over the mock registry so
+  // existing mock ids and real DB ids both resolve. The card receives
+  // `agentName` only when the map has a hit — otherwise it renders
+  // date-only without the `Agente #xxxx` placeholder.
   const agentNameMap = buildAgentMap();
-  const agentProfileIds = [
-    ...new Set(result.properties.map((property) => property.agentProfileId).filter(Boolean)),
-  ] as string[];
-  const agentNames = await Promise.all(agentProfileIds.map((id) => getPropertyAgentName(id)));
-  agentProfileIds.forEach((id, index) => {
-    const name = agentNames[index];
-    if (name) agentNameMap.set(id, name);
-  });
+  try {
+    const agents = await fetchBusinessUsers({ role: 'AGENT', limit: 100 });
+    for (const agent of agents) agentNameMap.set(agent.id, agent.name);
+  } catch {
+    // fetchBusinessUsers already fail-opens to [] and handles
+    // NEXT_REDIRECT; this catch is defensive for any unexpected throw.
+  }
 
   const ownerNameMap = buildOwnerMap();
 

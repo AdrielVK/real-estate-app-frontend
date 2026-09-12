@@ -21,7 +21,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PropertyResponse } from '@/types/properties';
 import { type AdminUser, resolveAdminUser } from '@/lib/auth/admin-session';
-import { getPropertyAgentName } from '@/lib/properties/agent';
 
 import AdminPropertiesPage from '@/app/(admin)/admin/properties/page';
 
@@ -37,15 +36,16 @@ vi.mock('@/lib/properties/api', () => ({
   fetchPropertiesByRole: vi.fn(),
 }));
 
-vi.mock('@/lib/properties/agent', () => ({
-  getPropertyAgentName: vi.fn().mockResolvedValue(null),
+vi.mock('@/lib/business-users/api', () => ({
+  fetchBusinessUsers: vi.fn().mockResolvedValue([]),
 }));
 
 const mockCookies = vi.mocked(cookies);
 const mockResolveAdminUser = vi.mocked(resolveAdminUser);
-const mockGetAgentName = vi.mocked(getPropertyAgentName);
 const { fetchPropertiesByRole: mockFetchPropertiesByRole } = await import('@/lib/properties/api');
 const mockedFetchByRole = vi.mocked(mockFetchPropertiesByRole);
+const { fetchBusinessUsers: mockFetchBusinessUsers } = await import('@/lib/business-users/api');
+const mockedFetchAgents = vi.mocked(mockFetchBusinessUsers);
 
 function makeCookieStore(value: string | undefined): Awaited<ReturnType<typeof cookies>> {
   return {
@@ -129,8 +129,8 @@ describe('AdminPropertiesPage', () => {
     mockCookies.mockReset();
     mockResolveAdminUser.mockReset();
     mockedFetchByRole.mockReset();
-    mockGetAgentName.mockReset();
-    mockGetAgentName.mockResolvedValue(null);
+    mockedFetchAgents.mockReset();
+    mockedFetchAgents.mockResolvedValue([]);
     setupDefaultMock();
   });
 
@@ -193,7 +193,7 @@ describe('AdminPropertiesPage', () => {
     expect(mockedFetchByRole).toHaveBeenCalledTimes(1);
   });
 
-  it('resolves agent names server-side per distinct profile and forwards them to the cards', async () => {
+  it('resolves agent names server-side via single AGENT fetch and forwards them to the cards', async () => {
     mockCookies.mockResolvedValue(makeCookieStore('fake-jwt'));
     mockResolveAdminUser.mockReturnValue(makeUser('ADMIN'));
     const agentId = 'agent-777';
@@ -203,14 +203,13 @@ describe('AdminPropertiesPage', () => {
       totalPages: 1,
       page: 1,
     });
-    mockGetAgentName.mockResolvedValue('Agente #agent-');
+    mockedFetchAgents.mockResolvedValue([{ id: agentId, name: 'María Gómez', type: 'agent' }]);
 
     const element = await AdminPropertiesPage();
     render(element);
 
-    expect(mockGetAgentName).toHaveBeenCalledTimes(1); // deduped by profile id
-    expect(mockGetAgentName).toHaveBeenCalledWith(agentId);
-    await waitFor(() => expect(screen.getByText('Agente #agent-')).toBeInTheDocument());
+    expect(mockedFetchAgents).toHaveBeenCalledWith({ role: 'AGENT', limit: 100 });
+    await waitFor(() => expect(screen.getByText('María Gómez')).toBeInTheDocument());
   });
 
   it('shows the truncation banner when the backend total exceeds the fetched dataset', async () => {
