@@ -10,7 +10,7 @@ import { slugify } from '@/lib/validation/slug';
 import type { CharacteristicRowValues } from '@/components/admin/properties/create/CharacteristicsSection';
 import type { AddressValues } from '@/components/property/AddressField';
 
-export const INITIAL_VALUES: Record<FieldKey, string> = {
+export const INITIAL_VALUES: Record<Exclude<FieldKey, 'characteristics'>, string> = {
   internalCode: '',
   propertyType: '',
   status: 'disponible',
@@ -101,7 +101,7 @@ function omitKeys<T extends Record<string, unknown>>(obj: T, keys: readonly stri
 }
 
 export interface PropertyCreateState {
-  values: Record<FieldKey, string>;
+  values: Record<Exclude<FieldKey, 'characteristics'>, string>;
   clientErrors: Partial<Record<FieldKey, string>>;
   serverState: CreatePropertyActionState;
   featuresEnabled: boolean;
@@ -134,7 +134,7 @@ export function createPropertyCreateStore() {
     featureValidation: {},
     setField: (key: FieldKey, value: string): void =>
       set((state) => {
-        const nextValues: Record<FieldKey, string> = { ...state.values, [key]: value };
+        const nextValues: Record<string, string> = { ...state.values, [key]: value };
         let nextErrors: Partial<Record<FieldKey, string>> = state.clientErrors;
         if (key in state.clientErrors) {
           const { [key]: _removed, ...rest } = state.clientErrors as Record<string, string>;
@@ -195,23 +195,27 @@ export function createPropertyCreateStore() {
       })),
     hydrateAddress: (addr: AddressValues): void =>
       set((state) => {
-        const nextValues: Record<FieldKey, string> = { ...state.values };
+        const nextValues: Record<string, string> = { ...state.values } as Record<string, string>;
         for (const k of ADDRESS_VALUE_KEYS) {
           (nextValues as Record<string, string>)[k as string] =
-            (addr as Record<string, string>)[k as string] ?? '';
+            (addr as unknown as Record<string, string>)[k as string] ?? '';
         }
         return {
-          values: nextValues,
+          values: nextValues as unknown as Record<Exclude<FieldKey, 'characteristics'>, string>,
           confirmedSnapshot: { ...addr },
           addressDirty: false,
         };
       }),
     clearAddress: (): void =>
       set((state) => {
-        const nextValues: Record<FieldKey, string> = { ...state.values };
+        const nextValues: Record<string, string> = { ...state.values } as Record<string, string>;
         for (const k of ADDRESS_VALUE_KEYS) {
           (nextValues as Record<string, string>)[k as string] = '';
         }
+        const typedValues = nextValues as unknown as Record<
+          Exclude<FieldKey, 'characteristics'>,
+          string
+        >;
         const nextClientErrors = omitKeys(
           state.clientErrors as Record<string, unknown>,
           ADDRESS_VALUE_KEYS as unknown as string[],
@@ -221,7 +225,7 @@ export function createPropertyCreateStore() {
           ADDRESS_VALUE_KEYS as unknown as string[],
         ) as Partial<Record<FieldKey, string>>;
         return {
-          values: nextValues,
+          values: typedValues,
           confirmedSnapshot: null,
           addressDirty: false,
           clientErrors: nextClientErrors,
@@ -233,13 +237,28 @@ export function createPropertyCreateStore() {
     setServerState: (next: CreatePropertyActionState): void => set({ serverState: { ...next } }),
     setFeatureValidationError: (key: FieldKey, message: string | undefined): void =>
       set((state) => {
+        let nextValidation: Partial<Record<FieldKey, string>>;
+        let nextErrors: Partial<Record<FieldKey, string>> = state.clientErrors;
         if (message === undefined) {
-          if (!(key in state.featureValidation)) return state;
-          const { [key]: _removed, ...rest } = state.featureValidation as Record<string, string>;
-          void _removed;
-          return { featureValidation: rest as Partial<Record<FieldKey, string>> };
+          if (key in state.featureValidation) {
+            const { [key]: _r, ...rest } = state.featureValidation as Record<string, string>;
+            void _r;
+            nextValidation = rest as Partial<Record<FieldKey, string>>;
+          } else {
+            nextValidation = state.featureValidation;
+          }
+          if (key in state.clientErrors) {
+            const { [key]: _e, ...restE } = state.clientErrors as Record<string, string>;
+            void _e;
+            nextErrors = restE as Partial<Record<FieldKey, string>>;
+          }
+          if (nextValidation === state.featureValidation && nextErrors === state.clientErrors)
+            return state;
+          return { featureValidation: nextValidation, clientErrors: nextErrors };
         }
-        return { featureValidation: { ...state.featureValidation, [key]: message } };
+        nextValidation = { ...state.featureValidation, [key]: message };
+        nextErrors = { ...state.clientErrors, [key]: message };
+        return { featureValidation: nextValidation, clientErrors: nextErrors };
       }),
     reset: (): void =>
       set(() => ({

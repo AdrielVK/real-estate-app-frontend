@@ -20,36 +20,28 @@
  *   acid-green (light operational) nor broadsheet (cards, not columns).
  *
  * Composition (vercel `architecture-compound-components`):
- * - `PropertyCreateProvider` supplies the flat string record + errors so
+ * - Store `usePropertyCreateStore` supplies the flat string record + errors so
  *   sections need not be re-threaded via 12+ props. Sections keep their
- *   props API for isolated unit tests; Provider is the declarative shell
- *   when composed.
- * - Boolean `featuresEnabled` lives as toggle state inside the shell and
- *   is exposed via the provider-aware stepper, not as a leaked prop bag.
+ *   props API for isolated unit tests; store selectors are the declarative
+ *   source when composed.
+ * - Boolean `featuresEnabled` lives as toggle state inside the store and
+ *   is exposed via the stepper, not as a leaked prop bag.
  */
 
 'use client';
 
-import {
-  type FormEvent,
-  startTransition,
-  useActionState,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { type FormEvent, startTransition, useActionState, useEffect, useRef } from 'react';
 
 import { useRouter } from 'next/navigation';
 
 import { AlertCircle, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
-import type { CreatePropertyActionState, FieldKey } from '@/types/properties';
+import type { FieldKey } from '@/types/properties';
 import type { ProfileOption } from '@/lib/business-users/types';
 import { createPropertyAction } from '@/lib/properties/actions';
 import { cn } from '@/lib/utils';
 import { featuresSchema, propertyCreateSchema } from '@/lib/validation/property-create.schema';
-import { slugify } from '@/lib/validation/slug';
 
 import { Button } from '@/components/ui/Button';
 
@@ -60,57 +52,12 @@ import {
   CharacteristicsSection,
 } from './create/CharacteristicsSection';
 import { FeaturesSection, type FeaturesValues } from './create/FeaturesSection';
-import { PropertyCreateProvider } from './create/form-context';
 
 import { useDebouncedFieldError } from '@/hooks/useDebouncedFieldError';
+import { INITIAL_STATE, usePropertyCreateStore } from '@/stores/admin/property-create.store';
 
 /** Full form state — the features fields ride the flat string record. */
 type FormValues = BasicInfoValues & AddressValues & FeaturesValues;
-
-const INITIAL_VALUES: FormValues = {
-  internalCode: '',
-  propertyType: '',
-  status: 'disponible',
-  ownerProfileId: '',
-  agentProfileId: '',
-  addressFormatted: '',
-  addressCity: '',
-  addressCountry: '',
-  addressPlaceId: '',
-  addressStreet: '',
-  addressStreetNumber: '',
-  addressNeighborhood: '',
-  addressState: '',
-  addressPostalCode: '',
-  addressLatitude: '',
-  addressLongitude: '',
-  featuresTotalAreaM2: '',
-  featuresCoveredAreaM2: '',
-  featuresConservationState: '',
-  featuresRooms: '',
-  featuresBedrooms: '',
-  featuresBathrooms: '',
-  featuresGarages: '',
-  featuresFloor: '',
-  featuresAgeYears: '',
-};
-
-/**
- * The feature `FieldKey`s, used to drop stale errors when the
- * toggle hides their controls (a hidden field must not keep the
- * aria-live summary lit).
- */
-const FEATURE_FIELD_KEYS: FieldKey[] = [
-  'featuresTotalAreaM2',
-  'featuresCoveredAreaM2',
-  'featuresConservationState',
-  'featuresRooms',
-  'featuresBedrooms',
-  'featuresBathrooms',
-  'featuresGarages',
-  'featuresFloor',
-  'featuresAgeYears',
-];
 
 /**
  * Feature `FieldKey` → `featuresSchema` key — the inverse of the
@@ -146,12 +93,6 @@ function validateFeatureField(key: string, value: string): string | undefined {
   const parsed = picked.safeParse({ [schemaKey]: value });
   return parsed.success ? undefined : parsed.error.issues[0]?.message;
 }
-
-const INITIAL_STATE: CreatePropertyActionState = {
-  fieldErrors: {},
-  formError: null,
-  success: false,
-};
 
 /** Summary copy shown in the aria-live region while fields are invalid. */
 const SUMMARY_ERROR = 'Revisá los campos marcados.';
@@ -303,13 +244,22 @@ export function PropertyCreateForm({
 }: PropertyCreateFormProps) {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(createPropertyAction, INITIAL_STATE);
-  const [values, setValues] = useState<FormValues>(INITIAL_VALUES);
-  const [clientErrors, setClientErrors] = useState<Partial<Record<FieldKey, string>>>({});
-  const [featuresEnabled, setFeaturesEnabled] = useState(false);
-  const [characteristics, setCharacteristics] = useState<CharacteristicRowValues[]>([]);
-  // DCS-1/DCS-4 lift: the address section reports core-vs-snapshot drift;
-  // the submit gate below never lets stale lat/lng reach the action.
-  const [addressDirty, setAddressDirty] = useState(false);
+  const values = usePropertyCreateStore((s) => s.values) as FormValues;
+  const clientErrors = usePropertyCreateStore((s) => s.clientErrors);
+  const serverState = usePropertyCreateStore((s) => s.serverState);
+  const featuresEnabled = usePropertyCreateStore((s) => s.featuresEnabled);
+  const characteristics = usePropertyCreateStore((s) => s.characteristics);
+  const addressDirty = usePropertyCreateStore((s) => s.addressDirty);
+
+  const setField = usePropertyCreateStore((s) => s.setField);
+  const toggleFeatures = usePropertyCreateStore((s) => s.toggleFeatures);
+  const addCharacteristic = usePropertyCreateStore((s) => s.addCharacteristic);
+  const removeCharacteristic = usePropertyCreateStore((s) => s.removeCharacteristic);
+  const updateCharacteristic = usePropertyCreateStore((s) => s.updateCharacteristic);
+  const setErrors = usePropertyCreateStore((s) => s.setErrors);
+  const setServerState = usePropertyCreateStore((s) => s.setServerState);
+  const setFeatureValidationError = usePropertyCreateStore((s) => s.setFeatureValidationError);
+
   const errorSummaryRef = useRef<HTMLDivElement>(null);
 
   // Debounced per-field re-validation (physical-features-ux D1): only
@@ -321,17 +271,13 @@ export function PropertyCreateForm({
     validate: validateFeatureField,
     onError: (key, message) => {
       const fieldKey = key as FieldKey;
-      setClientErrors((prev) => {
-        if (message === undefined) {
-          if (!(fieldKey in prev)) return prev;
-          const { [fieldKey]: _removed, ...rest } = prev;
-          void _removed;
-          return rest;
-        }
-        return { ...prev, [fieldKey]: message };
-      });
+      setFeatureValidationError(fieldKey, message);
     },
   });
+
+  useEffect(() => {
+    setServerState(state);
+  }, [state, setServerState]);
 
   // Success feedback (change `admin-property-create-snackbar`, design
   // D6/D7): the action now RETURNS `{ success: true }` instead of
@@ -353,25 +299,8 @@ export function PropertyCreateForm({
 
   if (!canCreate) return null;
 
-  const clearClientErrors = (keys: readonly FieldKey[]) => {
-    setClientErrors((prev) => {
-      const removed = new Set<string>(keys);
-      const next = Object.fromEntries(
-        Object.entries(prev).filter(([key]) => !removed.has(key)),
-      ) as Partial<Record<FieldKey, string>>;
-      if (Object.keys(next).length === Object.keys(prev).length) return prev;
-      return next;
-    });
-  };
-
-  const handleChange = (key: FieldKey, value: string) => {
-    setValues((prev) => ({ ...prev, [key]: value }));
-    setClientErrors((prev) => {
-      if (!(key in prev)) return prev;
-      const { [key]: _removed, ...rest } = prev;
-      void _removed;
-      return rest;
-    });
+  const handleChange = (key: FieldKey, value: string): void => {
+    setField(key, value);
     // Feature keys open a debounced re-parse window; every other key
     // keeps the submit-time-only contract untouched.
     if (key in FEATURE_SCHEMA_KEY) {
@@ -379,47 +308,37 @@ export function PropertyCreateForm({
     }
   };
 
-  const handleFeaturesToggle = (enabled: boolean) => {
-    setFeaturesEnabled(enabled);
+  const handleFeaturesToggle = (enabled: boolean): void => {
     if (!enabled) {
       // Toggle-off is the stale-error sweep (spec): drop the pending
       // windows first so no late `onError` resurrects a hidden field,
       // then clear the feature slots (hidden fields must not keep the
       // aria-live summary lit).
       featureValidation.cancelAll();
-      clearClientErrors(FEATURE_FIELD_KEYS);
     }
+    toggleFeatures(enabled);
   };
 
-  const handleRowChange = (index: number, key: 'name' | 'category', value: string) => {
-    setCharacteristics((prev) =>
-      prev.map((row, i) => {
-        if (i !== index) return row;
-        if (key === 'name') return { ...row, name: value, slug: slugify(value) };
-        return { ...row, category: value };
-      }),
-    );
-    clearClientErrors(['characteristics']);
+  const handleRowChange = (index: number, key: 'name' | 'category', value: string): void => {
+    updateCharacteristic(index, key, value);
   };
 
-  const handleRowAdd = () => {
-    setCharacteristics((prev) => [...prev, { name: '', slug: '', category: '' }]);
-    clearClientErrors(['characteristics']);
+  const handleRowAdd = (): void => {
+    addCharacteristic();
   };
 
-  const handleRowRemove = (index: number) => {
-    setCharacteristics((prev) => prev.filter((_, i) => i !== index));
-    clearClientErrors(['characteristics']);
+  const handleRowRemove = (index: number): void => {
+    removeCharacteristic(index);
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     // DCS-4 pre-parse gate: while the core fields diverge from the last
     // confirmed suggestion, the hidden lat/lng/placeId are stale — no
     // DTO is sent and no parse runs. Re-selecting a suggestion (the
     // auto-trigger's fresh pick) clears the flag.
     if (addressDirty) {
-      setClientErrors({ addressFormatted: DIRTY_CORE_ERROR });
+      setErrors({ addressFormatted: DIRTY_CORE_ERROR });
       requestAnimationFrame(() => {
         errorSummaryRef.current?.focus();
       });
@@ -430,25 +349,25 @@ export function PropertyCreateForm({
     );
     if (!parsed.success) {
       const mapped = mapIssuesToFieldErrors(parsed.error.issues);
-      setClientErrors(mapped);
+      setErrors(mapped);
       // Focus the error summary for keyboard/AT users (ux `focus-management`).
       requestAnimationFrame(() => {
         errorSummaryRef.current?.focus();
       });
       return;
     }
-    setClientErrors({});
+    setErrors({});
     startTransition(() => {
       formAction(parsed.data);
     });
   };
 
   const fieldErrors: Partial<Record<FieldKey, string>> = {
-    ...state.fieldErrors,
+    ...serverState.fieldErrors,
     ...clientErrors,
   };
   const hasFieldErrors = Object.keys(fieldErrors).length > 0;
-  const summary = state.formError ?? (hasFieldErrors ? SUMMARY_ERROR : '');
+  const summary = serverState.formError ?? (hasFieldErrors ? SUMMARY_ERROR : '');
   const errorEntries = Object.entries(fieldErrors).filter(([, v]) => Boolean(v)) as [
     FieldKey,
     string,
@@ -536,144 +455,131 @@ export function PropertyCreateForm({
   }
 
   return (
-    <PropertyCreateProvider
-      value={{
-        values: values as Record<FieldKey, string>,
-        errors: fieldErrors,
-        onChange: handleChange,
-      }}
+    <form
+      noValidate
+      onSubmit={handleSubmit}
+      className="glass-panel grid gap-6 rounded-lg p-4 sm:p-6"
+      style={{ scrollPaddingBottom: '88px' } as React.CSSProperties}
     >
-      <form
-        noValidate
-        onSubmit={handleSubmit}
-        className="glass-panel grid gap-6 rounded-lg p-4 sm:p-6"
-        style={{ scrollPaddingBottom: '88px' } as React.CSSProperties}
-      >
-        {/* Stepper header — ops progress at a glance */}
-        <div className="grid gap-3 rounded-xl border border-border bg-card/40 px-4 py-3 sm:px-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="font-sans text-xs font-medium tracking-tight text-muted-foreground">
-              Progreso · {completedSteps} de 4 secciones
-            </p>
-            <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
-              {hasFieldErrors ? `${errorEntries.length} por revisar` : 'Sin errores'}
-            </span>
-          </div>
-          <div className="grid grid-cols-4 gap-2">
-            {steps.map((step, idx) => {
-              const stepTone = getStepTone(step);
-              const badgeTone = getBadgeTone(step);
-              return (
-                <div
-                  key={step.label}
-                  className={cn(
-                    'flex items-center gap-1.5 rounded-full border px-2.5 py-2 text-xs font-medium transition-colors sm:gap-2 sm:px-3',
-                    stepTone,
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'grid size-5 place-items-center rounded-full border text-[11px] leading-none',
-                      badgeTone,
-                    )}
-                    aria-hidden="true"
-                  >
-                    {getStepIcon(step, idx)}
-                  </span>
-                  <span className="hidden truncate sm:inline">{step.label}</span>
-                  <span className="truncate sm:hidden">{step.label.slice(0, 4)}.</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-copper transition-[width] duration-300 ease-out"
-              style={{ width: `${(completedSteps / 4) * 100}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Focusable top error summary — ux `error-summary` + `focus-management` */}
-        {hasFieldErrors ? (
-          <div
-            ref={errorSummaryRef}
-            tabIndex={-1}
-            role="alert"
-            aria-labelledby="error-summary-title"
-            className="rounded-xl border border-destructive/30 bg-destructive/[0.06] px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-          >
-            <p
-              id="error-summary-title"
-              className="flex items-center gap-2 text-sm font-medium text-destructive"
-            >
-              <AlertCircle aria-hidden="true" className="size-4 shrink-0" />
-              Revisá los campos marcados.
-            </p>
-            <ul className="mt-2 grid gap-1 text-sm">
-              {errorEntries.map(([key, msg]) => (
-                <li key={key}>
-                  <a
-                    href={`#${key}`}
-                    className="underline decoration-destructive/30 underline-offset-2 hover:decoration-destructive focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                    onClick={(e) => {
-                      // Ensure the target exists (characteristics group has no single input id).
-                      if (key === 'characteristics') {
-                        e.preventDefault();
-                        document.getElementById('characteristic-name-0')?.focus();
-                      }
-                    }}
-                  >
-                    {msg}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        <BasicInfoSection
-          values={values}
-          errors={fieldErrors}
-          onChange={handleChange}
-          agentOptions={options.agents}
-          ownerOptions={options.owners}
-        />
-        <AddressSection
-          values={values}
-          errors={fieldErrors}
-          onChange={handleChange}
-          onDirtyCoreChange={setAddressDirty}
-        />
-        <FeaturesSection
-          enabled={featuresEnabled}
-          values={values}
-          errors={fieldErrors}
-          onChange={handleChange}
-          onToggle={handleFeaturesToggle}
-        />
-        <CharacteristicsSection
-          rows={characteristics}
-          error={fieldErrors.characteristics}
-          onAdd={handleRowAdd}
-          onRemove={handleRowRemove}
-          onChange={handleRowChange}
-        />
-
-        {/* Reserved-space error region — retained for test/AT compat */}
-        <p aria-live="polite" role="status" className="min-h-5 text-sm text-destructive">
-          {summary}
-        </p>
-
-        <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-background/80 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-          <p className="text-xs text-muted-foreground">
-            {hasFieldErrors ? `${errorEntries.length} campos por revisar` : 'Listo para crear'}
+      {/* Stepper header — ops progress at a glance */}
+      <div className="grid gap-3 rounded-xl border border-border bg-card/40 px-4 py-3 sm:px-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="font-sans text-xs font-medium tracking-tight text-muted-foreground">
+            Progreso · {completedSteps} de 4 secciones
           </p>
-          <Button type="submit" size="lg" disabled={isPending} aria-busy={isPending}>
-            {isPending ? 'Creando…' : 'Crear propiedad'}
-          </Button>
+          <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+            {hasFieldErrors ? `${errorEntries.length} por revisar` : 'Sin errores'}
+          </span>
         </div>
-      </form>
-    </PropertyCreateProvider>
+        <div className="grid grid-cols-4 gap-2">
+          {steps.map((step, idx) => {
+            const stepTone = getStepTone(step);
+            const badgeTone = getBadgeTone(step);
+            return (
+              <div
+                key={step.label}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-full border px-2.5 py-2 text-xs font-medium transition-colors sm:gap-2 sm:px-3',
+                  stepTone,
+                )}
+              >
+                <span
+                  className={cn(
+                    'grid size-5 place-items-center rounded-full border text-[11px] leading-none',
+                    badgeTone,
+                  )}
+                  aria-hidden="true"
+                >
+                  {getStepIcon(step, idx)}
+                </span>
+                <span className="hidden truncate sm:inline">{step.label}</span>
+                <span className="truncate sm:hidden">{step.label.slice(0, 4)}.</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-copper transition-[width] duration-300 ease-out"
+            style={{ width: `${(completedSteps / 4) * 100}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Focusable top error summary — ux `error-summary` + `focus-management` */}
+      {hasFieldErrors ? (
+        <div
+          ref={errorSummaryRef}
+          tabIndex={-1}
+          role="alert"
+          aria-labelledby="error-summary-title"
+          className="rounded-xl border border-destructive/30 bg-destructive/[0.06] px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          <p
+            id="error-summary-title"
+            className="flex items-center gap-2 text-sm font-medium text-destructive"
+          >
+            <AlertCircle aria-hidden="true" className="size-4 shrink-0" />
+            Revisá los campos marcados.
+          </p>
+          <ul className="mt-2 grid gap-1 text-sm">
+            {errorEntries.map(([key, msg]) => (
+              <li key={key}>
+                <a
+                  href={`#${key}`}
+                  className="underline decoration-destructive/30 underline-offset-2 hover:decoration-destructive focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                  onClick={(e) => {
+                    // Ensure the target exists (characteristics group has no single input id).
+                    if (key === 'characteristics') {
+                      e.preventDefault();
+                      document.getElementById('characteristic-name-0')?.focus();
+                    }
+                  }}
+                >
+                  {msg}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <BasicInfoSection
+        values={values}
+        errors={fieldErrors}
+        onChange={handleChange}
+        agentOptions={options.agents}
+        ownerOptions={options.owners}
+      />
+      <AddressSection values={values} errors={fieldErrors} onChange={handleChange} />
+      <FeaturesSection
+        enabled={featuresEnabled}
+        values={values}
+        errors={fieldErrors}
+        onChange={handleChange}
+        onToggle={handleFeaturesToggle}
+      />
+      <CharacteristicsSection
+        rows={characteristics}
+        error={fieldErrors.characteristics}
+        onAdd={handleRowAdd}
+        onRemove={handleRowRemove}
+        onChange={handleRowChange}
+      />
+
+      {/* Reserved-space error region — retained for test/AT compat */}
+      <p aria-live="polite" role="status" className="min-h-5 text-sm text-destructive">
+        {summary}
+      </p>
+
+      <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-background/80 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+        <p className="text-xs text-muted-foreground">
+          {hasFieldErrors ? `${errorEntries.length} campos por revisar` : 'Listo para crear'}
+        </p>
+        <Button type="submit" size="lg" disabled={isPending} aria-busy={isPending}>
+          {isPending ? 'Creando…' : 'Crear propiedad'}
+        </Button>
+      </div>
+    </form>
   );
 }
