@@ -35,6 +35,7 @@ import {
 } from '@/components/property/AddressField';
 
 import { server } from '@/mocks/server';
+import { usePropertyCreateStore } from '@/stores/admin/property-create.store';
 
 // The map now mounts through `AddressConfirmedSection`'s `next/dynamic`
 // (ui-refine moved the const; the mock targets the MODULE ID so it keeps
@@ -189,12 +190,14 @@ function renderControlled(onDirtyCoreChange = vi.fn()) {
 
 describe('AddressField', () => {
   beforeEach(() => {
+    usePropertyCreateStore.getState().reset();
     vi.useFakeTimers();
   });
 
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    usePropertyCreateStore.getState().reset();
   });
 
   /* ------------------------------------------------------------------ */

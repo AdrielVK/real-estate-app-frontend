@@ -35,15 +35,8 @@ const config: KnipConfig = {
   // consumers, so we list the file as intentionally unused at
   // this slice boundary. The entry will be removed after PR2
   // lands and the shell imports them.
-  // admin-properties redesign: `form-context` exposes a composition
-  // provider + hook (`PropertyCreateProvider`, `usePropertyCreateContext`)
-  // for vercel `architecture-compound-components`. The provider is used
-  // in `PropertyCreateForm`; the hook is the public composition surface
-  // for future consumers and is intentionally not yet imported elsewhere
-  // at this slice boundary.
   ignore: [
     'src/types/auth.ts',
-    'src/components/admin/properties/create/form-context.tsx',
     'src/lib/geocoding/places-api.ts',
     'src/components/admin/properties/create/AddressSection.tsx',
     'src/hooks/useAddressSearch.ts',

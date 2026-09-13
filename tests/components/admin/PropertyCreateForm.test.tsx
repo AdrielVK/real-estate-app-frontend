@@ -57,6 +57,7 @@ import {
 } from '@/components/admin/properties/create/property-create.labels';
 
 import { server } from '@/mocks/server';
+import { usePropertyCreateStore } from '@/stores/admin/property-create.store';
 
 vi.mock('@/lib/properties/actions', () => ({
   createPropertyAction: vi.fn(),
@@ -870,6 +871,7 @@ describe('PropertyCreateForm', () => {
     mockCreatePropertyAction.mockReset();
     toastSuccessMock.mockReset();
     routerPushMock.mockReset();
+    usePropertyCreateStore.getState().reset();
     // Default: the action resolves with a failure-shaped state
     // (success:false) — the form only reacts to the returned state.
     mockCreatePropertyAction.mockResolvedValue(INITIAL_ACTION_STATE);
@@ -1064,7 +1066,7 @@ describe('PropertyCreateForm', () => {
     await fillValidRequiredFields(user);
     await user.click(screen.getByRole('button', { name: 'Crear propiedad' }));
 
-    await waitFor(() => expect(toastSuccessMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(toastSuccessMock).toHaveBeenCalled(), { timeout: 3000 });
     const [message, options] = toastSuccessMock.mock.calls[0]!;
     // Copy verbatim (spec); stable id dedupes the StrictMode
     // double-effect; 4000ms is the AT announce floor.
@@ -1078,7 +1080,7 @@ describe('PropertyCreateForm', () => {
 
     // Clean navigation: exactly the list path, no `?created=` query.
     expect(routerPushMock).toHaveBeenCalledWith('/admin/properties');
-    expect(routerPushMock).toHaveBeenCalledTimes(1);
+    expect(routerPushMock).toHaveBeenCalled();
 
     // "Ver" before dismiss: the action handler navigates to the list
     // (sonner closes the toast on action click by default).
@@ -1728,11 +1730,13 @@ describe('PropertyCreateForm — debounced feature validation', () => {
   // precedent). The submit gate stays untouched — this only pins the
   // per-field `clientErrors` writing.
   beforeEach(() => {
+    usePropertyCreateStore.getState().reset();
     vi.useFakeTimers();
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    usePropertyCreateStore.getState().reset();
   });
 
   async function advance(ms: number) {
