@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 import Link from 'next/link';
 
@@ -11,6 +11,8 @@ import { usePropertySearch } from '@/lib/properties/usePropertySearch';
 import { PropertyCard } from './PropertyCard';
 import { PropertyPagination } from './PropertyPagination';
 import { PropertyToolbar } from './PropertyToolbar';
+
+import { usePropertyListStore } from '@/stores/admin/property-list.store';
 
 /** Cards per page — matches the retired server-side PAGE_SIZE contract. */
 const PAGE_SIZE = 6;
@@ -52,8 +54,10 @@ export function PropertyList({
   canCreate,
   truncated,
 }: PropertyListProps) {
-  const [query, setQuery] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
+  const query = usePropertyListStore((s) => s.query);
+  const currentPage = usePropertyListStore((s) => s.currentPage);
+  const setQuery = usePropertyListStore((s) => s.setQuery);
+  const setPage = usePropertyListStore((s) => s.setPage);
 
   const maps = useMemo<NameMaps>(
     () => ({ ownerNameMap, agentNameMap }),
@@ -63,14 +67,9 @@ export function PropertyList({
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   // Clamp defensively: a filter shrink can leave `currentPage` beyond the
-  // new total (the reset in `handleSearchChange` covers the common path).
-  const safePage = Math.min(currentPage, totalPages);
+  // new total (the atomic setQuery reset to 1 covers the common path).
+  const safePage = Math.min(Math.max(1, currentPage), Math.max(1, totalPages));
   const visible = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-
-  function handleSearchChange(next: string) {
-    setQuery(next);
-    setCurrentPage(1); // spec: filtering always returns to page 1
-  }
 
   const datasetEmpty = properties.length === 0;
   const noResults = hasQuery && filtered.length === 0;
@@ -80,7 +79,7 @@ export function PropertyList({
       <PropertyToolbar
         canCreate={canCreate}
         searchValue={query}
-        onSearchChange={handleSearchChange}
+        onSearchChange={setQuery}
         resultCount={hasQuery ? filtered.length : undefined}
       />
 
@@ -130,11 +129,7 @@ export function PropertyList({
       ) : null}
 
       {!datasetEmpty && !noResults && totalPages > 1 ? (
-        <PropertyPagination
-          currentPage={safePage}
-          totalPages={totalPages}
-          onPageChange={setCurrentPage}
-        />
+        <PropertyPagination currentPage={safePage} totalPages={totalPages} onPageChange={setPage} />
       ) : null}
     </div>
   );

@@ -17,6 +17,7 @@ import type { PropertyResponse } from '@/types/properties';
 import { type AdminUser, resolveAdminUser } from '@/lib/auth/admin-session';
 
 import AdminPropertiesPage from '@/app/(admin)/admin/properties/page';
+import { usePropertyListStore } from '@/stores/admin/property-list.store';
 
 vi.mock('next/headers', () => ({ cookies: vi.fn() }));
 vi.mock('@/lib/auth/admin-session', () => ({ resolveAdminUser: vi.fn() }));
@@ -84,6 +85,7 @@ async function search(value: string) {
 
 describe('Admin properties search — integration/a11y', () => {
   beforeEach(() => {
+    usePropertyListStore.getState().reset();
     mockedFetchByRole.mockReset();
     mockedFetchByRole.mockResolvedValue({
       properties: DATASET,

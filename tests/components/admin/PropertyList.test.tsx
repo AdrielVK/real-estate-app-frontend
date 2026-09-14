@@ -20,11 +20,13 @@
 import type { ComponentProps } from 'react';
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { PropertyResponse } from '@/types/properties';
 
 import { PropertyList } from '@/components/admin/properties/PropertyList';
+
+import { usePropertyListStore } from '@/stores/admin/property-list.store';
 
 function makeProp(index: number, city = 'Rosario'): PropertyResponse {
   const n = index + 1;
@@ -88,6 +90,10 @@ async function typeQuery(value: string) {
 }
 
 describe('PropertyList', () => {
+  beforeEach(() => {
+    usePropertyListStore.getState().reset();
+  });
+
   it('renders the toolbar, the first page of 6 cards, and client pagination', async () => {
     renderList();
     expect(searchInput()).toBeInTheDocument();
