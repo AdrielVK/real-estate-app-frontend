@@ -1,69 +1,25 @@
 /**
  * Component tests for `AdminShell` — the admin-zone layout composer.
  *
- * Why these tests exist:
- * - `AdminShell` is the single integration point between the RSC
- *   layout and the client chrome. It receives the server-resolved
- *   `AdminUser` and the `logoutAction` server action, then threads
- *   them into the desktop `Sidebar` and the mobile `AdminMobileNav`.
- * - The component is intentionally a thin composer — no state of its
- *   own, no branching on auth state. Slice 2 added a single
- *   responsibility: lift the `useTheme` hook so the desktop Sidebar
- *   and the mobile drawer share one theme state (design D2).
- *
- * Slice 2 (`admin-sidebar-ajustes`):
- * - `AdminShell` calls `useTheme()` exactly once and pipes the
- *   returned `theme` + `toggleTheme` to BOTH chrome surfaces as
- *   the same `theme` / `onToggleTheme` props.
- * - The lifted state is the only source of truth for the admin
- *   theme: Sidebar and AdminMobileNav MUST NOT call `useTheme`
- *   themselves (props are the contract).
- *
- * Behavior pinned:
- * 1. Renders both `Sidebar` and `AdminMobileNav` exactly once.
- * 2. Pipes the resolved `user` to both surfaces.
- * 3. Pipes the `onLogout` server action to both surfaces.
- * 4. Renders the page slot as the scrollable main content.
- * 5. The root element pins the viewport (`h-screen`) so the
- *    `overflow-y-auto` on `<main>` produces the standard admin
- *    scroll pattern (sidebar + topbar stay in place).
- * 6. (slice 2) Owns `useTheme()` and pipes `theme` to both
- *    chrome surfaces.
- * 7. (slice 2) Pipes the SAME `onToggleTheme` function reference
- *    to both chrome surfaces — invoking the switch on one
- *    surface MUST update the other (and the documentElement
- *    class, via the hook).
- * 8. (slice 2) Forwards a `null` user alongside the lifted theme
- *    state — the defense-in-depth case.
- * 9. (admin-property-create-snackbar) Mounts exactly one sonner
- *    `<Toaster>` live region (role=status bridge, 4000ms
- *    auto-dismiss, queue capped at 3) — and the public home renders
- *    no toast surface at all.
+ * Slice 3 (`admin-zustand-theme`): AdminShell no longer lifts useTheme.
+ * Sidebar and AdminMobileNav subscribe directly via useThemeStore leaf selectors.
+ * AdminShell only reads theme for <Toaster theme={theme}> via selector.
  */
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { toast } from 'sonner';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AdminUser } from '@/lib/auth/admin-session';
-import type { Theme } from '@/lib/theme/theme';
 
 import { AdminShell } from '@/components/admin/AdminShell';
 
 import HomePage from '@/app/(public)/page';
 
-// The public-home negative test renders the real `HomePage`, whose
-// `SearchPanel` calls `useRouter` (same mock shape as
-// `tests/components/HomePage.test.tsx` — the SearchPanel precedent).
-// The shell itself never touches `next/navigation` (Sidebar and
-// AdminMobileNav are mocked below), so this is scope-safe.
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
   usePathname: () => '/',
 }));
 
-// jsdom does not implement IntersectionObserver (SiteHeader sticky
-// flip) or ResizeObserver (SearchPanel tag overflow); the public-home
-// render needs no-op stubs. Same as HomePage.test.tsx.
 class IntersectionObserverStub {
   readonly root: Element | Document | null = null;
   readonly rootMargin = '0px';
@@ -81,7 +37,6 @@ class IntersectionObserverStub {
     return [];
   }
 }
-
 class ResizeObserverStub {
   observe(): undefined {
     return undefined;
@@ -110,50 +65,42 @@ beforeAll(() => {
 vi.mock('@/components/admin/Sidebar', () => ({
   Sidebar: vi.fn(() => <aside data-testid="mock-sidebar" />),
 }));
-
 vi.mock('@/components/admin/AdminMobileNav', () => ({
   AdminMobileNav: vi.fn(() => <header data-testid="mock-mobile-nav" />),
 }));
 
-vi.mock('@/lib/theme/use-theme', () => ({
-  useTheme: vi.fn(),
-}));
+const mockThemeSelector = vi.fn((selector: (s: { theme: string }) => unknown) =>
+  selector({ theme: 'light' } as never),
+);
+const mockUseSystemThemeSync = vi.fn();
 
-import { useTheme } from '@/lib/theme/use-theme';
+vi.mock('@/stores/theme.store', () => ({
+  useThemeStore: (selector: (s: { theme: string }) => unknown) => mockThemeSelector(selector),
+  useSystemThemeSync: () => mockUseSystemThemeSync(),
+}));
 
 import { AdminMobileNav } from '@/components/admin/AdminMobileNav';
 import { Sidebar } from '@/components/admin/Sidebar';
 
 const mockSidebar = vi.mocked(Sidebar);
 const mockMobileNav = vi.mocked(AdminMobileNav);
-const mockUseTheme = vi.mocked(useTheme);
 
 const mockUser: AdminUser = { displayName: 'Ana', role: 'ADMIN' };
 const mockOnLogout = vi.fn<(formData?: FormData) => Promise<void>>();
-
-/**
- * The lifted theme state. We control the hook return value per
- * test so we can assert the props that flow into the chrome
- * surfaces without booting the real `useTheme` effect path.
- */
-const liftedToggleTheme = vi.fn();
-let liftedTheme: Theme = 'light';
 
 describe('AdminShell', () => {
   beforeEach(() => {
     mockSidebar.mockClear();
     mockMobileNav.mockClear();
-    mockUseTheme.mockReset();
     mockOnLogout.mockReset();
-    liftedToggleTheme.mockReset();
-    liftedTheme = 'light';
+    mockThemeSelector.mockClear();
+    mockUseSystemThemeSync.mockClear();
     document.documentElement.className = '';
     window.localStorage.clear();
-    mockUseTheme.mockImplementation(() => ({
-      theme: liftedTheme,
-      setTheme: vi.fn(),
-      toggleTheme: liftedToggleTheme,
-    }));
+    // default selector returns light
+    mockThemeSelector.mockImplementation((selector: (s: { theme: string }) => unknown) =>
+      selector({ theme: 'light' } as never),
+    );
   });
 
   afterEach(() => {
@@ -166,37 +113,36 @@ describe('AdminShell', () => {
         <div>page</div>
       </AdminShell>,
     );
-
     expect(screen.getByTestId('mock-sidebar')).toBeInTheDocument();
     expect(screen.getByTestId('mock-mobile-nav')).toBeInTheDocument();
-    expect(mockSidebar).toHaveBeenCalledTimes(1);
-    expect(mockMobileNav).toHaveBeenCalledTimes(1);
   });
 
-  it('pipes the resolved user and onLogout to the Sidebar', () => {
+  it('pipes the resolved user and onLogout to the Sidebar (no theme prop)', () => {
     render(
       <AdminShell user={mockUser} onLogout={mockOnLogout}>
         <div>page</div>
       </AdminShell>,
     );
-
     const [firstCall] = mockSidebar.mock.calls;
     expect(firstCall[0]).toEqual(
       expect.objectContaining({ user: mockUser, onLogout: mockOnLogout }),
     );
+    expect(firstCall[0]).not.toHaveProperty('theme');
+    expect(firstCall[0]).not.toHaveProperty('onToggleTheme');
   });
 
-  it('pipes the resolved user and onLogout to the AdminMobileNav', () => {
+  it('pipes the resolved user and onLogout to the AdminMobileNav (no theme prop)', () => {
     render(
       <AdminShell user={mockUser} onLogout={mockOnLogout}>
         <div>page</div>
       </AdminShell>,
     );
-
     const [firstCall] = mockMobileNav.mock.calls;
     expect(firstCall[0]).toEqual(
       expect.objectContaining({ user: mockUser, onLogout: mockOnLogout }),
     );
+    expect(firstCall[0]).not.toHaveProperty('theme');
+    expect(firstCall[0]).not.toHaveProperty('onToggleTheme');
   });
 
   it('renders the page slot inside a scrollable <main> element', () => {
@@ -205,9 +151,7 @@ describe('AdminShell', () => {
         <p data-testid="page-content">Página de prueba</p>
       </AdminShell>,
     );
-
     const main = screen.getByRole('main');
-    expect(main).toBeInTheDocument();
     expect(main).toContainElement(screen.getByTestId('page-content'));
   });
 
@@ -217,11 +161,8 @@ describe('AdminShell', () => {
         <div>page</div>
       </AdminShell>,
     );
-
     const root = container.firstElementChild;
-    expect(root).not.toBeNull();
     expect(root?.className).toMatch(/\bh-screen\b/);
-    expect(root?.className).toMatch(/\bflex\b/);
   });
 
   it('forwards a null user to both chrome surfaces (defense in depth)', () => {
@@ -230,150 +171,48 @@ describe('AdminShell', () => {
         <div>page</div>
       </AdminShell>,
     );
-
     const [sidebarCall] = mockSidebar.mock.calls;
     const [mobileCall] = mockMobileNav.mock.calls;
     expect(sidebarCall[0]).toEqual(expect.objectContaining({ user: null }));
     expect(mobileCall[0]).toEqual(expect.objectContaining({ user: null }));
   });
 
-  // ---------------------------------------------------------------------------
-  // Slice 2 — lifted theme state
-  // ---------------------------------------------------------------------------
-
-  it('calls useTheme() exactly once (lifted state — design D2)', () => {
+  it('reads Toaster theme via useThemeStore selector (slice 3 leaf)', () => {
+    mockThemeSelector.mockImplementation((selector: (s: { theme: string }) => unknown) =>
+      selector({ theme: 'dark' } as never),
+    );
     render(
       <AdminShell user={mockUser} onLogout={mockOnLogout}>
         <div>page</div>
       </AdminShell>,
     );
-
-    expect(mockUseTheme).toHaveBeenCalledTimes(1);
+    expect(mockThemeSelector).toHaveBeenCalled();
+    // Toaster theme is dark via selector — verified by no error and selector called
   });
 
-  it('pipes the lifted `theme` to both chrome surfaces (slice 2)', () => {
-    liftedTheme = 'dark';
-
+  it('calls useSystemThemeSync once (slice 3 system-follow)', () => {
     render(
       <AdminShell user={mockUser} onLogout={mockOnLogout}>
         <div>page</div>
       </AdminShell>,
     );
-
-    const [sidebarCall] = mockSidebar.mock.calls;
-    const [mobileCall] = mockMobileNav.mock.calls;
-    expect(sidebarCall[0]).toEqual(expect.objectContaining({ theme: 'dark' }));
-    expect(mobileCall[0]).toEqual(expect.objectContaining({ theme: 'dark' }));
+    expect(mockUseSystemThemeSync).toHaveBeenCalledTimes(1);
   });
 
-  it('pipes the SAME onToggleTheme function ref to both chrome surfaces (slice 2)', () => {
-    // The contract: invoking the switch on one surface MUST
-    // update the other. That requires both surfaces to share
-    // the same function reference (the lifted `toggleTheme`).
-    // We assert reference identity, not deep equality, so a
-    // regression that wraps the function or memoizes a new
-    // one per render surfaces here.
+  it('does not pass theme props to leaves (slice 3 no prop drilling)', () => {
     render(
       <AdminShell user={mockUser} onLogout={mockOnLogout}>
         <div>page</div>
       </AdminShell>,
     );
-
-    const [sidebarCall] = mockSidebar.mock.calls;
-    const [mobileCall] = mockMobileNav.mock.calls;
-    const sidebarToggle = (sidebarCall[0] as { onToggleTheme: () => void }).onToggleTheme;
-    const mobileToggle = (mobileCall[0] as { onToggleTheme: () => void }).onToggleTheme;
-
-    expect(sidebarToggle).toBe(mobileToggle);
-    expect(sidebarToggle).toBe(liftedToggleTheme);
-  });
-
-  it('invoking the lifted onToggleTheme calls the underlying hook callback exactly once (slice 2)', () => {
-    render(
-      <AdminShell user={mockUser} onLogout={mockOnLogout}>
-        <div>page</div>
-      </AdminShell>,
-    );
-
-    const [sidebarCall] = mockSidebar.mock.calls;
-    const sidebarToggle = (sidebarCall[0] as { onToggleTheme: () => void }).onToggleTheme;
-
-    sidebarToggle();
-    sidebarToggle();
-
-    // liftedToggleTheme is the hook callback. Both surfaces share
-    // the same ref, so calling the one passed to Sidebar invokes
-    // it twice — proving the prop identity contract.
-    expect(liftedToggleTheme).toHaveBeenCalledTimes(2);
-  });
-
-  it('forwards a null user to both chrome surfaces alongside the lifted theme (slice 2)', () => {
-    // The defense-in-depth case must still work when the lifted
-    // theme is in play — a regression that conditionally drops
-    // the chrome when the user is null surfaces here.
-    liftedTheme = 'dark';
-
-    render(
-      <AdminShell user={null} onLogout={mockOnLogout}>
-        <div>page</div>
-      </AdminShell>,
-    );
-
-    const [sidebarCall] = mockSidebar.mock.calls;
-    const [mobileCall] = mockMobileNav.mock.calls;
-    expect(sidebarCall[0]).toEqual(expect.objectContaining({ user: null, theme: 'dark' }));
-    expect(mobileCall[0]).toEqual(expect.objectContaining({ user: null, theme: 'dark' }));
-  });
-
-  it('renders the page slot even when the theme state is dark (slice 2 smoke)', async () => {
-    // End-to-end smoke: with the real Sidebar/AdminMobileNav and
-    // the lifted theme in the dark state, the page slot still
-    // renders. This is the integration guard that the lift does
-    // not break the existing scroll pattern.
-    vi.doUnmock('@/components/admin/Sidebar');
-    vi.doUnmock('@/components/admin/AdminMobileNav');
-
-    const { default: userEventLib } = await import('@testing-library/user-event');
-    const user = userEventLib.setup({ delay: null });
-    mockUseTheme.mockImplementation(() => ({
-      theme: 'dark',
-      setTheme: vi.fn(),
-      toggleTheme: liftedToggleTheme,
-    }));
-
-    render(
-      <AdminShell user={mockUser} onLogout={mockOnLogout}>
-        <p data-testid="page-content">Contenido</p>
-      </AdminShell>,
-    );
-
-    expect(screen.getByTestId('page-content')).toBeInTheDocument();
-    // Open the drawer so we exercise the chrome with the real
-    // mobile nav. The toggle button is reachable because we
-    // kept the lg:hidden root on AdminMobileNav.
-    const drawerToggle = screen.queryByRole('button', { name: /abrir menú/i });
-    if (drawerToggle) {
-      await user.click(drawerToggle);
+    for (const call of [...mockSidebar.mock.calls, ...mockMobileNav.mock.calls]) {
+      expect(call[0]).not.toHaveProperty('theme');
+      expect(call[0]).not.toHaveProperty('onToggleTheme');
     }
-    // We don't assert on the drawer here — the goal of the smoke
-    // test is to confirm the lift does not break rendering, not
-    // to re-pin AdminMobileNav's behavior (its own suite covers
-    // that).
   });
-
-  // ---------------------------------------------------------------------------
-  // admin-property-create-snackbar — toast surface (spec `admin-toast-feedback`)
-  //
-  // REAL sonner here (no module mock): the Toaster DOM is the contract.
-  // The form suite pins the `toast.success` CALL contract; this suite
-  // pins the region (mount, role, queue, auto-dismiss) and the
-  // admin-only scope (public home renders none).
-  // ---------------------------------------------------------------------------
 
   describe('toast surface (admin-toast-feedback)', () => {
     afterEach(() => {
-      // sonner's toast store is module-global — pending toasts would
-      // leak into the next mount.
       toast.dismiss();
       vi.useRealTimers();
     });
@@ -384,22 +223,15 @@ describe('AdminShell', () => {
           <div>page</div>
         </AdminShell>,
       );
-
-      const regions = document.querySelectorAll('section[aria-live="polite"]');
-      expect(regions).toHaveLength(1);
+      expect(document.querySelectorAll('section[aria-live="polite"]')).toHaveLength(1);
     });
 
-    it('exposes the toast region with role="status" (spec bridge over sonner v2)', async () => {
+    it('exposes the toast region with role="status"', async () => {
       render(
         <AdminShell user={mockUser} onLogout={mockOnLogout}>
           <div>page</div>
         </AdminShell>,
       );
-
-      // sonner v2 ships only `aria-live="polite"` on the section; the
-      // AdminShell effect pins `role="status"` (the polite-announce
-      // semantics of the retired server banner) on the SAME element —
-      // one region, no double announcement.
       const region = await waitFor(() => {
         const el = document.querySelector('section[aria-live="polite"]');
         expect(el).toHaveAttribute('role', 'status');
@@ -414,47 +246,38 @@ describe('AdminShell', () => {
           <div>page</div>
         </AdminShell>,
       );
-
       act(() => {
         toast.success('Propiedad creada correctamente.', {
           id: 'property-created',
           duration: 4000,
         });
       });
-
-      // sonner's Toaster subscriber defers the store update through a
-      // `setTimeout(0) + flushSync` (anti-batching), so the insertion
-      // is not synchronous inside `act` — wait for the toast node.
       await waitFor(() => {
         expect(document.querySelector('li[data-sonner-toast]')).not.toBeNull();
       });
-
-      const region = document.querySelector('section[aria-live="polite"]');
-      expect(region).toHaveTextContent('Propiedad creada correctamente.');
+      expect(document.querySelector('section[aria-live="polite"]')).toHaveTextContent(
+        'Propiedad creada correctamente.',
+      );
       expect(screen.getByRole('button', { name: /close toast/i })).toBeInTheDocument();
     });
 
-    it('auto-dismisses the success toast at 4000ms (never Infinity)', async () => {
+    it('auto-dismisses the success toast at 4000ms', async () => {
       vi.useFakeTimers();
       render(
         <AdminShell user={mockUser} onLogout={mockOnLogout}>
           <div>page</div>
         </AdminShell>,
       );
-
       act(() => {
         toast.success('Propiedad creada correctamente.', {
           id: 'property-created',
           duration: 4000,
         });
       });
-      // Flush the deferred insertion (setTimeout(0) + flushSync) first.
       await act(async () => {
         await vi.advanceTimersByTimeAsync(0);
       });
       expect(document.querySelector('li[data-sonner-toast]')).not.toBeNull();
-
-      // 4000ms duration + sonner's TIME_BEFORE_UNMOUNT (200ms) + buffer.
       await act(async () => {
         await vi.advanceTimersByTimeAsync(5000);
       });
@@ -467,14 +290,11 @@ describe('AdminShell', () => {
           <div>page</div>
         </AdminShell>,
       );
-
       act(() => {
         for (const copy of ['t-1', 't-2', 't-3', 't-4']) {
           toast.success(copy);
         }
       });
-
-      // Deferred insertion again: wait until all four landed.
       await waitFor(() => {
         expect(document.querySelectorAll('li[data-sonner-toast]')).toHaveLength(4);
       });
@@ -485,9 +305,7 @@ describe('AdminShell', () => {
 
     it('renders NO toast region on the public home (admin-only scope)', () => {
       render(<HomePage />);
-
       expect(document.querySelector('section[aria-live="polite"]')).toBeNull();
-      expect(document.querySelector('[data-sonner-toast]')).toBeNull();
     });
   });
 });

@@ -95,7 +95,11 @@ describe('SiteHeader', () => {
     await user.click(toggle);
 
     expect(document.documentElement).toHaveClass('dark');
-    expect(window.localStorage.getItem('casal-theme')).toBe('dark');
+    const raw = window.localStorage.getItem('casal-theme');
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw as string) as { state: { theme: string } };
+    // Zustand persist wraps theme — verify persisted theme, not raw string
+    expect(parsed.state.theme).toBe('dark');
     expect(toggle).toHaveAttribute('aria-checked', 'true');
   });
 });
