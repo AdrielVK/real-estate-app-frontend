@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import type { AdminUser } from '@/lib/auth/admin-session';
-import type { Theme } from '@/lib/theme/theme';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/Button';
@@ -12,6 +11,8 @@ import { Button } from '@/components/ui/Button';
 import { ADMIN_NAV_ITEMS } from './nav-items';
 import { ThemeSwitch } from './ThemeSwitch';
 import { UserBlock } from './UserBlock';
+
+import { useThemeStore } from '@/stores/theme.store';
 
 export interface SidebarProps {
   /**
@@ -37,20 +38,6 @@ export interface SidebarProps {
    * RSC-as-trust-boundary pattern.
    */
   onLogout: (formData?: FormData) => Promise<void>;
-  /**
-   * Current resolved theme. Lifted to `AdminShell` (design D2) so
-   * the desktop Sidebar and the mobile drawer share one state and
-   * can never diverge. The switch is fully controlled — Sidebar
-   * does NOT call `useTheme` itself.
-   */
-  theme: Theme;
-  /**
-   * Toggle callback for the footer `ThemeSwitch`. Sourced from
-   * `useTheme().toggleTheme` inside `AdminShell`. Persistence is
-   * handled by the hook (design D5) — Sidebar MUST NOT write to
-   * `localStorage` itself.
-   */
-  onToggleTheme: () => void;
   /** Optional extra classes appended to the root element. */
   className?: string;
 }
@@ -97,8 +84,10 @@ const FALLBACK_USER: AdminUser = { displayName: null, role: 'AGENT' };
  *   form. The switch consumes the lifted `theme` / `onToggleTheme`
  *   props from `AdminShell`; Sidebar itself stays stateless.
  */
-export function Sidebar({ user, onLogout, theme, onToggleTheme, className }: SidebarProps) {
+export function Sidebar({ user, onLogout, className }: SidebarProps) {
   const pathname = usePathname();
+  const theme = useThemeStore((s) => s.theme);
+  const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const effectiveUser = user ?? FALLBACK_USER;
 
   return (
@@ -110,7 +99,7 @@ export function Sidebar({ user, onLogout, theme, onToggleTheme, className }: Sid
     >
       <div className="flex items-center justify-between gap-3 border-b border-sidebar-border px-6 py-5">
         <h2 className="text-base font-semibold tracking-tight">casal propiedades</h2>
-        <ThemeSwitch theme={theme} onToggle={onToggleTheme} />
+        <ThemeSwitch theme={theme} onToggle={toggleTheme} />
       </div>
 
       <nav aria-label="Navegación de administración" className="flex-1 px-3 py-4">

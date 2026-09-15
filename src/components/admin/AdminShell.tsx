@@ -5,10 +5,11 @@ import { type ReactNode, useEffect, useRef } from 'react';
 import { Toaster } from 'sonner';
 
 import type { AdminUser } from '@/lib/auth/admin-session';
-import { useTheme } from '@/lib/theme/use-theme';
 
 import { AdminMobileNav } from './AdminMobileNav';
 import { Sidebar } from './Sidebar';
+
+import { useSystemThemeSync, useThemeStore } from '@/stores/theme.store';
 
 export interface AdminShellProps {
   /**
@@ -37,20 +38,14 @@ export interface AdminShellProps {
  *   marking the composer client makes the boundary explicit and
  *   matches the design doc (D1: hybrid shell with client chrome).
  *
- * Why does `AdminShell` own `useTheme`? (slice 2 — design D2)
- * - Theme state is the single piece of cross-surface state. The
- *   desktop Sidebar and the mobile drawer MUST stay in lockstep —
- *   toggling one MUST update the other (and the public header via
- *   the shared `casal-theme` key). Lifting to `AdminShell` via
- *   props keeps the data flow explicit and testable; the alternative
- *   (per-surface hook + `storage` event) is racy and hides the
- *   contract.
- * - The hook is called EXACTLY ONCE here. Sidebar and
- *   AdminMobileNav MUST NOT call `useTheme` themselves — they
- *   receive `theme` + `onToggleTheme` as props. The reference
- *   identity is preserved (the hook returns memoized
- *   `toggleTheme`/`setTheme`), so a single render of AdminShell
- *   gives both surfaces the same function reference.
+ * Why leaf selectors (slice 3 — design leaf)?
+ * - Theme is single global Zustand store (`src/stores/theme.store.ts`)
+ *   with `persist` on `casal-theme`. Sidebar and AdminMobileNav
+ *   subscribe directly via `useThemeStore(s=>s.theme/toggleTheme)` so
+ *   AdminShell no longer lifts props — leaf subscriptions keep shell
+ *   independent and prevent theme toggle from remounting drawers.
+ * - `useSystemThemeSync` attaches `matchMedia` listener only when no
+ *   stored preference (system-follow) and applies without persisting.
  *
  * Why does `isOpen` stay inside `AdminMobileNav` (not lifted)?
  * - The disclosure state is the local view state of the mobile
@@ -84,8 +79,8 @@ export interface AdminShellProps {
  *   The toast chrome follows the lifted admin theme.
  */
 export function AdminShell({ user, onLogout, children }: AdminShellProps) {
-  // Lifted theme state — design D2. Called exactly once.
-  const { theme, toggleTheme } = useTheme();
+  const theme = useThemeStore((s) => s.theme);
+  useSystemThemeSync();
 
   // sonner v2 renders the live-region `<section>` with
   // `aria-live="polite"` but no explicit role; the spec pins
@@ -100,9 +95,9 @@ export function AdminShell({ user, onLogout, children }: AdminShellProps) {
 
   return (
     <div className="flex h-screen">
-      <Sidebar user={user} onLogout={onLogout} theme={theme} onToggleTheme={toggleTheme} />
+      <Sidebar user={user} onLogout={onLogout} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <AdminMobileNav user={user} onLogout={onLogout} theme={theme} onToggleTheme={toggleTheme} />
+        <AdminMobileNav user={user} onLogout={onLogout} />
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
       <Toaster

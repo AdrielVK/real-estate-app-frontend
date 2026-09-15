@@ -8,7 +8,6 @@ import { usePathname } from 'next/navigation';
 import { Menu, X } from 'lucide-react';
 
 import type { AdminUser } from '@/lib/auth/admin-session';
-import type { Theme } from '@/lib/theme/theme';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/Button';
@@ -16,6 +15,8 @@ import { Button } from '@/components/ui/Button';
 import { ADMIN_NAV_ITEMS } from './nav-items';
 import { ThemeSwitch } from './ThemeSwitch';
 import { UserBlock } from './UserBlock';
+
+import { useThemeStore } from '@/stores/theme.store';
 
 export interface AdminMobileNavProps {
   /**
@@ -34,19 +35,6 @@ export interface AdminMobileNavProps {
    * client JS and clears cookies server-side.
    */
   onLogout: (formData?: FormData) => Promise<void>;
-  /**
-   * Current resolved theme. Lifted to `AdminShell` (design D2) so
-   * the desktop Sidebar and the mobile drawer share one state and
-   * can never diverge.
-   */
-  theme: Theme;
-  /**
-   * Toggle callback for the drawer `ThemeSwitch`. Sourced from
-   * `useTheme().toggleTheme` inside `AdminShell`. The drawer state
-   * (`isOpen`) stays local — toggling the theme MUST NOT remount
-   * the drawer or close it.
-   */
-  onToggleTheme: () => void;
   /** Optional extra classes appended to the root element. */
   className?: string;
 }
@@ -96,14 +84,10 @@ const FALLBACK_USER: AdminUser = { displayName: null, role: 'AGENT' };
  *   `UserBlock` and the logout form, driven by the lifted
  *   `theme` / `onToggleTheme` props.
  */
-export function AdminMobileNav({
-  user,
-  onLogout,
-  theme,
-  onToggleTheme,
-  className,
-}: AdminMobileNavProps) {
+export function AdminMobileNav({ user, onLogout, className }: AdminMobileNavProps) {
   const pathname = usePathname();
+  const theme = useThemeStore((s) => s.theme);
+  const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const [isOpen, setIsOpen] = useState(false);
   const effectiveUser = user ?? FALLBACK_USER;
 
@@ -126,7 +110,7 @@ export function AdminMobileNav({
           </span>
           <span className="text-sm font-semibold tracking-tight">casal propiedades</span>
         </Link>
-        <ThemeSwitch theme={theme} onToggle={onToggleTheme} />
+        <ThemeSwitch theme={theme} onToggle={toggleTheme} />
       </div>
 
       <Button
