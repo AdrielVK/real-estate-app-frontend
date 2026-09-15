@@ -40,6 +40,7 @@ import { toast } from 'sonner';
 import type { FieldKey } from '@/types/properties';
 import type { ProfileOption } from '@/lib/business-users/types';
 import { createPropertyAction } from '@/lib/properties/actions';
+import { mapIssuesToFieldErrors } from '@/lib/properties/field-errors';
 import { cn } from '@/lib/utils';
 import { featuresSchema, propertyCreateSchema } from '@/lib/validation/property-create.schema';
 
@@ -54,6 +55,7 @@ import {
 import { FeaturesSection, type FeaturesValues } from './create/FeaturesSection';
 
 import { useDebouncedFieldError } from '@/hooks/useDebouncedFieldError';
+import { usePropertyCreateStepper } from '@/hooks/usePropertyCreateStepper';
 import { INITIAL_STATE, usePropertyCreateStore } from '@/stores/admin/property-create.store';
 
 /** Full form state — the features fields ride the flat string record. */
@@ -107,54 +109,6 @@ const SUMMARY_ERROR = 'Revisá los campos marcados.';
 const DIRTY_CORE_ERROR = 'La dirección fue modificada. Seleccioná una sugerencia para confirmar.';
 
 /**
- * Zod issue paths (dot notation) → the form's flat `FieldKey`. Mirrors
- * the action's `FIELD_PATH_MAP` (see duplication note above). Unknown
- * paths are dropped — the form cannot render an error for a field it
- * does not own — EXCEPT `characteristics.*` row paths, which collapse
- * onto the group slot (see `resolveFieldKey`).
- */
-const ISSUE_PATH_TO_FIELD: Record<string, FieldKey> = {
-  internalCode: 'internalCode',
-  propertyType: 'propertyType',
-  status: 'status',
-  ownerProfileId: 'ownerProfileId',
-  agentProfileId: 'agentProfileId',
-  'address.formattedAddress': 'addressFormatted',
-  'address.city': 'addressCity',
-  'address.country': 'addressCountry',
-  'address.placeId': 'addressPlaceId',
-  'address.street': 'addressStreet',
-  'address.streetNumber': 'addressStreetNumber',
-  'address.neighborhood': 'addressNeighborhood',
-  'address.state': 'addressState',
-  'address.postalCode': 'addressPostalCode',
-  'address.latitude': 'addressLatitude',
-  'address.longitude': 'addressLongitude',
-  'features.totalAreaM2': 'featuresTotalAreaM2',
-  'features.coveredAreaM2': 'featuresCoveredAreaM2',
-  'features.conservationState': 'featuresConservationState',
-  'features.rooms': 'featuresRooms',
-  'features.bedrooms': 'featuresBedrooms',
-  'features.bathrooms': 'featuresBathrooms',
-  'features.garages': 'featuresGarages',
-  'features.floor': 'featuresFloor',
-  'features.ageYears': 'featuresAgeYears',
-  characteristics: 'characteristics',
-};
-
-/**
- * Resolve a dot-notation issue path to a `FieldKey`. Mirrors the
- * action's `resolveFieldKey` exactly: exact map first, then any
- * row-scoped `characteristics.*` path collapses onto the group slot
- * (the section renders a single error line, not one per row).
- */
-function resolveFieldKey(path: string): FieldKey | undefined {
-  const mapped = ISSUE_PATH_TO_FIELD[path];
-  if (mapped) return mapped;
-  return path.startsWith('characteristics.') ? 'characteristics' : undefined;
-}
-
-/**
  * Flatten the controlled record into the nested shape the schema
  * declares. Pure function — no state reads. The features toggle is
  * the payload switch (design D7): off means the `features` KEY is
@@ -206,21 +160,6 @@ function buildPayload(
   }
 
   return payload;
-}
-
-/** First issue per field wins — same rule the action's mapper uses. */
-function mapIssuesToFieldErrors(
-  issues: readonly { path: readonly PropertyKey[]; message: string }[],
-): Partial<Record<FieldKey, string>> {
-  const fieldErrors: Partial<Record<FieldKey, string>> = {};
-  for (const issue of issues) {
-    const path = issue.path.map((segment) => String(segment)).join('.');
-    const key = resolveFieldKey(path);
-    if (key && !fieldErrors[key]) {
-      fieldErrors[key] = issue.message;
-    }
-  }
-  return fieldErrors;
 }
 
 export interface PropertyCreateFormProps {
@@ -297,6 +236,24 @@ export function PropertyCreateForm({
     router.push('/admin/properties');
   }, [state.success, router]);
 
+  const fieldErrors: Partial<Record<FieldKey, string>> = {
+    ...serverState.fieldErrors,
+    ...clientErrors,
+  };
+  const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+  const summary = serverState.formError ?? (hasFieldErrors ? SUMMARY_ERROR : '');
+  const errorEntries = Object.entries(fieldErrors).filter(([, v]) => Boolean(v)) as [
+    FieldKey,
+    string,
+  ][];
+
+  const { steps, completedSteps } = usePropertyCreateStepper(
+    values,
+    fieldErrors,
+    featuresEnabled,
+    characteristics,
+  );
+
   if (!canCreate) return null;
 
   const handleChange = (key: FieldKey, value: string): void => {
@@ -361,80 +318,6 @@ export function PropertyCreateForm({
       formAction(parsed.data);
     });
   };
-
-  const fieldErrors: Partial<Record<FieldKey, string>> = {
-    ...serverState.fieldErrors,
-    ...clientErrors,
-  };
-  const hasFieldErrors = Object.keys(fieldErrors).length > 0;
-  const summary = serverState.formError ?? (hasFieldErrors ? SUMMARY_ERROR : '');
-  const errorEntries = Object.entries(fieldErrors).filter(([, v]) => Boolean(v)) as [
-    FieldKey,
-    string,
-  ][];
-
-  // Stepper derivation — light heuristic, not a validation gate.
-  const basicDone = values.propertyType !== '';
-  const addressDone =
-    values.addressFormatted !== '' && values.addressCity !== '' && values.addressCountry !== '';
-  const featuresDone =
-    !featuresEnabled ||
-    (values.featuresTotalAreaM2 !== '' &&
-      values.featuresCoveredAreaM2 !== '' &&
-      values.featuresConservationState !== '');
-  const tagsDone = characteristics.length > 0;
-  const completedSteps = [basicDone, addressDone, featuresDone, tagsDone].filter(Boolean).length;
-
-  const steps: { label: string; done: boolean; hasError: boolean }[] = [
-    {
-      label: 'Datos básicos',
-      done: basicDone,
-      hasError: Boolean(
-        fieldErrors.internalCode ??
-        fieldErrors.propertyType ??
-        fieldErrors.status ??
-        fieldErrors.ownerProfileId ??
-        fieldErrors.agentProfileId,
-      ),
-    },
-    {
-      label: 'Dirección',
-      done: addressDone,
-      hasError: Boolean(
-        fieldErrors.addressFormatted ??
-        fieldErrors.addressCity ??
-        fieldErrors.addressCountry ??
-        fieldErrors.addressPlaceId ??
-        fieldErrors.addressStreet ??
-        fieldErrors.addressStreetNumber ??
-        fieldErrors.addressNeighborhood ??
-        fieldErrors.addressState ??
-        fieldErrors.addressPostalCode ??
-        fieldErrors.addressLatitude ??
-        fieldErrors.addressLongitude,
-      ),
-    },
-    {
-      label: 'Física',
-      done: featuresDone,
-      hasError: Boolean(
-        fieldErrors.featuresTotalAreaM2 ??
-        fieldErrors.featuresCoveredAreaM2 ??
-        fieldErrors.featuresConservationState ??
-        fieldErrors.featuresRooms ??
-        fieldErrors.featuresBedrooms ??
-        fieldErrors.featuresBathrooms ??
-        fieldErrors.featuresGarages ??
-        fieldErrors.featuresFloor ??
-        fieldErrors.featuresAgeYears,
-      ),
-    },
-    {
-      label: 'Adicionales',
-      done: tagsDone,
-      hasError: Boolean(fieldErrors.characteristics),
-    },
-  ];
 
   function getStepTone(step: { hasError: boolean; done: boolean }): string {
     if (step.hasError) return 'border-destructive/30 bg-destructive/10 text-destructive';

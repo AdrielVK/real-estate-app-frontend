@@ -50,44 +50,9 @@ import type { CreatePropertyActionState, CreatePropertyInput, FieldKey } from '@
 import { authFetch } from '@/lib/auth/api';
 import { propertyCreateSchema } from '@/lib/validation/property-create.schema';
 
-const GENERIC_FORM_ERROR = 'No se pudo crear la propiedad. Intentá de nuevo.';
+import { mapIssuesToFieldErrors, resolveFieldKey } from './field-errors';
 
-/**
- * Map backend field paths (dot notation) to the form's `FieldKey`
- * union. The backend `validationPipe` reports paths the same way
- * the schema does (e.g. `features.totalAreaM2`); the form renders
- * flat field names (`featuresTotalAreaM2`). Anything not in the map
- * is dropped from the user-facing error (avoids leaking server
- * details the form cannot render).
- */
-const FIELD_PATH_MAP: Record<string, FieldKey> = {
-  internalCode: 'internalCode',
-  propertyType: 'propertyType',
-  status: 'status',
-  ownerProfileId: 'ownerProfileId',
-  agentProfileId: 'agentProfileId',
-  'address.formattedAddress': 'addressFormatted',
-  'address.city': 'addressCity',
-  'address.country': 'addressCountry',
-  'address.placeId': 'addressPlaceId',
-  'address.street': 'addressStreet',
-  'address.streetNumber': 'addressStreetNumber',
-  'address.neighborhood': 'addressNeighborhood',
-  'address.state': 'addressState',
-  'address.postalCode': 'addressPostalCode',
-  'address.latitude': 'addressLatitude',
-  'address.longitude': 'addressLongitude',
-  'features.totalAreaM2': 'featuresTotalAreaM2',
-  'features.coveredAreaM2': 'featuresCoveredAreaM2',
-  'features.conservationState': 'featuresConservationState',
-  'features.rooms': 'featuresRooms',
-  'features.bedrooms': 'featuresBedrooms',
-  'features.bathrooms': 'featuresBathrooms',
-  'features.garages': 'featuresGarages',
-  'features.floor': 'featuresFloor',
-  'features.ageYears': 'featuresAgeYears',
-  characteristics: 'characteristics',
-};
+const GENERIC_FORM_ERROR = 'No se pudo crear la propiedad. Intentá de nuevo.';
 
 /**
  * Whitelist DTO keys; preserve numbers as numbers; drop empty
@@ -288,49 +253,11 @@ function mapErrorEnvelope(error: {
 }
 
 /**
- * Resolve a dot-notation issue path to the form's `FieldKey`.
- *
- * Exact map first; then any `characteristics.*` path (row-scoped,
- * e.g. `characteristics.0.category`, or the group-level refine issue
- * already in the map) collapses onto the single `characteristics`
- * slot — the form renders one error line for the whole section, so
- * a per-row path has no control to attach to and must NOT be
- * dropped.
- */
-function resolveFieldKey(path: string): FieldKey | undefined {
-  const mapped = FIELD_PATH_MAP[path];
-  if (mapped) return mapped;
-  return path.startsWith('characteristics.') ? 'characteristics' : undefined;
-}
-
-/**
- * Map a Zod issues array (server re-parse failure) to the form's
- * `FieldKey` map. Unknown paths are dropped (the form cannot render
- * them anyway).
- */
-function mapIssuesToFieldErrors(
-  issues: readonly { path: readonly PropertyKey[]; message: string }[],
-): Partial<Record<FieldKey, string>> {
-  const fieldErrors: Partial<Record<FieldKey, string>> = {};
-  for (const issue of issues) {
-    // Zod 4 uses `PropertyKey` (string | number | symbol) for the
-    // path; we only care about the string segments, so `String()`
-    // is a safe per-segment coercion and the final dot-joined key
-    // matches the backend's dot notation.
-    const path = issue.path.map((segment) => String(segment)).join('.');
-    const key = resolveFieldKey(path);
-    if (key && !fieldErrors[key]) {
-      fieldErrors[key] = issue.message;
-    }
-  }
-  return fieldErrors;
-}
-
-/**
  * Map the backend's `details` object (400 VALIDATION_ERROR) to the
  * form's `FieldKey` map. The backend reports paths with the same
- * dot notation the schema uses, so the same `FIELD_PATH_MAP` works
- * (including the `characteristics.*` row-path collapse).
+ * dot notation the schema uses, so the same `ISSUE_PATH_TO_FIELD` map
+ * (via `resolveFieldKey` from `./field-errors`) works — including the
+ * `characteristics.*` row-path collapse.
  */
 function mapDetailsToFieldErrors(
   details: Record<string, unknown>,
