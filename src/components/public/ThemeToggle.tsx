@@ -2,9 +2,9 @@
 
 import { Moon, Sun } from 'lucide-react';
 
-import { useTheme } from '@/lib/theme/use-theme';
-
 import { Button } from '@/components/ui/Button';
+
+import { useThemeStore } from '@/stores/theme.store';
 
 /**
  * `ThemeToggle` — public-zone dark/light switch.
@@ -47,7 +47,8 @@ import { Button } from '@/components/ui/Button';
  * - The visible icon is `Moon` for dark, `Sun` for light.
  */
 export function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme();
+  const theme = useThemeStore((s) => s.theme);
+  const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const isDark = theme === 'dark';
   const nextActionLabel = isDark ? 'Activar modo claro' : 'Activar modo oscuro';
 
